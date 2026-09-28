@@ -1,0 +1,9 @@
+QFrame#neonExplorerBar {
+    min-width: 6px;
+    max-width: 6px;
+    border-radius: 3px;
+}
+QFrame#explorerSubclassCard, QFrame#explorerProductCard {
+    border-radius: 14px;
+    background: #FFFFFF;
+}
