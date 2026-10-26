@@ -7,15 +7,16 @@ from ui.catalog_page import CatalogPage
 from ui.styles import APP_QSS
 from core.loader import load_stock,load_sales
 from core.matcher import build_analysis, load_classification
+from core.catalog_store import load_catalog, load_classification_from_catalog
 from core.models import AnalysisConfig
 import pandas as pd
 import traceback
 class MainWindow(QMainWindow):
     def __init__(self,catalog_path):
         super().__init__(); self.setWindowTitle("Mix Moda Insights"); self.resize(1580,980); self.setStyleSheet(APP_QSS)
-        with open(catalog_path,encoding="utf-8") as f:self.catalog=json.load(f)
-        ref_path = __import__("pathlib").Path(catalog_path).parent / "estoque_geral_classificacao.json"
-        self.classification = load_classification(ref_path) if ref_path.exists() else None
+        # JSON único: o mesmo arquivo alimenta o catálogo e a classificação por loja + código + descrição.
+        self.catalog=load_catalog(catalog_path)
+        self.classification = load_classification_from_catalog(self.catalog, load_classification)
         self.stack=QStackedWidget(); self.setCentralWidget(self.stack); self.home=self.home_page(); self.analysis=AnalysisPage(); self.analysis.generate.connect(self.generate)
         self.stack.addWidget(self.home); self.stack.addWidget(self.analysis)
     def home_page(self):
