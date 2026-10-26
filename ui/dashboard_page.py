@@ -18,6 +18,11 @@ SUBCLASS_COLORS = ["#5B6CFF","#E85D8A","#00A88F","#FFB52E","#19A9C7","#8B6FE8","
 def _stable_color(text):
     return SUBCLASS_COLORS[sum(ord(c) for c in str(text)) % len(SUBCLASS_COLORS)]
 
+def _rgba(hex_color, alpha):
+    # Qt interpreta #RRGGBBAA como #AARRGGBB; por isso usamos rgba() para controlar a opacidade corretamente.
+    h=hex_color.lstrip("#"); r,g,b=int(h[0:2],16),int(h[2:4],16),int(h[4:6],16)
+    return f"rgba({r},{g},{b},{alpha})"
+
 def _emoji(text, idx=0):
     t=str(text).upper()
     rules=[("PIJ", "👕"),("CALÇ", "👟"),("CALC", "👟"),("CHIN", "🩴"),("COSM", "💄"),("BIJ", "💍"),("BRIN", "🧸"),("BOLSA", "👜"),("ACESS", "👜"),("ROUP", "👗"),("VEST", "👗"),("CAMA", "🛏️"),("MESA", "🍽️"),("BANHO", "🛁"),("UTIL", "🏠"),("PESS", "🧴"),("PRAIA", "🩱"),("INF", "🧸")]
@@ -123,11 +128,12 @@ class DashboardPage(QWidget):
         self.body.addWidget(self.section_label("ESTOQUE PARADO / CAPITAL PRESO")); self.table_section(stagnant(d,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_estoque","valor_estoque"],150,"#FF9F43")
         self.body.addWidget(self.section_label("PRODUTOS CRÍTICOS")); self.table_section(critical(d,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_estoque","quantidade_vendida","status_estoque"],160,"#E94B5F",critical_mode=True)
         ins=QFrame(); ins.setObjectName("Panel"); il=QVBoxLayout(ins); il.setContentsMargins(16,14,16,14); il.addWidget(self.section_label("INSIGHTS INTELIGENTES"))
-        insight_colors=[("#5B6CFF","💡"),("#00A88F","📈"),("#FF9F43","⚠️"),("#E85D8A","🎯")]
+        insight_colors=[("#5B6CFF","💡"),("#00A88F","📈"),("#FF9F43","⚠️"),("#E85D8A","🎯")]  # azul, verde, laranja, rosa (mesma cor do título de cada insight)
         for idx,x in enumerate(generate_insights(d)):
             accent,emoji=insight_colors[idx%len(insight_colors)]
             # Contorno propositalmente discreto: o destaque fica no conteúdo, não na borda.
-            r=QFrame(); r.setStyleSheet(f"QFrame{{background:#FFFFFF;border:1px solid {accent}28;border-left:3px solid {accent}70;border-radius:14px;}} QLabel#it{{color:{accent};font-size:12px;font-weight:900;}} QLabel#ix{{color:#40516E;font-size:11px;font-weight:700;}}")
+            # A regra de borda é restrita ao card (#InsightCard) para não vazar para os QLabel filhos.
+            r=QFrame(); r.setObjectName("InsightCard"); r.setStyleSheet(f"QFrame#InsightCard{{background:#FFFFFF;border:1px solid {_rgba(accent,0.45)};border-radius:14px;}} QLabel{{border:none;background:transparent;}} QLabel#it{{color:{accent};font-size:12px;font-weight:900;}} QLabel#ix{{color:#40516E;font-size:11px;font-weight:700;}}")
             rl=QHBoxLayout(r); rl.setContentsMargins(12,10,12,10); icon=QLabel(emoji); icon.setStyleSheet(f"font-size:21px;color:{accent};background:transparent;"); rl.addWidget(icon); box=QVBoxLayout(); a=QLabel(x['titulo']); a.setObjectName("it"); box.addWidget(a); b=QLabel(x['texto']); b.setObjectName("ix"); b.setWordWrap(True); box.addWidget(b); rl.addLayout(box,1); il.addWidget(r)
         self.body.addWidget(ins); audit=QLabel(f"Auditoria: {br_number(self.audit.get('produtos_estoque',0),0)} itens de estoque • {br_number(self.audit.get('produtos_vendas',0),0)} itens de vendas • {br_number(self.audit.get('vendas_correspondentes',0),0)} correspondências • {br_number(self.audit.get('vendas_sem_correspondencia',0),0)} vendas ignoradas"); audit.setStyleSheet("color:#7A879D;font-size:10px;font-weight:700;padding:5px;"); self.body.addWidget(audit)
 
