@@ -2,7 +2,7 @@ from utils.formatting import brl, br_number
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QComboBox,QLineEdit,QLabel,QTableWidget,
     QTableWidgetItem,QScrollArea,QGridLayout,QFrame,QPushButton,QMessageBox,QFileDialog,QHeaderView,QDialog,
-    QListWidget,QListWidgetItem)
+    QListWidget,QListWidgetItem,QAbstractItemView)
 from PySide6.QtGui import QColor, QFont
 from ui.widgets import Card, RankCard
 from ui.product_modal import ProductModal
@@ -150,7 +150,7 @@ class DashboardPage(QWidget):
         l.addStretch(); return w
     def pivot_table(self,d):
         g=d.groupby("grupo",as_index=False).agg(produtos=("codigo_barras","count"),estoque=("quantidade_estoque","sum"),vendas=("quantidade_vendida","sum"),valor_estoque=("valor_estoque","sum"),faturamento=("valor_vendido","sum"),giro=("giro","mean")).sort_values("vendas",ascending=False)
-        t=QTableWidget(len(g),7); t.setMinimumHeight(max(225, 44 + len(g)*38)); t.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); t.setHorizontalHeaderLabels(["Grupo","Produtos","Estoque","Vendas","Valor estoque","Faturamento","Giro (%)"]); t.verticalHeader().setVisible(False); t.setSelectionBehavior(QTableWidget.SelectRows); t.setAlternatingRowColors(True); t.setSortingEnabled(False); rows=list(g.iterrows()); palette=["#EEF3FF","#E8FBF7","#FFF3E2","#F4EEFF","#FFEAF1"]
+        t=QTableWidget(len(g),7); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setMinimumHeight(max(225, 44 + len(g)*38)); t.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); t.setHorizontalHeaderLabels(["Grupo","Produtos","Estoque","Vendas","Valor estoque","Faturamento","Giro (%)"]); t.verticalHeader().setVisible(False); t.setSelectionBehavior(QTableWidget.SelectRows); t.setAlternatingRowColors(True); t.setSortingEnabled(False); rows=list(g.iterrows()); palette=["#EEF3FF","#E8FBF7","#FFF3E2","#F4EEFF","#FFEAF1"]
         for i,(_,r) in enumerate(rows):
             vals=[r.grupo,r.produtos,r.estoque,r.vendas,r.valor_estoque,r.faturamento,r.giro]
             for j,v in enumerate(vals):
@@ -163,7 +163,7 @@ class DashboardPage(QWidget):
     def open_group(self,rows,r):
         if 0<=r<len(rows): HierarchyExplorer(self.current_df(),str(rows[r][1]["grupo"]),self).exec()
     def table_section(self,d,cols,height=140,accent="#2F5BEA",critical_mode=False):
-        t=QTableWidget(len(d),len(cols)); t.setMinimumHeight(max(height, 44 + len(d)*38)); t.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); t.setAlternatingRowColors(True); t.setSortingEnabled(False); t.setHorizontalHeaderLabels([c.replace("_"," ").title() for c in cols]); t.horizontalHeader().setStretchLastSection(True); t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.verticalHeader().setVisible(False); t.setSelectionBehavior(QTableWidget.SelectRows); rows=list(d.iterrows())
+        t=QTableWidget(len(d),len(cols)); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setMinimumHeight(max(height, 44 + len(d)*38)); t.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); t.setAlternatingRowColors(True); t.setSortingEnabled(False); t.setHorizontalHeaderLabels([c.replace("_"," ").title() for c in cols]); t.horizontalHeader().setStretchLastSection(True); t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.verticalHeader().setVisible(False); t.setSelectionBehavior(QTableWidget.SelectRows); rows=list(d.iterrows())
         t.setStyleSheet(f"QTableWidget{{border:1px solid {accent}55;border-radius:14px;gridline-color:#E9EEF5;alternate-background-color:#FAFCFF;}} QHeaderView::section{{background:{accent};color:white;border:none;padding:10px;font-weight:900;}}")
         for i,(_,r) in enumerate(rows):
             for j,c in enumerate(cols):
@@ -199,7 +199,7 @@ class DashboardPage(QWidget):
         dlg=QDialog(self); dlg.setWindowTitle(title); dlg.resize(1180,700); l=QVBoxLayout(dlg)
         head=QLabel(f"{title} • {br_number(len(d),0)} registros")
         head.setStyleSheet("font-size:18px;font-weight:900;color:#12213D;padding:4px;"); l.addWidget(head)
-        t=QTableWidget(len(d),8); t.setHorizontalHeaderLabels(["Código","Produto","Grupo","Subclasse","Loja","Estoque","Vendas","Valor estoque"]); t.setSortingEnabled(False); rows=list(d.iterrows())
+        t=QTableWidget(len(d),8); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setHorizontalHeaderLabels(["Código","Produto","Grupo","Subclasse","Loja","Estoque","Vendas","Valor estoque"]); t.setSortingEnabled(False); rows=list(d.iterrows())
         for i,(_,r) in enumerate(rows):
             vals=[r.codigo_barras,r.descricao,r.grupo,r.subclasse,r.loja,r.quantidade_estoque,r.quantidade_vendida,r.valor_estoque]
             for j,v in enumerate(vals):
