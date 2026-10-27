@@ -189,6 +189,7 @@ class StockAlertRulesDialog(QDialog):
             "Confirmo que o destinatário autorizou receber alertas de estoque neste WhatsApp."
         )
         self.recipient_consent.setChecked(bool(settings.get("whatsapp_opt_in_confirmed", False)))
+        self.recipient_consent.toggled.connect(self.refresh_connection_status)
         whatsapp_layout.addWidget(self.recipient_consent)
 
         connection_row = QHBoxLayout()
@@ -245,6 +246,8 @@ class StockAlertRulesDialog(QDialog):
         settings = self.alert_store.load_settings()
         if not settings.get("whatsapp_recipient") and not self.recipient.text().strip():
             missing.append("destinatário")
+        if self.recipient.text().strip() and not self.recipient_consent.isChecked():
+            missing.append("autorização do destinatário")
         if not self.phone_number_id.text().strip():
             missing.append("Phone Number ID")
         if not self.template_name.text().strip():
@@ -367,6 +370,12 @@ class StockAlertRulesDialog(QDialog):
             return
         if not self.recipient.text().strip():
             QMessageBox.warning(self, "WhatsApp necessário", "Informe o número com código do país e DDD para receber os alertas.")
+            return
+        if not self.recipient_consent.isChecked():
+            QMessageBox.warning(
+                self, "Confirmação necessária",
+                "Confirme que o destinatário autorizou receber avisos pelo WhatsApp."
+            )
             return
         minimum = self.minimum.value()
         maximum = self.maximum.value()
