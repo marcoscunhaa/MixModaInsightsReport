@@ -121,6 +121,8 @@ class StockAlertRulesDialog(QDialog):
 
         self.recipient = QLineEdit()
         self.recipient.setPlaceholderText("Ex.: +55 11 99999-9999")
+        self.recipient.setText(str(self.alert_store.load_settings().get("whatsapp_recipient", "")))
+        self.recipient.textChanged.connect(self.refresh_connection_status)
         form.addWidget(QLabel("WhatsApp destinatário"), 2, 0)
         form.addWidget(self.recipient, 2, 1, 1, 5)
         add_layout.addLayout(form)
@@ -148,8 +150,10 @@ class StockAlertRulesDialog(QDialog):
         settings = self.alert_store.load_settings()
         self.phone_number_id = QLineEdit(str(settings.get("phone_number_id", "")))
         self.phone_number_id.setPlaceholderText("Phone Number ID do número remetente na Meta")
+        self.phone_number_id.textChanged.connect(self.refresh_connection_status)
         self.template_name = QLineEdit(str(settings.get("template_name", "")))
         self.template_name.setPlaceholderText("Nome do template de mensagem aprovado")
+        self.template_name.textChanged.connect(self.refresh_connection_status)
         self.template_language = QLineEdit(str(settings.get("template_language", "pt_BR")))
         self.template_language.setPlaceholderText("pt_BR")
         self.access_token = QLineEdit()
@@ -347,6 +351,9 @@ class StockAlertRulesDialog(QDialog):
 
     def save_rule(self):
         if not self.selected_product:
+            return
+        if not self.recipient.text().strip():
+            QMessageBox.warning(self, "WhatsApp necessário", "Informe o número com código do país e DDD para receber os alertas.")
             return
         minimum = self.minimum.value()
         maximum = self.maximum.value()
