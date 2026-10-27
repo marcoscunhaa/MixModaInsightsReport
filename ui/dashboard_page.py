@@ -90,12 +90,12 @@ class HierarchyExplorer(QDialog):
         elif len(self.path)==1: self.render_groups()
 
 class DashboardPage(QWidget):
-    def __init__(self,df,period,audit,parent=None,on_manage_alerts=None):
+    def __init__(self,df,period,audit,parent=None,on_home=None):
         super().__init__(parent); self.df=df; self.period=period; self.audit=audit
         root=QVBoxLayout(self); root.setContentsMargins(28,18,28,22); root.setSpacing(12)
         head=QHBoxLayout(); brand=QVBoxLayout(); title=QLabel("MIX MODA INSIGHTS"); title.setObjectName("Title"); brand.addWidget(title); brand.addWidget(QLabel("Central executiva de estoque, vendas, faturamento e rotação por loja")); head.addLayout(brand); head.addStretch();
-        if on_manage_alerts:
-            alerts_button=QPushButton("ALERTAS DE ESTOQUE"); alerts_button.setObjectName("Secondary"); alerts_button.clicked.connect(on_manage_alerts); head.addWidget(alerts_button)
+        if on_home:
+            home_button=QPushButton("← INÍCIO"); home_button.setObjectName("Ghost"); home_button.clicked.connect(on_home); head.addWidget(home_button)
         pdf=QPushButton("EXPORTAR PDF"); pdf.clicked.connect(self.export_pdf); head.addWidget(pdf); root.addLayout(head)
         filters=QFrame(); filters.setObjectName("Panel"); fl=QHBoxLayout(filters); fl.setContentsMargins(12,10,12,10); fl.setSpacing(8)
         self.store=QComboBox(); self.store.addItem("Todas as lojas"); self.store.addItems(sorted(df.loja.dropna().unique())); self.group=QComboBox(); self.group.addItem("Todos os grupos"); self.group.addItems(sorted(df.grupo.dropna().unique())); self.sub=QComboBox(); self.sub.addItem("Todas as subclasses"); self.status=QComboBox(); self.status.addItems(["Todos os status","SEM ESTOQUE","CRÍTICO","BAIXO","NORMAL","EXCESSO","SEM VENDA"]); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código, grupo ou subclasse...")
