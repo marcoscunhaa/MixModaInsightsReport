@@ -67,6 +67,10 @@ def _stylebook():
             "ReportMuted", parent=base["Normal"], fontName="Helvetica",
             fontSize=7.5, leading=10, textColor=MUTED,
         ),
+        "legend": ParagraphStyle(
+            "ReportLegend", parent=base["Normal"], fontName="Helvetica",
+            fontSize=7.1, leading=9, textColor=INK,
+        ),
         "table_head": ParagraphStyle(
             "ReportTableHead", parent=base["Normal"], fontName="Helvetica-Bold",
             fontSize=7.2, leading=9, textColor=WHITE,
@@ -343,7 +347,7 @@ def _audit_table(audit, styles, width):
         ("Correspondências", audit.get("vendas_correspondentes", 0), TEAL),
         ("Chaves sem correspondência", audit.get("vendas_sem_correspondencia", 0), PINK),
         ("Códigos inválidos", audit.get("codigos_invalidos", 0), GOLD),
-        ("Itens ignorados", audit.get("produtos_ignorados", 0), BLUE),
+        ("Registros ignorados", audit.get("produtos_ignorados", 0), BLUE),
     ]
     cards = [_card(label, br_number(value, 0), color, styles) for label, value, color in items]
     card_width = width / 3
@@ -356,6 +360,31 @@ def _audit_table(audit, styles, width):
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]))
     return row
+
+
+def _audit_legend(styles, width):
+    definitions = [
+        ("Itens de estoque", "Produtos únicos com código e descrição válidos, após a consolidação do estoque."),
+        ("Linhas de venda", "Registros de produtos lidos no arquivo de vendas após a limpeza."),
+        ("Correspondências", "Combinações de código e descrição presentes tanto no estoque quanto nas vendas."),
+        ("Chaves sem correspondência", "Combinações de código e descrição das vendas que não foram localizadas no estoque."),
+        ("Códigos inválidos", "Registros, em estoque ou vendas, sem código de barras utilizável."),
+        ("Registros ignorados", "Linhas descartadas por descrição iniciada por “PECA” ou “CODIGO DESATIVADO”, ou por código antigo de apenas 3 dígitos, como 313 e 315."),
+    ]
+    cells = [
+        _paragraph(f"<b>{escape(title)}:</b> {escape(description)}", styles["legend"], markup=True)
+        for title, description in definitions
+    ]
+    rows = [[cells[index], cells[index + 1]] for index in range(0, len(cells), 2)]
+    table = Table(rows, colWidths=[width / 2, width / 2], hAlign="LEFT")
+    table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    return table
 
 
 def export_dashboard_pdf(path, df, period, loja, audit):
@@ -460,7 +489,9 @@ def export_dashboard_pdf(path, df, period, loja, audit):
     if shown == 0:
         story.append(_paragraph("Nenhum produto está classificado como crítico, baixo ou sem estoque.", styles["body"]))
     story.extend([_section_heading("Qualidade e cobertura dos dados", styles),
-                  _audit_table(audit or {}, styles, content_width), Spacer(1, 5)])
+                  _audit_table(audit or {}, styles, content_width), Spacer(1, 5),
+                  _section_heading("Legenda dos indicadores", styles),
+                  _audit_legend(styles, content_width), Spacer(1, 5)])
     story.append(_paragraph(
         "As correspondências usam código de barras e descrição normalizada. "
         "Vendas sem correspondência ficam fora dos indicadores de produto.", styles["muted"]
