@@ -131,6 +131,23 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
 
     stock_keys = set(zip(estoque.codigo_barras, estoque.descricao_norm))
     sales_keys = set(zip(vendas.codigo_barras, vendas.descricao_norm))
+    unmatched_mask = [key not in stock_keys for key in zip(vendas.codigo_barras, vendas.descricao_norm)]
+    unmatched_sales = vendas.loc[unmatched_mask]
+    unmatched_products = unmatched_sales.groupby(
+        ["codigo_barras", "descricao_norm"], as_index=False
+    ).agg(
+        descricao=("descricao", "first"),
+        quantidade_vendida=("quantidade_vendida", "sum"),
+    )
+    unmatched_items = [
+        {
+            "codigo_barras": str(row.codigo_barras),
+            "descricao": str(row.descricao),
+            "loja": str(loja),
+            "quantidade_vendida": float(row.quantidade_vendida),
+        }
+        for row in unmatched_products.itertuples(index=False)
+    ]
 
     # Regra comercial da Mix Moda: preço de venda = 2x preço de compra.
     merged["preco_compra"] = pd.to_numeric(merged["preco_compra"], errors="coerce").fillna(0)
@@ -173,5 +190,6 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
         ),
         "descricoes_divergentes": len(sales_keys - stock_keys),
         "produtos_sem_classificacao": int((merged.grupo == "SEM CLASSIFICAÇÃO").sum()),
+        "vendas_sem_correspondencia_itens": unmatched_items,
     }
     return merged, audit
