@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QCheckBox,
     QDialog,
     QGridLayout,
     QHBoxLayout,
@@ -184,6 +185,11 @@ class StockAlertRulesDialog(QDialog):
         setup_hint.setObjectName("muted")
         setup_hint.setWordWrap(True)
         whatsapp_layout.addWidget(setup_hint)
+        self.recipient_consent = QCheckBox(
+            "Confirmo que o destinatário autorizou receber alertas de estoque neste WhatsApp."
+        )
+        self.recipient_consent.setChecked(bool(settings.get("whatsapp_opt_in_confirmed", False)))
+        whatsapp_layout.addWidget(self.recipient_consent)
 
         connection_row = QHBoxLayout()
         self.whatsapp_status = QLabel()
@@ -256,9 +262,16 @@ class StockAlertRulesDialog(QDialog):
             "phone_number_id": self.phone_number_id.text(),
             "template_name": self.template_name.text(),
             "template_language": self.template_language.text() or "pt_BR",
+            "whatsapp_opt_in_confirmed": self.recipient_consent.isChecked(),
         }
 
     def save_whatsapp_settings(self):
+        if self.recipient.text().strip() and not self.recipient_consent.isChecked():
+            QMessageBox.warning(
+                self, "Confirmação necessária",
+                "Confirme que o destinatário autorizou receber avisos pelo WhatsApp."
+            )
+            return
         try:
             self.alert_store.save_settings(self._settings_payload(), self.access_token.text())
         except (OSError, ValueError, RuntimeError) as error:
