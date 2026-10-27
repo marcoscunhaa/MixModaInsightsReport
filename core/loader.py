@@ -50,6 +50,11 @@ def read_raw(path):
 
 
 def _standardize(raw, mapping):
+    required_columns = max(mapping.values()) + 1
+    if raw.shape[1] < required_columns:
+        raise ValueError(
+            f"Planilha com {raw.shape[1]} colunas; o layout esperado precisa de pelo menos {required_columns}."
+        )
     out = {k: (raw.iloc[:, i] if i < raw.shape[1] else pd.Series(index=raw.index)) for k, i in mapping.items()}
     df = pd.DataFrame(out).dropna(how="all").copy()
     if len(df):

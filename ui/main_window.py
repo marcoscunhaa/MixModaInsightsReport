@@ -38,7 +38,13 @@ class MainWindow(QMainWindow):
                 df,audit=build_analysis(stock,sales,self.catalog,s["loja"],cfg,self.classification); frames.append(df); audits.append(audit)
             df=pd.concat([x for x in frames if not x.empty],ignore_index=True) if any(not x.empty for x in frames) else pd.DataFrame()
             if df.empty: QMessageBox.warning(self,"Sem dados","Nenhum produto válido permaneceu após limpeza e cruzamento."); return
-            audit={k:sum(a.get(k,0) for a in audits) for k in set().union(*(a.keys() for a in audits))}
+            audit={}
+            audit_keys=set().union(*(a.keys() for a in audits))
+            for key in audit_keys:
+                if key == "vendas_sem_correspondencia_itens":
+                    audit[key]=[item for a in audits for item in a.get(key,[])]
+                else:
+                    audit[key]=sum(a.get(key,0) for a in audits)
             page=DashboardPage(df,(info["data_inicio"],info["data_fim"]),audit); self.stack.addWidget(page); self.stack.setCurrentWidget(page)
         except Exception as e:
             details = traceback.format_exc()

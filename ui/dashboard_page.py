@@ -33,7 +33,8 @@ def _emoji(text, idx=0):
 class ExplorerCard(QFrame):
     def __init__(self, emoji, title, subtitle, value, accent, parent=None, flat=True):
         super().__init__(parent); self.setObjectName("ExplorerCard")
-        self.setStyleSheet(f"QFrame#ExplorerCard{{background:#FFFFFF;border:{"none" if flat else "1px solid #DCE6F3"};border-left:6px solid {accent};border-radius:{"0px" if flat else "18px"};}} QFrame#ExplorerCard:hover{{background:#F7FAFF;}}")
+        border="none" if flat else "1px solid #DCE6F3"; radius="0px" if flat else "18px"
+        self.setStyleSheet(f"QFrame#ExplorerCard{{background:#FFFFFF;border:{border};border-left:6px solid {accent};border-radius:{radius};}} QFrame#ExplorerCard:hover{{background:#F7FAFF;}}")
         l=QHBoxLayout(self); l.setContentsMargins(13,14,14,14); l.setSpacing(12)
         text=QVBoxLayout(); text.setSpacing(3)
         name=QLabel(str(title)); name.setStyleSheet("font-size:13px;font-weight:900;color:#142B52;"); name.setWordWrap(True); text.addWidget(name)
@@ -111,10 +112,19 @@ class DashboardPage(QWidget):
                     z=item.layout().takeAt(0)
                     if z.widget(): z.widget().deleteLater()
     def refresh(self):
+        options=self.df
+        if self.store.currentText()!="Todas as lojas":
+            options=options[options.loja==self.store.currentText()]
+        old_group=self.group.currentText()
+        groups=sorted(options.grupo.dropna().unique())
+        self.group.blockSignals(True); self.group.clear(); self.group.addItem("Todos os grupos"); self.group.addItems(groups)
+        self.group.setCurrentText(old_group if old_group in [self.group.itemText(i) for i in range(self.group.count())] else "Todos os grupos"); self.group.blockSignals(False)
         if self.group.currentText()!="Todos os grupos":
-            self.sub.blockSignals(True); old=self.sub.currentText(); self.sub.clear(); self.sub.addItem("Todas as subclasses"); self.sub.addItems(sorted(self.df[self.df.grupo==self.group.currentText()].subclasse.dropna().unique())); self.sub.setCurrentText(old if old in [self.sub.itemText(i) for i in range(self.sub.count())] else "Todas as subclasses"); self.sub.blockSignals(False)
-        else:
-            self.sub.blockSignals(True); self.sub.clear(); self.sub.addItem("Todas as subclasses"); self.sub.addItems(sorted(self.df.subclasse.dropna().unique())); self.sub.blockSignals(False)
+            options=options[options.grupo==self.group.currentText()]
+        old_sub=self.sub.currentText()
+        subclasses=sorted(options.subclasse.dropna().unique())
+        self.sub.blockSignals(True); self.sub.clear(); self.sub.addItem("Todas as subclasses"); self.sub.addItems(subclasses)
+        self.sub.setCurrentText(old_sub if old_sub in [self.sub.itemText(i) for i in range(self.sub.count())] else "Todas as subclasses"); self.sub.blockSignals(False)
         d=self.current_df(); self.clear_body(); kp=kpis(d); grid=QGridLayout(); grid.setHorizontalSpacing(10); grid.setVerticalSpacing(10)
         specs=[("Valor em estoque",brl(kp['Valor em estoque']),"#2854D9","▣"),("Unidades em estoque",br_number(kp['Unidades em estoque'],0),"#16B8C8","▥"),("Unidades vendidas",br_number(kp['Unidades vendidas'],0),"#0F9D8A","↗"),("Produtos ativos",br_number(kp['Produtos ativos analisados'],0),"#7C6FE6","●"),("Sem vendas",br_number(kp['Produtos sem vendas'],0),"#E85D8A","○"),("Em ruptura",br_number(kp['Produtos em ruptura'],0),"#D9485F","!"),("Críticos",br_number(kp['Produtos críticos'],0),"#F3B63F","◆"),("Giro médio do período",f"{kp['Giro médio']:.1f}%","#2854D9","↻"),("Margem potencial",brl(kp['Margem potencial']),"#0F9D8A","%"),("Faturamento estimado",brl(kp['Faturamento estimado']),"#16B8C8","$")]
         for i,(n,v,a,ic) in enumerate(specs): c=Card(n,v,a,ic); c.clicked.connect(lambda name=n:self.detail(name,d)); grid.addWidget(c,i//5,i%5)

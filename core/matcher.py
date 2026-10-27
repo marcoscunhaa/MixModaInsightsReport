@@ -20,7 +20,32 @@ def classification_frame(reference):
             "subclasse_ref": p.get("subclasse", ""),
             "situacao_ref": p.get("situacao", ""),
         })
-    return pd.DataFrame(rows).drop_duplicates(["loja_ref", "codigo_barras", "descricao_norm"])
+    columns = ["loja_ref", "codigo_barras", "descricao_norm", "grupo_ref", "subclasse_ref", "situacao_ref"]
+    return pd.DataFrame(rows, columns=columns).drop_duplicates(["loja_ref", "codigo_barras", "descricao_norm"])
+
+
+def catalog_classification_frame(catalog):
+    """Build the store-independent classification master from the JSON catalog."""
+    rows = []
+    for product in (catalog or {}).get("produtos", []):
+        rows.append({
+            "codigo_barras": normalize_barcode(product.get("codigo_barras")),
+            "descricao_norm": normalize_text(product.get("descricao_norm") or product.get("descricao", "")),
+            "grupo_ref": product.get("grupo", ""),
+            "subclasse_ref": product.get("subclasse", ""),
+        })
+    return pd.DataFrame(rows).drop_duplicates()
+
+
+def _unique_classification(frame, key):
+    """Keep keys whose catalog rows agree on one non-empty group/subclass pair."""
+    frame = frame[(frame.grupo_ref.fillna("").astype(str).str.strip() != "") &
+                  (frame.subclasse_ref.fillna("").astype(str).str.strip() != "")].copy()
+    if frame.empty:
+        return frame[[key, "grupo_ref", "subclasse_ref"]]
+    counts = frame.groupby(key)[["grupo_ref", "subclasse_ref"]].nunique(dropna=False)
+    keys = counts[(counts.grupo_ref == 1) & (counts.subclasse_ref == 1)].index
+    return frame[frame[key].isin(keys)].drop_duplicates(key)[[key, "grupo_ref", "subclasse_ref"]]
 
 
 def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=None):
@@ -54,35 +79,75 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     merged["quantidade_vendida"] = merged["quantidade_vendida"].fillna(0)
     merged["loja"] = loja
 
-    # Classificação oficial: estoque geral(4).xlsx, resolvida por loja + código + descrição.
+    # Classificação específica da loja tem prioridade quando existir.
     if classification:
         cf = classification_frame(classification)
-        cf = cf[cf.loja_ref == loja].copy()
+        cf = cf[cf.loja_ref.map(normalize_text) == normalize_text(loja)].copy()
         merged = merged.merge(cf, on=["codigo_barras", "descricao_norm"], how="left")
     else:
         merged["grupo_ref"] = None
         merged["subclasse_ref"] = None
 
-    # Fallback por loja + código somente quando houver uma única classificação possível.
+    # Primeiro tenta o código da loja selecionada, se ele tiver classificação única.
     if classification:
         cf2 = classification_frame(classification)
-        cf2 = cf2[cf2.loja_ref == loja].copy()
-        unique_code = cf2.groupby("codigo_barras").agg(
-            n_grupo=("grupo_ref", "nunique"), n_sub=("subclasse_ref", "nunique")
-        ).reset_index()
-        unique_code = unique_code[(unique_code.n_grupo == 1) & (unique_code.n_sub == 1)]
-        unique_code = unique_code.merge(cf2, on="codigo_barras", how="left")
-        unique_code = unique_code.drop_duplicates("codigo_barras")[["codigo_barras", "grupo_ref", "subclasse_ref"]]
+        cf2 = cf2[cf2.loja_ref.map(normalize_text) == normalize_text(loja)].copy()
+        unique_code = _unique_classification(cf2, "codigo_barras")
         merged = merged.merge(unique_code, on="codigo_barras", how="left", suffixes=("", "_fallback"))
         merged["grupo_ref"] = merged["grupo_ref"].fillna(merged["grupo_ref_fallback"])
         merged["subclasse_ref"] = merged["subclasse_ref"].fillna(merged["subclasse_ref_fallback"])
         merged.drop(columns=[c for c in ["grupo_ref_fallback", "subclasse_ref_fallback"] if c in merged.columns], inplace=True)
+
+    # The JSON's top-level product record is the global master. Use it regardless
+    # of selected store, then a globally unique description for codes absent there.
+    global_catalog = catalog_classification_frame(catalog)
+    if not global_catalog.empty:
+        # The source JSON has one known barcode collision: two zero-padded
+        # codes both describe LENÇOL CASAL BASICO, but one is wrongly tagged as
+        # a skirt. Keep this explicit correction until the upstream catalog is fixed.
+        linen = global_catalog.descricao_norm == normalize_text("LENÇOL CASAL BASICO")
+        global_catalog.loc[linen, ["grupo_ref", "subclasse_ref"]] = ["UTILIDADES", "COLCHA"]
+        global_code = _unique_classification(global_catalog, "codigo_barras")
+        merged = merged.merge(global_code, on="codigo_barras", how="left", suffixes=("", "_global_code"))
+        # A unique global classification is authoritative, so choosing a
+        # different store cannot change the product's group or subclass.
+        merged["grupo_ref"] = merged["grupo_ref_global_code"].fillna(merged["grupo_ref"])
+        merged["subclasse_ref"] = merged["subclasse_ref_global_code"].fillna(merged["subclasse_ref"])
+        merged.drop(columns=["grupo_ref_global_code", "subclasse_ref_global_code"], inplace=True)
+
+        global_description = _unique_classification(global_catalog, "descricao_norm")
+        merged = merged.merge(global_description, on="descricao_norm", how="left", suffixes=("", "_global_description"))
+        merged["grupo_ref"] = merged["grupo_ref"].fillna(merged["grupo_ref_global_description"])
+        merged["subclasse_ref"] = merged["subclasse_ref"].fillna(merged["subclasse_ref_global_description"])
+        merged.drop(columns=["grupo_ref_global_description", "subclasse_ref_global_description"], inplace=True)
+
+    # Override a known source inconsistency even when the selected store carries
+    # the wrong local tag for this globally identifiable product.
+    linen = merged.descricao_norm == normalize_text("LENÇOL CASAL BASICO")
+    merged.loc[linen, ["grupo_ref", "subclasse_ref"]] = ["UTILIDADES", "COLCHA"]
 
     merged["grupo"] = merged["grupo_ref"].fillna("SEM CLASSIFICAÇÃO")
     merged["subclasse"] = merged["subclasse_ref"].fillna("SEM CLASSIFICAÇÃO")
 
     stock_keys = set(zip(estoque.codigo_barras, estoque.descricao_norm))
     sales_keys = set(zip(vendas.codigo_barras, vendas.descricao_norm))
+    unmatched_mask = [key not in stock_keys for key in zip(vendas.codigo_barras, vendas.descricao_norm)]
+    unmatched_sales = vendas.loc[unmatched_mask]
+    unmatched_products = unmatched_sales.groupby(
+        ["codigo_barras", "descricao_norm"], as_index=False
+    ).agg(
+        descricao=("descricao", "first"),
+        quantidade_vendida=("quantidade_vendida", "sum"),
+    )
+    unmatched_items = [
+        {
+            "codigo_barras": str(row.codigo_barras),
+            "descricao": str(row.descricao),
+            "loja": str(loja),
+            "quantidade_vendida": float(row.quantidade_vendida),
+        }
+        for row in unmatched_products.itertuples(index=False)
+    ]
 
     # Regra comercial da Mix Moda: preço de venda = 2x preço de compra.
     merged["preco_compra"] = pd.to_numeric(merged["preco_compra"], errors="coerce").fillna(0)
@@ -103,7 +168,7 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     merged["cobertura"] = merged.apply(lambda r: r.quantidade_estoque / r.quantidade_vendida if r.quantidade_vendida > 0 else float("inf"), axis=1)
     merged["produto_sem_venda"] = merged.quantidade_vendida <= 0
     merged["ruptura"] = (merged.quantidade_estoque <= 0) & (merged.quantidade_vendida > 0)
-    merged["risco_ruptura"] = (merged.quantidade_estoque <= config.estoque_baixo) & (merged.quantidade_vendida > 0)
+    merged["risco_ruptura"] = (merged.cobertura <= config.cobertura_risco) & (merged.quantidade_vendida > 0)
 
     def status(r):
         q, v = r.quantidade_estoque, r.quantidade_vendida
@@ -118,7 +183,13 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     audit = {
         "produtos_estoque": len(estoque), "produtos_vendas": len(vendas),
         "vendas_correspondentes": len(sales_keys & stock_keys), "vendas_sem_correspondencia": len(sales_keys - stock_keys),
-        "produtos_ignorados": ig1 + ig2, "codigos_invalidos": int((df_estoque.codigo_barras.map(normalize_barcode) == "").sum()),
-        "descricoes_divergentes": len(sales_keys - stock_keys)
+        "produtos_ignorados": ig1 + ig2,
+        "codigos_invalidos": sum(
+            int((frame.codigo_barras.map(normalize_barcode) == "").sum())
+            for frame in (df_estoque, df_vendas) if "codigo_barras" in frame
+        ),
+        "descricoes_divergentes": len(sales_keys - stock_keys),
+        "produtos_sem_classificacao": int((merged.grupo == "SEM CLASSIFICAÇÃO").sum()),
+        "vendas_sem_correspondencia_itens": unmatched_items,
     }
     return merged, audit

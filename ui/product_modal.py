@@ -30,8 +30,13 @@ class ProductModal(QDialog):
         hero=QFrame(); hero.setObjectName("hero")
         hl=QVBoxLayout(hero); hl.setContentsMargins(22,20,22,20); hl.setSpacing(6)
         e=QLabel("VISÃO COMPLETA DO PRODUTO"); e.setObjectName("eyebrow"); hl.addWidget(e)
-        title=QLabel(str(row.get("descricao", "Produto sem descrição"))); title.setObjectName("productTitle"); title.setWordWrap(True); hl.addWidget(title)
-        meta=QLabel(f"Código  {row.get('codigo_barras','—')}   •   {row.get('grupo','—')}   •   {row.get('subclasse','—')}   •   {row.get('loja','—')}"); meta.setObjectName("meta"); meta.setWordWrap(True); hl.addWidget(meta)
+        description=str(row.get("descricao", "Produto sem descrição"))
+        barcode=str(row.get("codigo_barras", "")).strip()
+        title=QLabel(description); title.setObjectName("productTitle"); title.setWordWrap(True)
+        title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse); hl.addWidget(title)
+        barcode_label=QLabel(f"Código  {barcode or '—'}"); barcode_label.setObjectName("meta")
+        barcode_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse); hl.addWidget(barcode_label)
+        meta=QLabel(f"{row.get('grupo','—')}   •   {row.get('subclasse','—')}   •   {row.get('loja','—')}"); meta.setObjectName("meta"); meta.setWordWrap(True); hl.addWidget(meta)
         root.addWidget(hero)
 
         body=QWidget(); body.setObjectName("productBody"); body.setStyleSheet("QWidget#productBody{background:#F3F0FF;border:1px solid #DDD5FA;border-radius:22px;}"); bl=QVBoxLayout(body); bl.setContentsMargins(14,14,14,16); bl.setSpacing(14)
@@ -69,3 +74,4 @@ class ProductModal(QDialog):
         root.addWidget(body,1)
 
         bottom=QHBoxLayout(); bottom.addStretch(1); b=QPushButton("Fechar"); b.setObjectName("close"); b.clicked.connect(self.accept); bottom.addWidget(b); root.addLayout(bottom)
+

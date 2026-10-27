@@ -23,5 +23,6 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 ## Regras comerciais e classificação atualizadas
 - Preço de venda calculado como **2x o preço de compra** para todos os produtos.
 - Faturamento do período = preço de venda × quantidade vendida.
-- O arquivo `data/estoque_geral_classificacao.json` foi gerado a partir da planilha `estoque geral(4).xlsx` enviada pelo usuário e é a referência de grupo/subclasse por loja + código + descrição.
+- A classificação oficial por loja + código + descrição está incorporada em `data/catalogo_produtos_estoque_geral.json`.
+- A análise permite selecionar até quatro lojas, uma vez cada: Sitio São João, Palmeiras, Sapiranga e Pedras.
 - Explorador hierárquico: **Grupo → Subclasse → Produto → Detalhes**.
