@@ -63,6 +63,8 @@ class WhatsAppCloudClient:
         missing = []
         if not settings.get("whatsapp_recipient"):
             missing.append("número de WhatsApp destinatário")
+        if not settings.get("whatsapp_opt_in_confirmed"):
+            missing.append("autorização do destinatário")
         if not settings.get("phone_number_id"):
             missing.append("Phone Number ID da Meta")
         if not self.alert_store.get_access_token():
