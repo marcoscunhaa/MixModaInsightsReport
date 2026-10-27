@@ -506,13 +506,13 @@ def export_dashboard_pdf(path, df, period, loja, audit):
     if shown == 0:
         story.append(_paragraph("Nenhum produto está classificado como crítico, baixo ou sem estoque.", styles["body"]))
     unmatched_items = (audit or {}).get("vendas_sem_correspondencia_itens", [])
-    story.extend([_section_heading("Vendas sem correspondência no estoque", styles),
+    story.extend([PageBreak(), _section_heading("Vendas sem correspondência no estoque", styles),
                   _paragraph(
                       f"{len(unmatched_items)} combinações de venda não foram encontradas no estoque. "
                       "A tabela identifica os itens para conferência no sistema da loja.", styles["muted"]
                   ), Spacer(1, 5),
-                  _unmatched_table(audit or {}, styles, content_width), Spacer(1, 12),
-                  _section_heading("Qualidade e cobertura dos dados", styles),
+                  _unmatched_table(audit or {}, styles, content_width),
+                  PageBreak(), _section_heading("Qualidade e cobertura dos dados", styles),
                   _audit_table(audit or {}, styles, content_width), Spacer(1, 5),
                   _section_heading("Legenda dos indicadores", styles),
                   _audit_legend(styles, content_width), Spacer(1, 5)])
