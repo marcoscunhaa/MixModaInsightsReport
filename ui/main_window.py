@@ -183,6 +183,7 @@ class MainWindow(QMainWindow):
         self.alert_store.mark_alerts_sent(self._pending_alerts)
         self._pending_alerts = []
         self.refresh_alert_status()
+        QTimer.singleShot(0, self.send_latest_stock_alerts)
 
     def open_home(self):
         self.stack.setCurrentWidget(self.home)
