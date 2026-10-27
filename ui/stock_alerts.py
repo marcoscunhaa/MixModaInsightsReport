@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.stock_alerts import StockAlertStore
-from core.analysis_page import STORES
+from ui.analysis_page import STORES
 from utils.normalization import normalize_barcode, normalize_text
 
 
