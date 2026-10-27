@@ -6,7 +6,7 @@ def filter_analysis(df,loja="Todas",grupo="Todos",subclasse="Todas",busca="",sta
     if status!="Todos":out=out[out.status_estoque==status]
     if busca.strip():
         q=busca.strip().upper()
-        m=(out.descricao.str.upper().str.contains(q,na=False)|out.codigo_barras.str.contains(q,na=False)|out.grupo.str.upper().str.contains(q,na=False)|out.subclasse.str.upper().str.contains(q,na=False))
+        m=(out.descricao.str.upper().str.contains(q,na=False,regex=False)|out.codigo_barras.str.contains(q,na=False,regex=False)|out.grupo.str.upper().str.contains(q,na=False,regex=False)|out.subclasse.str.upper().str.contains(q,na=False,regex=False))
         out=out[m]
     return out
 

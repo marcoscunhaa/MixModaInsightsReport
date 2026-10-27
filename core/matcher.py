@@ -57,7 +57,7 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     # Classificação oficial: estoque geral(4).xlsx, resolvida por loja + código + descrição.
     if classification:
         cf = classification_frame(classification)
-        cf = cf[cf.loja_ref == loja].copy()
+        cf = cf[cf.loja_ref.map(normalize_text) == normalize_text(loja)].copy()
         merged = merged.merge(cf, on=["codigo_barras", "descricao_norm"], how="left")
     else:
         merged["grupo_ref"] = None
@@ -66,7 +66,7 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     # Fallback por loja + código somente quando houver uma única classificação possível.
     if classification:
         cf2 = classification_frame(classification)
-        cf2 = cf2[cf2.loja_ref == loja].copy()
+        cf2 = cf2[cf2.loja_ref.map(normalize_text) == normalize_text(loja)].copy()
         unique_code = cf2.groupby("codigo_barras").agg(
             n_grupo=("grupo_ref", "nunique"), n_sub=("subclasse_ref", "nunique")
         ).reset_index()
@@ -103,7 +103,7 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     merged["cobertura"] = merged.apply(lambda r: r.quantidade_estoque / r.quantidade_vendida if r.quantidade_vendida > 0 else float("inf"), axis=1)
     merged["produto_sem_venda"] = merged.quantidade_vendida <= 0
     merged["ruptura"] = (merged.quantidade_estoque <= 0) & (merged.quantidade_vendida > 0)
-    merged["risco_ruptura"] = (merged.quantidade_estoque <= config.estoque_baixo) & (merged.quantidade_vendida > 0)
+    merged["risco_ruptura"] = (merged.cobertura <= config.cobertura_risco) & (merged.quantidade_vendida > 0)
 
     def status(r):
         q, v = r.quantidade_estoque, r.quantidade_vendida
