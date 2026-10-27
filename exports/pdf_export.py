@@ -369,7 +369,7 @@ def _audit_legend(styles, width):
         ("Correspondências", "Combinações de código e descrição presentes tanto no estoque quanto nas vendas."),
         ("Chaves sem correspondência", "Combinações de código e descrição das vendas que não foram localizadas no estoque."),
         ("Códigos inválidos", "Registros, em estoque ou vendas, sem código de barras utilizável."),
-        ("Registros ignorados", "Linhas descartadas por descrição iniciada por “PECA” ou “CODIGO DESATIVADO”, ou por código antigo de apenas 3 dígitos, como 313 e 315."),
+        ("Registros ignorados", "Linhas descartadas por descrição iniciada por “PECA” ou “CODIGO DESATIVADO”, ou por código antigo de 3 ou 4 dígitos, como 313, 315 e 3191."),
     ]
     cells = [
         _paragraph(f"<b>{escape(title)}:</b> {escape(description)}", styles["legend"], markup=True)
