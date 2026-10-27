@@ -166,7 +166,11 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     audit = {
         "produtos_estoque": len(estoque), "produtos_vendas": len(vendas),
         "vendas_correspondentes": len(sales_keys & stock_keys), "vendas_sem_correspondencia": len(sales_keys - stock_keys),
-        "produtos_ignorados": ig1 + ig2, "codigos_invalidos": int((df_estoque.codigo_barras.map(normalize_barcode) == "").sum()),
+        "produtos_ignorados": ig1 + ig2,
+        "codigos_invalidos": sum(
+            int((frame.codigo_barras.map(normalize_barcode) == "").sum())
+            for frame in (df_estoque, df_vendas) if "codigo_barras" in frame
+        ),
         "descricoes_divergentes": len(sales_keys - stock_keys),
         "produtos_sem_classificacao": int((merged.grupo == "SEM CLASSIFICAÇÃO").sum()),
     }
