@@ -11,7 +11,7 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-pyinstaller --noconfirm --clean --onefile --windowed --collect-all keyring --collect-all rapidfuzz --name MixModaInsights --add-data "data\catalogo_produtos_estoque_geral.json;data" app.py
+pyinstaller --noconfirm --clean --onefile --windowed --collect-all keyring --copy-metadata keyring --collect-all rapidfuzz --name MixModaInsights --add-data "data\catalogo_produtos_estoque_geral.json;data" app.py
 echo.
 echo ==========================================
 echo EXECUTAVEL GERADO EM:
