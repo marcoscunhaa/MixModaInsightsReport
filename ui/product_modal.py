@@ -1,6 +1,6 @@
 from utils.formatting import brl, br_number
-from PySide6.QtWidgets import QApplication,QDialog,QVBoxLayout,QGridLayout,QLabel,QPushButton,QFrame,QHBoxLayout,QWidget
-from PySide6.QtCore import Qt,QTimer
+from PySide6.QtWidgets import QDialog,QVBoxLayout,QGridLayout,QLabel,QPushButton,QFrame,QHBoxLayout,QWidget
+from PySide6.QtCore import Qt
 
 class ProductModal(QDialog):
     def __init__(self,row,parent=None):
@@ -18,8 +18,6 @@ class ProductModal(QDialog):
             QLabel#eyebrow{background:transparent;color:#EDE7FF;font-size:11px;font-weight:700;letter-spacing:1px;}
             QLabel#productTitle{background:transparent;color:#FFFFFF;font-size:25px;font-weight:850;}
             QLabel#meta{background:transparent;color:#F5EEFF;font-size:12px;}
-            QPushButton#copy{background:rgba(255,255,255,0.16);color:#FFFFFF;border:1px solid rgba(255,255,255,0.4);border-radius:9px;padding:8px 12px;font-size:11px;font-weight:750;}
-            QPushButton#copy:hover{background:rgba(255,255,255,0.26);}
             QLabel#metricLabel{color:#7A8498;font-size:10px;font-weight:700;}
             QLabel#metricValue{color:#24324A;font-size:19px;font-weight:850;}
             QLabel#sectionTitle{color:#24324A;font-size:14px;font-weight:850;}
@@ -34,16 +32,11 @@ class ProductModal(QDialog):
         e=QLabel("VISÃO COMPLETA DO PRODUTO"); e.setObjectName("eyebrow"); hl.addWidget(e)
         description=str(row.get("descricao", "Produto sem descrição"))
         barcode=str(row.get("codigo_barras", "")).strip()
-        title=QLabel(description); title.setObjectName("productTitle"); title.setWordWrap(True); hl.addWidget(title)
-        meta=QLabel(f"Código  {row.get('codigo_barras','—')}   •   {row.get('grupo','—')}   •   {row.get('subclasse','—')}   •   {row.get('loja','—')}"); meta.setObjectName("meta"); meta.setWordWrap(True); hl.addWidget(meta)
-        copy_row=QHBoxLayout(); copy_row.setSpacing(8)
-        description_copy=QPushButton("⧉  Copiar descrição"); description_copy.setObjectName("copy")
-        barcode_copy=QPushButton("⧉  Copiar código de barras"); barcode_copy.setObjectName("copy")
-        description_copy.setToolTip("Copiar a descrição para colar com Ctrl+V")
-        barcode_copy.setToolTip("Copiar o código de barras para colar com Ctrl+V")
-        description_copy.clicked.connect(lambda: self.copy_to_clipboard(description, description_copy, "Copiar descrição", "Descrição copiada!"))
-        barcode_copy.clicked.connect(lambda: self.copy_to_clipboard(barcode, barcode_copy, "Copiar código de barras", "Código copiado!"))
-        copy_row.addWidget(description_copy); copy_row.addWidget(barcode_copy); copy_row.addStretch(1); hl.addLayout(copy_row)
+        title=QLabel(description); title.setObjectName("productTitle"); title.setWordWrap(True)
+        title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse); hl.addWidget(title)
+        barcode_label=QLabel(f"Código  {barcode or '—'}"); barcode_label.setObjectName("meta")
+        barcode_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse); hl.addWidget(barcode_label)
+        meta=QLabel(f"{row.get('grupo','—')}   •   {row.get('subclasse','—')}   •   {row.get('loja','—')}"); meta.setObjectName("meta"); meta.setWordWrap(True); hl.addWidget(meta)
         root.addWidget(hero)
 
         body=QWidget(); body.setObjectName("productBody"); body.setStyleSheet("QWidget#productBody{background:#F3F0FF;border:1px solid #DDD5FA;border-radius:22px;}"); bl=QVBoxLayout(body); bl.setContentsMargins(14,14,14,16); bl.setSpacing(14)
@@ -82,8 +75,3 @@ class ProductModal(QDialog):
 
         bottom=QHBoxLayout(); bottom.addStretch(1); b=QPushButton("Fechar"); b.setObjectName("close"); b.clicked.connect(self.accept); bottom.addWidget(b); root.addLayout(bottom)
 
-    @staticmethod
-    def copy_to_clipboard(value, button, original_text, copied_text):
-        QApplication.clipboard().setText(value)
-        button.setText("✓  " + copied_text)
-        QTimer.singleShot(1400, lambda: button.setText(original_text))
