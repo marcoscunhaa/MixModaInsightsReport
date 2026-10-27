@@ -362,6 +362,23 @@ def _audit_table(audit, styles, width):
     return row
 
 
+def _unmatched_table(audit, styles, width):
+    items = audit.get("vendas_sem_correspondencia_itens", [])
+    if not items:
+        return _paragraph("Nenhum item de venda ficou sem correspondência no estoque.", styles["body"])
+
+    headers = ["Código de barras", "Descrição do produto", "Loja", "Unidades vendidas"]
+    data = [[_paragraph(header, styles["table_head"]) for header in headers]]
+    for item in items:
+        data.append([
+            _paragraph(item.get("codigo_barras", ""), styles["table"]),
+            _paragraph(item.get("descricao", ""), styles["table_bold"]),
+            _paragraph(item.get("loja", ""), styles["table"]),
+            br_number(item.get("quantidade_vendida", 0), 0),
+        ])
+    return _table(data, [width * .19, width * .46, width * .20, width * .15], paddings=5)
+
+
 def _audit_legend(styles, width):
     definitions = [
         ("Itens de estoque", "Produtos únicos com código e descrição válidos, após a consolidação do estoque."),
@@ -488,7 +505,14 @@ def export_dashboard_pdf(path, df, period, loja, audit):
     story.extend([critical, Spacer(1, 13)])
     if shown == 0:
         story.append(_paragraph("Nenhum produto está classificado como crítico, baixo ou sem estoque.", styles["body"]))
-    story.extend([_section_heading("Qualidade e cobertura dos dados", styles),
+    unmatched_items = (audit or {}).get("vendas_sem_correspondencia_itens", [])
+    story.extend([_section_heading("Vendas sem correspondência no estoque", styles),
+                  _paragraph(
+                      f"{len(unmatched_items)} combinações de venda não foram encontradas no estoque. "
+                      "A tabela identifica os itens para conferência no sistema da loja.", styles["muted"]
+                  ), Spacer(1, 5),
+                  _unmatched_table(audit or {}, styles, content_width), Spacer(1, 12),
+                  _section_heading("Qualidade e cobertura dos dados", styles),
                   _audit_table(audit or {}, styles, content_width), Spacer(1, 5),
                   _section_heading("Legenda dos indicadores", styles),
                   _audit_legend(styles, content_width), Spacer(1, 5)])
