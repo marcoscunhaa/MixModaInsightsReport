@@ -6,7 +6,7 @@ def is_produto_ignorado(descricao, codigo_barras=None):
     return (
         s.startswith("CODIGO DESATIVADO")
         or s.startswith("PECA")
-        or len(codigo) == 3
+        or len(codigo) in (3, 4)
     )
 
 def clean_dataframe(df, description_col="descricao", barcode_col="codigo_barras"):
