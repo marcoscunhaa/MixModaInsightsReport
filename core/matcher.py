@@ -109,8 +109,10 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
         global_catalog.loc[linen, ["grupo_ref", "subclasse_ref"]] = ["UTILIDADES", "COLCHA"]
         global_code = _unique_classification(global_catalog, "codigo_barras")
         merged = merged.merge(global_code, on="codigo_barras", how="left", suffixes=("", "_global_code"))
-        merged["grupo_ref"] = merged["grupo_ref"].fillna(merged["grupo_ref_global_code"])
-        merged["subclasse_ref"] = merged["subclasse_ref"].fillna(merged["subclasse_ref_global_code"])
+        # A unique global classification is authoritative, so choosing a
+        # different store cannot change the product's group or subclass.
+        merged["grupo_ref"] = merged["grupo_ref_global_code"].fillna(merged["grupo_ref"])
+        merged["subclasse_ref"] = merged["subclasse_ref_global_code"].fillna(merged["subclasse_ref"])
         merged.drop(columns=["grupo_ref_global_code", "subclasse_ref_global_code"], inplace=True)
 
         global_description = _unique_classification(global_catalog, "descricao_norm")
