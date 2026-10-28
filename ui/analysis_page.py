@@ -1,3 +1,4 @@
+from pathlib import Path
 from PySide6.QtCore import Signal,QDate
 from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QComboBox,QDateEdit,QPushButton,QLabel,QFrame,QScrollArea
 from ui.window_chrome import get_open_file, show_message
@@ -16,11 +17,24 @@ class StoreRow(QFrame):
         bs=QPushButton("Selecionar estoque"); bs.setObjectName("Secondary"); bs.clicked.connect(self.pick_stock); bv=QPushButton("Selecionar vendas"); bv.setObjectName("Secondary"); bv.clicked.connect(self.pick_sales)
         form.addRow("Nome da loja",self.loja); form.addRow(bs,self.stock); form.addRow(bv,self.sales); l.addLayout(form); self.stock_path=None; self.sales_path=None
     def pick_stock(self):
-        p=get_open_file(self,"Selecionar estoque","Planilhas (*.xlsx *.xls)")
-        if p:self.stock_path=p; self.stock.setText("✓ "+p.split("/")[-1])
+        try:
+            path = get_open_file(self, "Selecionar estoque", "Planilhas (*.xlsx *.xls)")
+        except Exception as error:
+            show_message(self, "critical", "Não foi possível abrir os arquivos", str(error))
+            return
+        if path:
+            self.stock_path = path
+            self.stock.setText("✓ " + Path(path).name)
+
     def pick_sales(self):
-        p=get_open_file(self,"Selecionar vendas","Planilhas (*.xlsx *.xls)")
-        if p:self.sales_path=p; self.sales.setText("✓ "+p.split("/")[-1])
+        try:
+            path = get_open_file(self, "Selecionar vendas", "Planilhas (*.xlsx *.xls)")
+        except Exception as error:
+            show_message(self, "critical", "Não foi possível abrir os arquivos", str(error))
+            return
+        if path:
+            self.sales_path = path
+            self.sales.setText("✓ " + Path(path).name)
 
 class AnalysisPage(QWidget):
     generate=Signal(dict)
