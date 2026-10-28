@@ -23,9 +23,10 @@ class StoreRow(QFrame):
 
 class AnalysisPage(QWidget):
     generate=Signal(dict)
-    def __init__(self,parent=None):
+    def __init__(self,parent=None,on_home=None):
         super().__init__(parent); self.rows=[]; root=QVBoxLayout(self); root.setContentsMargins(34,26,34,26); root.setSpacing(16)
-        title=QLabel("Nova análise multi-lojas"); title.setObjectName("Title"); root.addWidget(title); root.addWidget(QLabel("Selecione até 4 lojas, cada uma uma vez. O dashboard consolida os dados e permite filtrar por unidade."))
+        heading=QHBoxLayout(); back=QPushButton("← TELA INICIAL"); back.setObjectName("Ghost"); back.clicked.connect(on_home or (lambda: None)); heading.addWidget(back); heading.addStretch()
+        title=QLabel("Nova análise multi-lojas"); title.setObjectName("Title"); heading.addWidget(title); heading.addStretch(); root.addLayout(heading); root.addWidget(QLabel("Selecione até 4 lojas, cada uma uma vez. O dashboard consolida os dados e permite filtrar por unidade."))
         top=QFrame(); top.setObjectName("Panel"); f=QFormLayout(top); f.setContentsMargins(20,18,20,18)
         self.ini=QDateEdit(QDate.currentDate().addMonths(-1)); self.ini.setCalendarPopup(True); self.fim=QDateEdit(QDate.currentDate()); self.fim.setCalendarPopup(True)
         f.addRow("Período inicial",self.ini); f.addRow("Período final",self.fim); root.addWidget(top)
