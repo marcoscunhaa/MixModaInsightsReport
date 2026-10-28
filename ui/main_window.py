@@ -2,7 +2,6 @@ from pathlib import Path
 import traceback
 
 import pandas as pd
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -19,32 +18,12 @@ from core.loader import load_stock, load_sales
 from core.matcher import build_analysis, load_classification
 from core.models import AnalysisConfig
 from core.stock_alerts import StockAlertStore
-from core.whatsapp import WhatsAppCloudClient
 from ui.analysis_page import AnalysisPage
 from ui.catalog_page import CatalogPage
 from ui.dashboard_page import DashboardPage
 from ui.stock_alerts import StockAlertRulesDialog
 from ui.styles import APP_QSS
 from utils.formatting import br_number
-
-
-class _WhatsAppSendSignals(QObject):
-    finished = Signal(object, object)
-
-
-class _WhatsAppSendWorker(QRunnable):
-    def __init__(self, client, alerts):
-        super().__init__()
-        self.client = client
-        self.alerts = alerts
-        self.signals = _WhatsAppSendSignals()
-
-    def run(self):
-        try:
-            message_ids = self.client.send_stock_alerts(self.alerts)
-            self.signals.finished.emit(message_ids, None)
-        except Exception as error:
-            self.signals.finished.emit(None, str(error))
 
 
 class MainWindow(QMainWindow):
@@ -62,11 +41,6 @@ class MainWindow(QMainWindow):
             data_dir / "stock_alert_rules.json",
             data_dir / "stock_alert_snapshot.json",
         )
-        self.whatsapp_client = WhatsAppCloudClient(self.alert_store)
-        self._alert_send_pool = QThreadPool.globalInstance()
-        self._alert_send_worker = None
-        self._alert_sending = False
-        self._pending_alerts = []
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -76,9 +50,6 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.home)
         self.stack.addWidget(self.analysis)
 
-        # Reuse the last analyzed stock snapshot for automatic WhatsApp alerts at launch.
-        QTimer.singleShot(350, self.refresh_alert_status)
-        QTimer.singleShot(350, self.send_latest_stock_alerts)
 
     def home_page(self):
         widget = QWidget()
@@ -112,9 +83,6 @@ class MainWindow(QMainWindow):
         actions.addStretch()
         layout.addLayout(actions)
 
-        self.alert_status = QLabel()
-        self.alert_status.setObjectName("Muted")
-        layout.addWidget(self.alert_status)
         layout.addStretch()
 
         meta = self.catalog.get("meta", {})
@@ -126,21 +94,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(footer)
         return widget
 
-    def refresh_alert_status(self):
-        settings = self.alert_store.load_settings()
-        missing = self.whatsapp_client.missing_configuration()
-        rule_count = len(self.alert_store.load_rules())
-        if not rule_count:
-            text = "Alertas de estoque: nenhuma regra configurada."
-        elif missing:
-            text = "Alertas salvos; para receber no WhatsApp, complete a configuração em CONFIGURAR ALERTAS."
-        else:
-            text = f"WhatsApp configurado • {rule_count} regra(s) de estoque ativa(s)."
-        self.alert_status.setText(text)
-        self.alert_status.setToolTip(
-            f"Destinatário salvo: {settings.get('whatsapp_recipient', '') or 'não informado'}"
-        )
-
     def open_catalog(self):
         if not hasattr(self, "catpage"):
             self.catpage = CatalogPage(self.catalog)
@@ -150,40 +103,6 @@ class MainWindow(QMainWindow):
     def open_stock_alerts(self):
         dialog = StockAlertRulesDialog(self.catalog, self.alert_store, self)
         dialog.exec()
-        self.refresh_alert_status()
-        self.send_latest_stock_alerts()
-
-    def send_latest_stock_alerts(self):
-        if self._alert_sending:
-            return
-        snapshot = self.alert_store.load_snapshot()
-        alerts = self.alert_store.evaluate(snapshot.get("rows", []))
-        pending = self.alert_store.unsent_alerts(alerts)
-        if not pending or self.whatsapp_client.missing_configuration():
-            return
-
-        self._pending_alerts = pending
-        self._alert_sending = True
-        worker = _WhatsAppSendWorker(self.whatsapp_client, pending)
-        worker.signals.finished.connect(self._on_whatsapp_send_finished)
-        self._alert_send_worker = worker
-        self._alert_send_pool.start(worker)
-
-    def _on_whatsapp_send_finished(self, message_ids, error):
-        self._alert_sending = False
-        self._alert_send_worker = None
-        if error:
-            QMessageBox.warning(
-                self,
-                "Falha no envio pelo WhatsApp",
-                f"A lista de estoque crítico não foi enviada.\n\n{error}\n\n"
-                "Confira a conexão, o template aprovado e as credenciais da Meta.",
-            )
-            return
-        self.alert_store.mark_alerts_sent(self._pending_alerts)
-        self._pending_alerts = []
-        self.refresh_alert_status()
-        QTimer.singleShot(0, self.send_latest_stock_alerts)
 
     def open_home(self):
         self.stack.setCurrentWidget(self.home)
@@ -239,10 +158,10 @@ class MainWindow(QMainWindow):
                 (info["data_inicio"], info["data_fim"]),
                 audit,
                 on_home=self.open_home,
+                alert_store=self.alert_store,
             )
             self.stack.addWidget(page)
             self.stack.setCurrentWidget(page)
-            self.send_latest_stock_alerts()
         except Exception as error:
             details = traceback.format_exc()
             QMessageBox.critical(
