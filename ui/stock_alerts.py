@@ -337,6 +337,17 @@ class StockAlertsDialog(QDialog):
                 table.setItem(row, col, QTableWidgetItem(value))
             table.setRowHeight(row, 42)
         layout.addWidget(table, 1)
+        if not alerts:
+            table.hide()
+            empty = QLabel("Tudo em dia")
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty.setStyleSheet("color:#16836D;font-size:18px;font-weight:900;padding:28px;")
+            detail = QLabel("Nenhum produto atingiu a faixa de estoque definida nas suas regras.")
+            detail.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            detail.setWordWrap(True)
+            detail.setStyleSheet("color:#74829A;font-size:11px;padding:0 20px 24px;")
+            layout.addWidget(empty)
+            layout.addWidget(detail)
         root.addWidget(panel, 1)
 
         footer = QHBoxLayout()
