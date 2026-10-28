@@ -175,7 +175,7 @@ def get_open_file(parent, title, name_filter):
     dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
     dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
     dialog.setNameFilter(name_filter)
-    install_mac_window_chrome(dialog, dialog.layout(), resizable=False)
+    install_mac_window_chrome(dialog, dialog.layout())
     accepted = dialog.exec() == QDialog.DialogCode.Accepted
     files = dialog.selectedFiles()
     return files[0] if accepted and files else ""
@@ -193,7 +193,7 @@ def get_save_file(parent, title, default_name, name_filter, default_suffix=""):
         dialog.setDefaultSuffix(default_suffix)
     if default_name:
         dialog.selectFile(default_name)
-    install_mac_window_chrome(dialog, dialog.layout(), resizable=False)
+    install_mac_window_chrome(dialog, dialog.layout())
     accepted = dialog.exec() == QDialog.DialogCode.Accepted
     files = dialog.selectedFiles()
     return files[0] if accepted and files else ""
