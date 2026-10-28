@@ -4,7 +4,7 @@ import re
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
+    QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, 
     QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 from rapidfuzz import fuzz
@@ -13,7 +13,7 @@ from core.stock_alerts import StockAlertStore
 from ui.analysis_page import STORES
 from utils.formatting import brl, br_number
 from utils.normalization import normalize_barcode, normalize_text
-from ui.window_chrome import install_mac_window_chrome
+from ui.window_chrome import install_mac_window_chrome, show_message
 
 
 PALETTE = """
@@ -249,7 +249,7 @@ class StockAlertRulesDialog(QDialog):
                 "estoque_minimo": minimum,
             })
         except (OSError, ValueError) as error:
-            QMessageBox.critical(self, "Não foi possível salvar", str(error))
+            show_message(self, "critical", "Não foi possível salvar", str(error))
             return
         self.status.setText("Regra salva. O alerta será mostrado quando o estoque atingir o limite ou ficar abaixo.")
         self.refresh_rules()
@@ -277,7 +277,7 @@ class StockAlertRulesDialog(QDialog):
         try:
             self.alert_store.remove_rule(rule_id)
         except OSError as error:
-            QMessageBox.critical(self, "Não foi possível remover", str(error))
+            show_message(self, "critical", "Não foi possível remover", str(error))
             return
         self.refresh_rules()
 
