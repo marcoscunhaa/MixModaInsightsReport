@@ -1,7 +1,7 @@
 from utils.formatting import brl, br_number
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QComboBox,QLineEdit,QLabel,QTableWidget,
-    QTableWidgetItem,QScrollArea,QGridLayout,QFrame,QPushButton,QMessageBox,QFileDialog,QHeaderView,QDialog,
+    QTableWidgetItem,QScrollArea,QGridLayout,QFrame,QPushButton,QHeaderView,QDialog,
     QListWidget,QListWidgetItem,QAbstractItemView)
 from PySide6.QtGui import QColor, QFont
 from ui.widgets import Card, RankCard
@@ -12,7 +12,7 @@ from core.insights import generate_insights
 from utils.normalization import normalize_text
 from exports.pdf_export import export_dashboard_pdf
 from ui.stock_alerts import StockAlertsDialog
-from ui.window_chrome import install_mac_window_chrome
+from ui.window_chrome import get_save_file, install_mac_window_chrome, show_message
 
 SUBCLASS_EMOJIS = ["👗","👚","👕","👖","👟","🥿","👜","💄","💍","🧸","🏠","🛏️","🍳","🧴","🧢","🩱","🩴","🎀","🧦","🧺"]
 SUBCLASS_COLORS = ["#5B6CFF","#E85D8A","#00A88F","#FFB52E","#19A9C7","#8B6FE8","#FF7A59","#D94D9A","#36A269","#F06A9B","#4B8EF7","#12B8A6"]
@@ -253,5 +253,5 @@ class DashboardPage(QWidget):
                 t.setItem(i,j,QTableWidgetItem(txt))
         t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.horizontalHeader().setStretchLastSection(True); t.setAlternatingRowColors(True); t.cellDoubleClicked.connect(lambda rr,cc:self.open_row_dict(rows[rr][1].to_dict())); l.addWidget(t); dlg.exec()
     def export_pdf(self):
-        p,_=QFileDialog.getSaveFileName(self,"Exportar PDF","MixModaInsights.pdf","PDF (*.pdf)")
-        if p: export_dashboard_pdf(p,self.current_df(),self.period,self.store.currentText(),self.audit); QMessageBox.information(self,"PDF","Dashboard exportado com sucesso.")
+        p=get_save_file(self,"Exportar PDF","MixModaInsights.pdf","PDF (*.pdf)","pdf")
+        if p: export_dashboard_pdf(p,self.current_df(),self.period,self.store.currentText(),self.audit); show_message(self, "information", "PDF","Dashboard exportado com sucesso.")
