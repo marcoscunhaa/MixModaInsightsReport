@@ -58,7 +58,20 @@ class StockAlertStore:
         self._atomic_write(self.rules_path, payload)
 
     def load_rules(self):
-        return [rule for rule in self._read_document()["rules"] if isinstance(rule, dict)]
+        rules = [dict(rule) for rule in self._read_document()["rules"] if isinstance(rule, dict)]
+        migrated = False
+        for rule in rules:
+            if "estoque_maximo" in rule:
+                # Preserve the previous upper limit as the new single low-stock threshold.
+                try:
+                    rule["estoque_minimo"] = int(rule.get("estoque_maximo", rule.get("estoque_minimo", 0)))
+                except (TypeError, ValueError):
+                    rule["estoque_minimo"] = 0
+                rule.pop("estoque_maximo", None)
+                migrated = True
+        if migrated:
+            self.save_rules(rules)
+        return rules
 
     def save_rules(self, rules):
         self._write_document({"version": 1, "rules": rules})
@@ -68,11 +81,10 @@ class StockAlertStore:
         description = str(rule.get("descricao", "")).strip()
         store = str(rule.get("loja", "*")).strip() or "*"
         minimum = int(rule.get("estoque_minimo", 0))
-        maximum = int(rule.get("estoque_maximo", 0))
         if not barcode or not description:
             raise ValueError("A regra precisa de produto e código de barras.")
-        if minimum < 0 or maximum < minimum:
-            raise ValueError("A faixa de estoque informada é inválida.")
+        if minimum < 0:
+            raise ValueError("O limite de estoque precisa ser igual ou maior que zero.")
 
         rules = self.load_rules()
         identity = (barcode, normalize_text(description), normalize_text(store))
@@ -93,7 +105,6 @@ class StockAlertStore:
             "descricao": description,
             "loja": store,
             "estoque_minimo": minimum,
-            "estoque_maximo": maximum,
             "ativa": True,
         }
         if existing:
@@ -173,7 +184,6 @@ class StockAlertStore:
             rule_store = str(rule.get("loja", "*"))
             try:
                 minimum = int(rule.get("estoque_minimo", 0))
-                maximum = int(rule.get("estoque_maximo", 0))
             except (TypeError, ValueError):
                 continue
 
@@ -196,7 +206,7 @@ class StockAlertStore:
                     quantity = float(stock.get("quantidade_estoque", 0))
                 except (TypeError, ValueError):
                     continue
-                if minimum <= quantity <= maximum:
+                if quantity <= minimum:
                     alerts.append({
                         "rule_id": str(rule.get("id", "")),
                         "codigo_barras": rule_code,
@@ -205,7 +215,6 @@ class StockAlertStore:
                         "quantidade_estoque": quantity,
                         "preco_venda": float(stock.get("preco_venda", 0) or 0),
                         "estoque_minimo": minimum,
-                        "estoque_maximo": maximum,
                     })
 
         return sorted(alerts, key=lambda item: (normalize_text(item["loja"]), normalize_text(item["descricao"])))
