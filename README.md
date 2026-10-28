@@ -31,6 +31,5 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 
 - Pesquise produtos pelo nome ou código de barras; a lista sugere resultados aproximados do catálogo oficial.
 - Cada regra define uma faixa de unidades e pode valer para uma loja ou para todas.
-- As regras e o número de destino ficam em \`data/stock_alert_rules.json\`. O token da Meta fica no cofre de credenciais do sistema.
-- O último estoque analisado fica em \`data/stock_alert_snapshot.json\` para avaliar alertas ao abrir o aplicativo.
-- Para envio automático, configure a integração oficial WhatsApp Business Cloud API no aplicativo: Phone Number ID, token de acesso, nome e idioma de um template Utility aprovado e número destinatário. O template precisa ter um único campo de texto no corpo (\`{{1}}\`), e o destinatário deve ter autorizado as mensagens.
+- As regras ficam salvas em `data/stock_alert_rules.json`; a última análise fica em `data/stock_alert_snapshot.json`.
+- Na dashboard, o ícone de alertas destaca quantos produtos atingiram as regras e abre a relação com código, loja, quantidade e preço de venda.
