@@ -211,3 +211,42 @@ def get_save_file(parent, title, default_name, name_filter, default_suffix=""):
     accepted = dialog.exec() == QDialog.DialogCode.Accepted
     files = dialog.selectedFiles()
     return files[0] if accepted and files else ""
+
+def confirm_action(parent, title, message, confirm_label="Excluir"):
+    """Show a confirmation dialog with the same app window controls."""
+    from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+
+    dialog = QDialog(parent)
+    dialog.setWindowTitle(title)
+    dialog.setModal(True)
+    dialog.setMinimumWidth(460)
+    dialog.setStyleSheet(
+        "QDialog{background:#F4F7FC;}"
+        "QLabel#confirmText{color:#283954;font-size:12px;}"
+        "QPushButton#cancelAction{background:#FFFFFF;color:#40516E;border:1px solid #D8E2F0;"
+        "border-radius:10px;padding:9px 16px;font-weight:800;}"
+        "QPushButton#confirmAction{background:#D94152;color:white;border:0;"
+        "border-radius:10px;padding:9px 16px;font-weight:900;}"
+        "QPushButton#confirmAction:hover{background:#C02E40;}"
+    )
+    root = QVBoxLayout(dialog)
+    root.setContentsMargins(12, 8, 16, 16)
+    root.setSpacing(14)
+    install_mac_window_chrome(dialog, root)
+
+    label = QLabel(str(message))
+    label.setObjectName("confirmText")
+    label.setWordWrap(True)
+    root.addWidget(label, 1)
+    actions = QHBoxLayout()
+    actions.addStretch(1)
+    cancel = QPushButton("Cancelar")
+    cancel.setObjectName("cancelAction")
+    cancel.clicked.connect(lambda checked=False: dialog.reject())
+    actions.addWidget(cancel)
+    confirm = QPushButton(confirm_label)
+    confirm.setObjectName("confirmAction")
+    confirm.clicked.connect(lambda checked=False: dialog.accept())
+    actions.addWidget(confirm)
+    root.addLayout(actions)
+    return dialog.exec() == QDialog.DialogCode.Accepted
