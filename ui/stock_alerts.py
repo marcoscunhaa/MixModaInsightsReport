@@ -1,33 +1,39 @@
-"""Product search, persistent stock-alert rules, and WhatsApp settings."""
+"""Interface para configurar regras e consultar alertas de estoque."""
 import re
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QComboBox,
-    QCheckBox,
-    QDialog,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QListWidget,
-    QListWidgetItem,
-    QMessageBox,
-    QPushButton,
-    QSpinBox,
-    QTableWidget,
-    QTableWidgetItem,
-    QVBoxLayout,
-    QWidget,
-    QHeaderView,
-    QFrame,
+    QAbstractItemView, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout,
+    QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
+    QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
 from rapidfuzz import fuzz
 
 from core.stock_alerts import StockAlertStore
 from ui.analysis_page import STORES
+from utils.formatting import brl, br_number
 from utils.normalization import normalize_barcode, normalize_text
+
+
+PALETTE = """
+QDialog { background:#F3F6FB; }
+QLabel#eyebrow { color:#526FE3; font-size:10px; font-weight:900; letter-spacing:1px; }
+QLabel#title { color:#14284B; font-size:24px; font-weight:900; }
+QLabel#muted { color:#74829A; font-size:11px; }
+QLabel#section { color:#192D50; font-size:13px; font-weight:900; }
+QFrame#panel { background:#FFFFFF; border:1px solid #E0E7F1; border-radius:16px; }
+QLineEdit, QComboBox, QSpinBox { background:#F8FAFD; border:1px solid #DCE4F0; border-radius:9px; padding:9px 10px; color:#233451; }
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border:1px solid #5675E8; background:#FFFFFF; }
+QListWidget, QTableWidget { background:#FFFFFF; border:1px solid #E2E8F1; border-radius:10px; }
+QListWidget::item { padding:9px; border-bottom:1px solid #EEF1F6; }
+QListWidget::item:selected { background:#EEF2FF; color:#18377C; }
+"""
+
+
+def _panel():
+    frame = QFrame()
+    frame.setObjectName("panel")
+    return frame
 
 
 class StockAlertRulesDialog(QDialog):
@@ -37,184 +43,123 @@ class StockAlertRulesDialog(QDialog):
         self.alert_store = alert_store
         self.products = self.catalog.get("produtos", [])
         self.products_by_key = {
-            (
-                normalize_barcode(product.get("codigo_barras")),
-                normalize_text(product.get("descricao")),
-            ): product
-            for product in self.products
+            (normalize_barcode(p.get("codigo_barras")), normalize_text(p.get("descricao"))): p
+            for p in self.products
         }
         self.selected_product = None
-
-        self.setWindowTitle("Regras de alerta de estoque")
-        self.resize(1120, 850)
-        self.setMinimumSize(940, 700)
-        self.setStyleSheet("""
-            QDialog { background: #F4F7FC; }
-            QLabel#pageTitle { color: #14284B; font-size: 23px; font-weight: 900; }
-            QLabel#muted { color: #718097; font-size: 11px; }
-            QLabel#sectionTitle { color: #14284B; font-size: 14px; font-weight: 850; }
-            QFrame#panel { background: #FFFFFF; border: 1px solid #DCE5F2; border-radius: 16px; }
-            QListWidget, QTableWidget { background: #FFFFFF; border: 1px solid #DCE5F2; border-radius: 10px; }
-            QListWidget::item { padding: 8px; border-bottom: 1px solid #EDF1F7; }
-            QListWidget::item:selected { background: #EAF0FF; color: #17326F; }
-        """)
+        self.setWindowTitle("Regras de estoque • Mix Moda")
+        self.resize(1050, 820)
+        self.setMinimumSize(900, 700)
+        self.setStyleSheet(PALETTE)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 20, 24, 22)
-        root.setSpacing(12)
+        root.setContentsMargins(24, 20, 24, 20)
+        root.setSpacing(13)
+        root.addWidget(self._heading())
+        root.addWidget(self._editor())
+        root.addWidget(self._rules_panel(), 1)
+        root.addLayout(self._footer())
 
-        title = QLabel("ALERTAS DE ESTOQUE")
-        title.setObjectName("pageTitle")
-        root.addWidget(title)
-        intro = QLabel(
-            "Busque produtos pelo nome ou código, escolha uma faixa de estoque e informe "
-            "o WhatsApp que receberá a lista dos produtos críticos."
-        )
-        intro.setObjectName("muted")
-        intro.setWordWrap(True)
-        root.addWidget(intro)
+        self.refresh_rules()
+        self.refresh_products("")
 
-        add_panel = QFrame()
-        add_panel.setObjectName("panel")
-        add_layout = QVBoxLayout(add_panel)
-        add_layout.setContentsMargins(16, 14, 16, 16)
-        add_layout.setSpacing(8)
-        add_title = QLabel("Adicionar ou atualizar uma regra")
-        add_title.setObjectName("sectionTitle")
-        add_layout.addWidget(add_title)
+    def _heading(self):
+        box = QVBoxLayout()
+        eyebrow = QLabel("GESTÃO INTELIGENTE DE ESTOQUE")
+        eyebrow.setObjectName("eyebrow")
+        box.addWidget(eyebrow)
+        title = QLabel("Regras de estoque crítico")
+        title.setObjectName("title")
+        box.addWidget(title)
+        subtitle = QLabel("Escolha os produtos importantes e defina quando o estoque deve chamar sua atenção.")
+        subtitle.setObjectName("muted")
+        box.addWidget(subtitle)
+        wrapper = QWidget()
+        wrapper.setLayout(box)
+        return wrapper
+
+    def _editor(self):
+        panel = _panel()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 16, 18, 18)
+        layout.setSpacing(10)
+        title = QLabel("Criar ou atualizar regra")
+        title.setObjectName("section")
+        layout.addWidget(title)
 
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Digite parte do nome (ex.: cueca cavada) ou do código de barras...")
+        self.search.setPlaceholderText("Buscar por nome ou código de barras — ex.: cueca cavada")
         self.search.textChanged.connect(self.refresh_products)
-        add_layout.addWidget(self.search)
+        layout.addWidget(self.search)
 
         self.results = QListWidget()
         self.results.setMaximumHeight(175)
         self.results.currentItemChanged.connect(self.select_product)
-        add_layout.addWidget(self.results)
+        layout.addWidget(self.results)
 
-        form = QGridLayout()
-        form.setHorizontalSpacing(12)
-        form.setVerticalSpacing(8)
-        self.selected_label = QLabel("Digite ao menos 2 caracteres para ver sugestões.")
+        self.selected_label = QLabel("Digite pelo menos 2 caracteres para encontrar um produto.")
         self.selected_label.setObjectName("muted")
         self.selected_label.setWordWrap(True)
-        form.addWidget(self.selected_label, 0, 0, 1, 6)
+        layout.addWidget(self.selected_label)
 
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(6)
+        grid.addWidget(self._field_label("LOJA"), 0, 0)
         self.store = QComboBox()
         self.store.addItem("Todas as lojas", "*")
         for store in STORES:
             self.store.addItem(store, store)
+        grid.addWidget(self.store, 1, 0)
 
+        grid.addWidget(self._field_label("ESTOQUE MÍNIMO"), 0, 1)
         self.minimum = QSpinBox()
         self.minimum.setRange(0, 100000)
-        self.minimum.setValue(0)
+        grid.addWidget(self.minimum, 1, 1)
+        grid.addWidget(self._field_label("ESTOQUE MÁXIMO"), 0, 2)
         self.maximum = QSpinBox()
         self.maximum.setRange(0, 100000)
         self.maximum.setValue(3)
+        grid.addWidget(self.maximum, 1, 2)
+        grid.setColumnStretch(0, 2)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+        layout.addLayout(grid)
 
-        form.addWidget(QLabel("Aplicar em"), 1, 0)
-        form.addWidget(self.store, 1, 1)
-        form.addWidget(QLabel("Estoque mínimo"), 1, 2)
-        form.addWidget(self.minimum, 1, 3)
-        form.addWidget(QLabel("Estoque máximo"), 1, 4)
-        form.addWidget(self.maximum, 1, 5)
-
-        self.recipient = QLineEdit()
-        self.recipient.setPlaceholderText("Ex.: +55 11 99999-9999")
-        self.recipient.setText(str(self.alert_store.load_settings().get("whatsapp_recipient", "")))
-        self.recipient.textChanged.connect(self.refresh_connection_status)
-        form.addWidget(QLabel("WhatsApp destinatário"), 2, 0)
-        form.addWidget(self.recipient, 2, 1, 1, 5)
-        add_layout.addLayout(form)
-
-        action_row = QHBoxLayout()
-        self.status = QLabel("Exemplo: avisar quando o estoque ficar entre 0 e 3 unidades.")
+        actions = QHBoxLayout()
+        self.status = QLabel("O alerta aparece quando o estoque estiver entre os limites definidos.")
         self.status.setObjectName("muted")
-        action_row.addWidget(self.status, 1)
+        self.status.setWordWrap(True)
+        actions.addWidget(self.status, 1)
         self.save_button = QPushButton("＋  SALVAR REGRA")
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self.save_rule)
-        action_row.addWidget(self.save_button)
-        add_layout.addLayout(action_row)
-        root.addWidget(add_panel)
+        actions.addWidget(self.save_button)
+        layout.addLayout(actions)
+        return panel
 
-        whatsapp_panel = QFrame()
-        whatsapp_panel.setObjectName("panel")
-        whatsapp_layout = QVBoxLayout(whatsapp_panel)
-        whatsapp_layout.setContentsMargins(16, 14, 16, 14)
-        whatsapp_layout.setSpacing(7)
-        whatsapp_title = QLabel("Conexão WhatsApp Business")
-        whatsapp_title.setObjectName("sectionTitle")
-        whatsapp_layout.addWidget(whatsapp_title)
+    @staticmethod
+    def _field_label(text):
+        label = QLabel(text)
+        label.setStyleSheet("color:#8290A6;font-size:9px;font-weight:900;letter-spacing:0.6px;")
+        return label
 
-        settings = self.alert_store.load_settings()
-        self.phone_number_id = QLineEdit(str(settings.get("phone_number_id", "")))
-        self.phone_number_id.setPlaceholderText("Phone Number ID do número remetente na Meta")
-        self.phone_number_id.textChanged.connect(self.refresh_connection_status)
-        self.template_name = QLineEdit(str(settings.get("template_name", "")))
-        self.template_name.setPlaceholderText("Nome do template de mensagem aprovado")
-        self.template_name.textChanged.connect(self.refresh_connection_status)
-        self.template_language = QLineEdit(str(settings.get("template_language", "pt_BR")))
-        self.template_language.setPlaceholderText("pt_BR")
-        self.access_token = QLineEdit()
-        self.access_token.setEchoMode(QLineEdit.EchoMode.Password)
-        self.access_token.setPlaceholderText(
-            "Token salvo no cofre do sistema; deixe vazio para manter"
-            if self.alert_store.has_access_token()
-            else "Token de acesso da Meta"
-        )
-
-        config_grid = QGridLayout()
-        config_grid.setHorizontalSpacing(12)
-        config_grid.setVerticalSpacing(7)
-        config_grid.addWidget(QLabel("Phone Number ID"), 0, 0)
-        config_grid.addWidget(self.phone_number_id, 0, 1)
-        config_grid.addWidget(QLabel("Template aprovado"), 0, 2)
-        config_grid.addWidget(self.template_name, 0, 3)
-        config_grid.addWidget(QLabel("Idioma"), 0, 4)
-        config_grid.addWidget(self.template_language, 0, 5)
-        config_grid.addWidget(QLabel("Token de acesso"), 1, 0)
-        config_grid.addWidget(self.access_token, 1, 1, 1, 5)
-        whatsapp_layout.addLayout(config_grid)
-
-        setup_hint = QLabel(
-            "Use um template Utility aprovado pela Meta com um único campo de texto {{1}}. "
-            "O token é guardado no cofre de credenciais do computador, não no JSON."
-        )
-        setup_hint.setObjectName("muted")
-        setup_hint.setWordWrap(True)
-        whatsapp_layout.addWidget(setup_hint)
-        self.recipient_consent = QCheckBox(
-            "Confirmo que o destinatário autorizou receber alertas de estoque neste WhatsApp."
-        )
-        self.recipient_consent.setChecked(bool(settings.get("whatsapp_opt_in_confirmed", False)))
-        self.recipient_consent.toggled.connect(self.refresh_connection_status)
-        whatsapp_layout.addWidget(self.recipient_consent)
-
-        connection_row = QHBoxLayout()
-        self.whatsapp_status = QLabel()
-        self.whatsapp_status.setObjectName("muted")
-        connection_row.addWidget(self.whatsapp_status, 1)
-        save_connection = QPushButton("SALVAR CONFIGURAÇÃO")
-        save_connection.setObjectName("Secondary")
-        save_connection.clicked.connect(self.save_whatsapp_settings)
-        connection_row.addWidget(save_connection)
-        whatsapp_layout.addLayout(connection_row)
-        root.addWidget(whatsapp_panel)
-        self.refresh_connection_status()
-
-        rules_panel = QFrame()
-        rules_panel.setObjectName("panel")
-        rules_layout = QVBoxLayout(rules_panel)
-        rules_layout.setContentsMargins(16, 14, 16, 14)
-        rules_layout.setSpacing(8)
-        rules_title = QLabel("Regras salvas")
-        rules_title.setObjectName("sectionTitle")
-        rules_layout.addWidget(rules_title)
+    def _rules_panel(self):
+        panel = _panel()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 15, 18, 14)
+        heading = QHBoxLayout()
+        title = QLabel("Suas regras")
+        title.setObjectName("section")
+        heading.addWidget(title)
+        heading.addStretch()
+        self.rule_count = QLabel()
+        self.rule_count.setObjectName("muted")
+        heading.addWidget(self.rule_count)
+        layout.addLayout(heading)
 
         self.rules_table = QTableWidget(0, 5)
-        self.rules_table.setHorizontalHeaderLabels(["Produto", "Código", "Loja", "Faixa de estoque", ""])
+        self.rules_table.setHorizontalHeaderLabels(["Produto", "Código", "Loja", "Limite de estoque", ""])
         self.rules_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.rules_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.rules_table.setAlternatingRowColors(True)
@@ -222,68 +167,20 @@ class StockAlertRulesDialog(QDialog):
         self.rules_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for column in (1, 2, 3, 4):
             self.rules_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
-        rules_layout.addWidget(self.rules_table, 1)
-        root.addWidget(rules_panel, 1)
+        layout.addWidget(self.rules_table, 1)
+        return panel
 
-        footer = QHBoxLayout()
-        hint = QLabel(
-            "Os avisos são enviados após cada análise e na abertura do app, usando os dados da última análise."
-        )
-        hint.setObjectName("muted")
-        hint.setWordWrap(True)
-        footer.addWidget(hint, 1)
-        close_button = QPushButton("FECHAR")
-        close_button.setObjectName("Ghost")
-        close_button.clicked.connect(self.accept)
-        footer.addWidget(close_button)
-        root.addLayout(footer)
-
-        self.refresh_rules()
-        self.refresh_products("")
-
-    def refresh_connection_status(self):
-        missing = []
-        settings = self.alert_store.load_settings()
-        if not settings.get("whatsapp_recipient") and not self.recipient.text().strip():
-            missing.append("destinatário")
-        if self.recipient.text().strip() and not self.recipient_consent.isChecked():
-            missing.append("autorização do destinatário")
-        if not self.phone_number_id.text().strip():
-            missing.append("Phone Number ID")
-        if not self.template_name.text().strip():
-            missing.append("template")
-        if not self.alert_store.has_access_token() and not self.access_token.text().strip():
-            missing.append("token")
-        if missing:
-            self.whatsapp_status.setText("Falta configurar: " + ", ".join(missing) + ".")
-        else:
-            self.whatsapp_status.setText("Configuração preenchida; mensagens serão enviadas quando houver alerta.")
-
-    def _settings_payload(self):
-        return {
-            "whatsapp_recipient": self.recipient.text(),
-            "phone_number_id": self.phone_number_id.text(),
-            "template_name": self.template_name.text(),
-            "template_language": self.template_language.text() or "pt_BR",
-            "whatsapp_opt_in_confirmed": self.recipient_consent.isChecked(),
-        }
-
-    def save_whatsapp_settings(self):
-        if self.recipient.text().strip() and not self.recipient_consent.isChecked():
-            QMessageBox.warning(
-                self, "Confirmação necessária",
-                "Confirme que o destinatário autorizou receber avisos pelo WhatsApp."
-            )
-            return
-        try:
-            self.alert_store.save_settings(self._settings_payload(), self.access_token.text())
-        except (OSError, ValueError, RuntimeError) as error:
-            QMessageBox.critical(self, "Não foi possível salvar", str(error))
-            return
-        self.access_token.clear()
-        self.access_token.setPlaceholderText("Token salvo no cofre do sistema; deixe vazio para manter")
-        self.whatsapp_status.setText("Configuração do WhatsApp salva.")
-        self.refresh_connection_status()
+    def _footer(self):
+        row = QHBoxLayout()
+        note = QLabel("As regras ficam salvas neste computador e são verificadas com os dados da última análise.")
+        note.setObjectName("muted")
+        note.setWordWrap(True)
+        row.addWidget(note, 1)
+        close = QPushButton("CONCLUÍDO")
+        close.setObjectName("Ghost")
+        close.clicked.connect(self.accept)
+        row.addWidget(close)
+        return row
 
     def refresh_products(self, text):
         self.results.clear()
@@ -291,9 +188,8 @@ class StockAlertRulesDialog(QDialog):
         self.save_button.setEnabled(False)
         query = str(text).strip()
         if len(query) < 2:
-            self.selected_label.setText("Digite ao menos 2 caracteres para ver sugestões.")
+            self.selected_label.setText("Digite pelo menos 2 caracteres para encontrar um produto.")
             return
-
         normalized_query = normalize_text(query)
         query_digits = normalize_barcode(query)
         code_search = bool(re.fullmatch(r"[\d\s./+-]+", query))
@@ -301,11 +197,9 @@ class StockAlertRulesDialog(QDialog):
         for product in self.products:
             description = str(product.get("descricao", ""))
             normalized_description = normalize_text(description)
-            barcode = str(product.get("codigo_barras", ""))
-            normalized_barcode = normalize_barcode(barcode)
-
-            if code_search and query_digits and query_digits in normalized_barcode:
-                score = 1200 if normalized_barcode == query_digits else 1100
+            barcode = normalize_barcode(product.get("codigo_barras"))
+            if code_search and query_digits and query_digits in barcode:
+                score = 1200 if barcode == query_digits else 1100
             elif normalized_query in normalized_description:
                 score = 1000 - normalized_description.find(normalized_query)
             else:
@@ -314,78 +208,44 @@ class StockAlertRulesDialog(QDialog):
                     fuzz.token_set_ratio(normalized_query, normalized_description),
                     fuzz.partial_ratio(normalized_query, normalized_description) * 0.82,
                 )
-                if query_digits and query_digits in normalized_barcode:
+                if query_digits and query_digits in barcode:
                     score = max(score, 950)
-
             if score >= 48:
                 matches.append((score, product))
-
-        matches.sort(
-            key=lambda item: (
-                -item[0],
-                normalize_text(item[1].get("descricao", "")),
-                normalize_barcode(item[1].get("codigo_barras")),
-            )
-        )
-        shown = matches[:60]
-        for _, product in shown:
+        matches.sort(key=lambda pair: (-pair[0], normalize_text(pair[1].get("descricao", ""))))
+        for _, product in matches[:60]:
             description = str(product.get("descricao", "Produto"))
             barcode = str(product.get("codigo_barras", ""))
-            group = str(product.get("grupo", ""))
-            subclass = str(product.get("subclasse", ""))
-            item = QListWidgetItem(
-                f"{description}  •  {barcode}\n{group}  /  {subclass}"
-            )
-            item.setData(
-                Qt.ItemDataRole.UserRole,
-                (normalize_barcode(barcode), normalize_text(description)),
-            )
+            item = QListWidgetItem(f"{description}  •  {barcode}")
+            item.setData(Qt.ItemDataRole.UserRole, (normalize_barcode(barcode), normalize_text(description)))
             self.results.addItem(item)
-
         if not matches:
-            self.selected_label.setText("Nenhum produto parecido encontrado. Tente outra palavra ou parte do código.")
-        elif len(matches) > len(shown):
-            self.selected_label.setText(
-                f"{len(matches)} sugestões ordenadas por semelhança; exibindo as 60 mais próximas. Selecione uma."
-            )
+            self.selected_label.setText("Nenhum produto encontrado. Tente outra palavra ou parte do código.")
         else:
-            self.selected_label.setText(f"{len(matches)} sugestões ordenadas; selecione o produto desejado.")
+            self.selected_label.setText(f"{len(matches)} produtos encontrados. Selecione o item para definir a regra.")
 
-    def select_product(self, current, previous):
+    def select_product(self, current, _previous):
+        self.selected_product = None
+        self.save_button.setEnabled(False)
         if current is None:
-            self.selected_product = None
-            self.save_button.setEnabled(False)
             return
-        key = current.data(Qt.ItemDataRole.UserRole)
-        self.selected_product = self.products_by_key.get(key)
+        self.selected_product = self.products_by_key.get(current.data(Qt.ItemDataRole.UserRole))
         if self.selected_product:
             self.selected_label.setText(
-                f"Selecionado: {self.selected_product.get('descricao', '')} "
-                f"• Código {self.selected_product.get('codigo_barras', '')}"
+                f"Selecionado: {self.selected_product.get('descricao', '')}  •  "
+                f"Código {self.selected_product.get('codigo_barras', '')}"
             )
             self.save_button.setEnabled(True)
 
     def save_rule(self):
         if not self.selected_product:
             return
-        if not self.recipient.text().strip():
-            QMessageBox.warning(self, "WhatsApp necessário", "Informe o número com código do país e DDD para receber os alertas.")
-            return
-        if not self.recipient_consent.isChecked():
-            QMessageBox.warning(
-                self, "Confirmação necessária",
-                "Confirme que o destinatário autorizou receber avisos pelo WhatsApp."
-            )
-            return
-        minimum = self.minimum.value()
-        maximum = self.maximum.value()
+        minimum, maximum = self.minimum.value(), self.maximum.value()
         if maximum < minimum:
             QMessageBox.warning(self, "Faixa inválida", "O estoque máximo precisa ser igual ou maior que o mínimo.")
             return
         product = self.selected_product
         try:
-            settings = self._settings_payload()
-            self.alert_store.save_settings(settings)
             self.alert_store.upsert_rule({
                 "codigo_barras": product.get("codigo_barras"),
                 "descricao": product.get("descricao"),
@@ -396,31 +256,27 @@ class StockAlertRulesDialog(QDialog):
         except (OSError, ValueError) as error:
             QMessageBox.critical(self, "Não foi possível salvar", str(error))
             return
-        self.status.setText("Regra salva. O aviso será enviado quando a faixa for atingida.")
-        self.refresh_connection_status()
+        self.status.setText("Regra salva. Ela será verificada na próxima análise.")
         self.refresh_rules()
 
     def refresh_rules(self):
         rules = self.alert_store.load_rules()
+        self.rule_count.setText(f"{len(rules)} regra(s) ativa(s)")
         self.rules_table.setRowCount(len(rules))
-        for row_index, rule in enumerate(rules):
+        for row, rule in enumerate(rules):
             store = rule.get("loja", "*")
-            store_label = "Todas as lojas" if store == "*" else store
             values = [
-                str(rule.get("descricao", "")),
-                str(rule.get("codigo_barras", "")),
-                store_label,
-                f"{rule.get('estoque_minimo', 0)} a {rule.get('estoque_maximo', 0)} unidades",
+                str(rule.get("descricao", "")), str(rule.get("codigo_barras", "")),
+                "Todas as lojas" if store == "*" else store,
+                f"{rule.get('estoque_minimo', 0)}–{rule.get('estoque_maximo', 0)} un.",
             ]
-            for column, value in enumerate(values):
-                self.rules_table.setItem(row_index, column, QTableWidgetItem(value))
+            for col, value in enumerate(values):
+                self.rules_table.setItem(row, col, QTableWidgetItem(value))
             remove = QPushButton("Remover")
             remove.setObjectName("Danger")
-            remove.clicked.connect(
-                lambda checked=False, rule_id=rule.get("id"): self.remove_rule(rule_id)
-            )
-            self.rules_table.setCellWidget(row_index, 4, remove)
-            self.rules_table.setRowHeight(row_index, 42)
+            remove.clicked.connect(lambda checked=False, rule_id=rule.get("id"): self.remove_rule(rule_id))
+            self.rules_table.setCellWidget(row, 4, remove)
+            self.rules_table.setRowHeight(row, 40)
 
     def remove_rule(self, rule_id):
         try:
@@ -429,3 +285,66 @@ class StockAlertRulesDialog(QDialog):
             QMessageBox.critical(self, "Não foi possível remover", str(error))
             return
         self.refresh_rules()
+
+
+class StockAlertsDialog(QDialog):
+    def __init__(self, alerts, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Produtos em atenção • Mix Moda")
+        self.resize(900, 620)
+        self.setMinimumSize(700, 440)
+        self.setStyleSheet(PALETTE)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 22, 24, 20)
+        root.setSpacing(12)
+
+        eyebrow = QLabel("ACOMPANHAMENTO DE ESTOQUE")
+        eyebrow.setObjectName("eyebrow")
+        root.addWidget(eyebrow)
+        title = QLabel("Produtos em atenção")
+        title.setObjectName("title")
+        root.addWidget(title)
+        subtitle = QLabel(
+            "Estes produtos atingiram a faixa de estoque definida nas suas regras. "
+            "A quantidade exibida corresponde à última análise."
+        )
+        subtitle.setObjectName("muted")
+        subtitle.setWordWrap(True)
+        root.addWidget(subtitle)
+
+        panel = _panel()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(14, 14, 14, 14)
+        table = QTableWidget(len(alerts), 5)
+        table.setHorizontalHeaderLabels(["Produto", "Código", "Loja", "Estoque atual", "Preço de venda"])
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setAlternatingRowColors(True)
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for col in range(1, 5):
+            table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+        for row, alert in enumerate(alerts):
+            values = [
+                str(alert.get("descricao", "")),
+                str(alert.get("codigo_barras", "")),
+                str(alert.get("loja", "")),
+                f"{br_number(alert.get('quantidade_estoque', 0), 0)} un.  (limite "
+                f"{alert.get('estoque_minimo', 0)}–{alert.get('estoque_maximo', 0)})",
+                brl(alert.get("preco_venda", 0)),
+            ]
+            for col, value in enumerate(values):
+                table.setItem(row, col, QTableWidgetItem(value))
+            table.setRowHeight(row, 42)
+        layout.addWidget(table, 1)
+        root.addWidget(panel, 1)
+
+        footer = QHBoxLayout()
+        count = QLabel(f"{len(alerts)} produto(s) dentro da faixa configurada")
+        count.setObjectName("muted")
+        footer.addWidget(count, 1)
+        close = QPushButton("FECHAR")
+        close.setObjectName("Ghost")
+        close.clicked.connect(self.accept)
+        footer.addWidget(close)
+        root.addLayout(footer)
