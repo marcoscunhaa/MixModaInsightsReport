@@ -1,7 +1,6 @@
-"""Persistent rules, WhatsApp settings, and stock snapshots for low-stock alerts."""
+"""Persist stock-alert rules and the latest stock snapshot."""
 import json
 import os
-import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -10,17 +9,13 @@ from uuid import uuid4
 from utils.normalization import normalize_barcode, normalize_text
 
 
-KEYRING_SERVICE = "MixModaInsights.WhatsAppCloudAPI"
-KEYRING_ACCOUNT = "access_token"
-
-
 class StockAlertStore:
     def __init__(self, rules_path, snapshot_path):
         self.rules_path = Path(rules_path)
         self.snapshot_path = Path(snapshot_path)
         self.rules_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.rules_path.exists():
-            self._write_document({"version": 1, "settings": {}, "rules": []})
+            self._write_document({"version": 1, "rules": []})
 
     @staticmethod
     def _read_json(path, default):
@@ -50,14 +45,12 @@ class StockAlertStore:
     def _read_document(self):
         payload = self._read_json(self.rules_path, {})
         if isinstance(payload, list):
-            return {"version": 1, "settings": {}, "rules": payload}
+            return {"version": 1, "rules": payload}
         if not isinstance(payload, dict):
-            return {"version": 1, "settings": {}, "rules": []}
+            return {"version": 1, "rules": []}
         rules = payload.get("rules", [])
-        settings = payload.get("settings", {})
         return {
             "version": int(payload.get("version", 1)),
-            "settings": settings if isinstance(settings, dict) else {},
             "rules": rules if isinstance(rules, list) else [],
         }
 
@@ -68,62 +61,7 @@ class StockAlertStore:
         return [rule for rule in self._read_document()["rules"] if isinstance(rule, dict)]
 
     def save_rules(self, rules):
-        document = self._read_document()
-        document["rules"] = rules
-        self._write_document(document)
-
-    def load_settings(self):
-        return dict(self._read_document()["settings"])
-
-    def save_settings(self, settings, access_token=None):
-        settings = dict(settings or {})
-        recipient_raw = str(settings.get("whatsapp_recipient", "")).strip()
-        recipient = re.sub(r"\D", "", recipient_raw)
-        if recipient and not 10 <= len(recipient) <= 15:
-            raise ValueError("Informe o número de WhatsApp com código do país e DDD.")
-        phone_number_id = re.sub(r"\D", "", str(settings.get("phone_number_id", "")).strip())
-        if settings.get("phone_number_id") and not phone_number_id:
-            raise ValueError("O Phone Number ID deve conter apenas números.")
-        settings["whatsapp_recipient"] = recipient
-        settings["phone_number_id"] = phone_number_id
-        settings["template_name"] = str(settings.get("template_name", "")).strip()
-        settings["template_language"] = str(settings.get("template_language", "pt_BR")).strip() or "pt_BR"
-
-        if access_token and str(access_token).strip():
-            self.set_access_token(str(access_token).strip())
-
-        document = self._read_document()
-        document["settings"] = settings
-        self._write_document(document)
-        return settings
-
-    @staticmethod
-    def set_access_token(token):
-        try:
-            import keyring
-            backend = keyring.get_keyring()
-            if getattr(backend, "priority", 0) <= 0:
-                raise RuntimeError("O cofre de credenciais do sistema não está disponível.")
-            keyring.set_password(KEYRING_SERVICE, KEYRING_ACCOUNT, token)
-        except Exception as error:
-            raise RuntimeError(
-                "Não foi possível salvar o token no cofre de credenciais do sistema. "
-                "Verifique se o gerenciador de credenciais do computador está ativo."
-            ) from error
-
-    @staticmethod
-    def get_access_token():
-        token = os.environ.get("MIXMODA_WA_ACCESS_TOKEN", "").strip()
-        if token:
-            return token
-        try:
-            import keyring
-            return keyring.get_password(KEYRING_SERVICE, KEYRING_ACCOUNT)
-        except Exception:
-            return None
-
-    def has_access_token(self):
-        return bool(self.get_access_token())
+        self._write_document({"version": 1, "rules": rules})
 
     def upsert_rule(self, rule):
         barcode = normalize_barcode(rule.get("codigo_barras"))
@@ -197,11 +135,9 @@ class StockAlertStore:
             aggregated[key]["quantidade_estoque"] += quantity
             aggregated[key]["preco_venda"] = sale_price
 
-        previous = self.load_snapshot()
         snapshot = {
             "updated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             "rows": list(aggregated.values()),
-            "sent_alerts": previous.get("sent_alerts", {}),
         }
         self._atomic_write(self.snapshot_path, snapshot)
         return snapshot
@@ -209,13 +145,11 @@ class StockAlertStore:
     def load_snapshot(self):
         payload = self._read_json(self.snapshot_path, {})
         if not isinstance(payload, dict):
-            return {"updated_at": None, "rows": [], "sent_alerts": {}}
+            return {"updated_at": None, "rows": []}
         rows = payload.get("rows", [])
-        sent = payload.get("sent_alerts", {})
         return {
             "updated_at": payload.get("updated_at"),
             "rows": rows if isinstance(rows, list) else [],
-            "sent_alerts": sent if isinstance(sent, dict) else {},
         }
 
     def evaluate(self, rows=None):
@@ -276,43 +210,3 @@ class StockAlertStore:
 
         return sorted(alerts, key=lambda item: (normalize_text(item["loja"]), normalize_text(item["descricao"])))
 
-    @staticmethod
-    def _alert_key(alert):
-        return "|".join((
-            str(alert.get("rule_id", "")),
-            normalize_barcode(alert.get("codigo_barras")),
-            normalize_text(alert.get("descricao")),
-            normalize_text(alert.get("loja")),
-        ))
-
-    @staticmethod
-    def _alert_signature(alert):
-        return "|".join((
-            f"{float(alert.get('quantidade_estoque', 0)):g}",
-            str(int(alert.get("estoque_minimo", 0))),
-            str(int(alert.get("estoque_maximo", 0))),
-        ))
-
-    def unsent_alerts(self, alerts):
-        snapshot = self.load_snapshot()
-        previous = snapshot.get("sent_alerts", {})
-        current_keys = {self._alert_key(alert) for alert in alerts}
-        previous = {key: value for key, value in previous.items() if key in current_keys}
-        pending = [
-            alert for alert in alerts
-            if previous.get(self._alert_key(alert)) != self._alert_signature(alert)
-        ]
-        snapshot["sent_alerts"] = previous
-        self._atomic_write(self.snapshot_path, snapshot)
-        return pending
-
-    def mark_alerts_sent(self, alerts):
-        if not alerts:
-            return
-        snapshot = self.load_snapshot()
-        sent = snapshot.get("sent_alerts", {})
-        for alert in alerts:
-            sent[self._alert_key(alert)] = self._alert_signature(alert)
-        snapshot["sent_alerts"] = sent
-        snapshot["last_alert_sent_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
-        self._atomic_write(self.snapshot_path, snapshot)
