@@ -23,10 +23,10 @@ class _MacTitleBar(QFrame):
 
         controls = QHBoxLayout()
         controls.setSpacing(7)
-        self._button(controls, "#FF5F57", "Fechar janela", window.close)
         self._button(controls, "#FEBC2E", "Minimizar janela", window.showMinimized)
         self._button(controls, "#28C840", "Maximizar ou restaurar janela", self._toggle_maximize)
-        row.addLayout(controls)
+        self._button(controls, "#FF5F57", "Fechar janela", window.close)
+        row.addSpacing(58)
         row.addStretch(1)
 
         title = QLabel(window.windowTitle())
@@ -34,7 +34,7 @@ class _MacTitleBar(QFrame):
         title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         row.addWidget(title)
         row.addStretch(1)
-        row.addSpacing(58)
+        row.addLayout(controls)
 
     @staticmethod
     def _button(layout, color, name, callback):
