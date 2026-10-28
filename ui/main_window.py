@@ -6,7 +6,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
-    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -21,7 +20,7 @@ from core.stock_alerts import StockAlertStore
 from ui.analysis_page import AnalysisPage
 from ui.dashboard_page import DashboardPage
 from ui.stock_alerts import StockAlertRulesDialog
-from ui.window_chrome import install_mac_window_chrome
+from ui.window_chrome import install_mac_window_chrome, show_message
 from ui.styles import APP_QSS
 from utils.formatting import br_number
 
@@ -101,8 +100,9 @@ class MainWindow(QMainWindow):
             dialog = StockAlertRulesDialog(self.catalog, self.alert_store, self)
             dialog.exec()
         except Exception as error:
-            QMessageBox.critical(
+            show_message(
                 self,
+                "critical",
                 "Não foi possível abrir as regras",
                 f"O formulário de alertas encontrou um erro.\n\n{type(error).__name__}: {error}",
             )
@@ -136,8 +136,9 @@ class MainWindow(QMainWindow):
                 else pd.DataFrame()
             )
             if frame.empty:
-                QMessageBox.warning(
+                show_message(
                     self,
+                    "warning",
                     "Sem dados",
                     "Nenhum produto válido permaneceu após limpeza e cruzamento.",
                 )
@@ -167,8 +168,9 @@ class MainWindow(QMainWindow):
             self.stack.setCurrentWidget(page)
         except Exception as error:
             details = traceback.format_exc()
-            QMessageBox.critical(
+            show_message(
                 self,
+                "critical",
                 "Erro ao gerar análise",
                 f"Não foi possível processar os arquivos.\n\n{type(error).__name__}: {error}\n\n"
                 "Verifique se os arquivos são XLS/XLSX válidos e se seguem o layout da Mix Moda.",
