@@ -1,6 +1,6 @@
 """Custom macOS-inspired title bar for application windows."""
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QApplication, QSizeGrip, QBoxLayout, QGridLayout, QDialog
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QApplication, QBoxLayout, QGridLayout, QDialog
 
 
 class _MacTitleBar(QFrame):
@@ -34,9 +34,7 @@ class _MacTitleBar(QFrame):
         title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         row.addWidget(title)
         row.addStretch(1)
-        spacer = QFrame()
-        spacer.setFixedWidth(58)
-        row.addWidget(spacer)
+        row.addSpacing(58)
 
     @staticmethod
     def _button(layout, color, name, callback):
@@ -86,7 +84,7 @@ class _MacTitleBar(QFrame):
         super().mouseDoubleClickEvent(event)
 
 
-def install_mac_window_chrome(window, content_layout, resizable=True):
+def install_mac_window_chrome(window, content_layout):
     """Replace native title-bar controls with draggable red/yellow/green controls."""
     if getattr(window, "_mac_title_bar", None):
         return window._mac_title_bar
@@ -119,18 +117,6 @@ def install_mac_window_chrome(window, content_layout, resizable=True):
         raise TypeError("A janela precisa usar um layout vertical ou em grade para o título personalizado.")
 
     window._mac_title_bar = title_bar
-    if resizable:
-        grip = QSizeGrip(window)
-        if isinstance(content_layout, QBoxLayout):
-            content_layout.addWidget(grip, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
-        else:
-            content_layout.addWidget(
-                grip,
-                max(1, content_layout.rowCount()),
-                max(0, content_layout.columnCount() - 1),
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom,
-            )
-        window._mac_size_grip = grip
     return title_bar
 
 def show_message(parent, level, title, text):
