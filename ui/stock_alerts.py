@@ -13,6 +13,7 @@ from core.stock_alerts import StockAlertStore
 from ui.analysis_page import STORES
 from utils.formatting import brl, br_number
 from utils.normalization import normalize_barcode, normalize_text
+from ui.window_chrome import install_mac_window_chrome
 
 
 PALETTE = """
@@ -58,8 +59,9 @@ class StockAlertRulesDialog(QDialog):
         self.setStyleSheet(PALETTE)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 20, 24, 20)
+        root.setContentsMargins(12, 8, 12, 12)
         root.setSpacing(13)
+        install_mac_window_chrome(self, root)
         root.addWidget(self._heading())
         root.addWidget(self._editor())
         root.addWidget(self._rules_panel(), 1)
@@ -120,19 +122,15 @@ class StockAlertRulesDialog(QDialog):
         grid.addWidget(self._field_label("ESTOQUE MÍNIMO"), 0, 1)
         self.minimum = QSpinBox()
         self.minimum.setRange(0, 100000)
+        self.minimum.setValue(3)
+        self.minimum.setToolTip("Avisar quando o estoque ficar igual ou abaixo deste limite.")
         grid.addWidget(self.minimum, 1, 1)
-        grid.addWidget(self._field_label("ESTOQUE MÁXIMO"), 0, 2)
-        self.maximum = QSpinBox()
-        self.maximum.setRange(0, 100000)
-        self.maximum.setValue(3)
-        grid.addWidget(self.maximum, 1, 2)
         grid.setColumnStretch(0, 2)
         grid.setColumnStretch(1, 1)
-        grid.setColumnStretch(2, 1)
         layout.addLayout(grid)
 
         actions = QHBoxLayout()
-        self.status = QLabel("O alerta aparece quando o estoque estiver entre os limites definidos.")
+        self.status = QLabel("Avisar quando o estoque chegar a este número de unidades ou menos.")
         self.status.setObjectName("muted")
         self.status.setWordWrap(True)
         actions.addWidget(self.status, 1)
@@ -180,10 +178,6 @@ class StockAlertRulesDialog(QDialog):
         note = QLabel("As regras ficam salvas neste computador e são verificadas com os dados da última análise.")
         note.setObjectName("muted")
         note.setWordWrap(True)
-        back = QPushButton("← VOLTAR À TELA INICIAL")
-        back.setObjectName("Ghost")
-        back.clicked.connect(self.accept)
-        row.addWidget(back)
         row.addWidget(note, 1)
         return row
 
@@ -245,10 +239,7 @@ class StockAlertRulesDialog(QDialog):
     def save_rule(self):
         if not self.selected_product:
             return
-        minimum, maximum = self.minimum.value(), self.maximum.value()
-        if maximum < minimum:
-            QMessageBox.warning(self, "Faixa inválida", "O estoque máximo precisa ser igual ou maior que o mínimo.")
-            return
+        minimum = self.minimum.value()
         product = self.selected_product
         try:
             self.alert_store.upsert_rule({
@@ -256,12 +247,11 @@ class StockAlertRulesDialog(QDialog):
                 "descricao": product.get("descricao"),
                 "loja": self.store.currentData(),
                 "estoque_minimo": minimum,
-                "estoque_maximo": maximum,
             })
         except (OSError, ValueError) as error:
             QMessageBox.critical(self, "Não foi possível salvar", str(error))
             return
-        self.status.setText("Regra salva. Ela será verificada na próxima análise.")
+        self.status.setText("Regra salva. O alerta será mostrado quando o estoque atingir o limite ou ficar abaixo.")
         self.refresh_rules()
 
     def refresh_rules(self):
@@ -273,7 +263,7 @@ class StockAlertRulesDialog(QDialog):
             values = [
                 str(rule.get("descricao", "")), str(rule.get("codigo_barras", "")),
                 "Todas as lojas" if store == "*" else store,
-                f"{rule.get('estoque_minimo', 0)}–{rule.get('estoque_maximo', 0)} un.",
+                f"Até {rule.get('estoque_minimo', 0)} un.",
             ]
             for col, value in enumerate(values):
                 self.rules_table.setItem(row, col, QTableWidgetItem(value))
@@ -300,8 +290,9 @@ class StockAlertsDialog(QDialog):
         self.setMinimumSize(700, 440)
         self.setStyleSheet(PALETTE)
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 22, 24, 20)
+        root.setContentsMargins(12, 8, 12, 12)
         root.setSpacing(12)
+        install_mac_window_chrome(self, root)
 
         eyebrow = QLabel("ACOMPANHAMENTO DE ESTOQUE")
         eyebrow.setObjectName("eyebrow")
@@ -334,8 +325,8 @@ class StockAlertsDialog(QDialog):
                 str(alert.get("descricao", "")),
                 str(alert.get("codigo_barras", "")),
                 str(alert.get("loja", "")),
-                f"{br_number(alert.get('quantidade_estoque', 0), 0)} un.  (limite "
-                f"{alert.get('estoque_minimo', 0)}–{alert.get('estoque_maximo', 0)})",
+                f"{br_number(alert.get('quantidade_estoque', 0), 0)} un.  (limite ≤ "
+                f"{alert.get('estoque_minimo', 0)})",
                 brl(alert.get("preco_venda", 0)),
             ]
             for col, value in enumerate(values):
