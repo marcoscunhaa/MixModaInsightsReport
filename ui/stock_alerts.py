@@ -3,7 +3,7 @@ import re
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout,
+    QApplication, QAbstractItemView, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout,
     QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
     QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
@@ -48,8 +48,13 @@ class StockAlertRulesDialog(QDialog):
         }
         self.selected_product = None
         self.setWindowTitle("Regras de estoque • Mix Moda")
-        self.resize(1050, 820)
-        self.setMinimumSize(900, 700)
+        screen = self.screen() or QApplication.primaryScreen()
+        available = screen.availableGeometry() if screen else None
+        width = min(1050, available.width() - 32) if available else 1050
+        height = min(820, available.height() - 48) if available else 820
+        width, height = max(560, width), max(480, height)
+        self.resize(width, height)
+        self.setMinimumSize(min(760, width), min(540, height))
         self.setStyleSheet(PALETTE)
 
         root = QVBoxLayout(self)
@@ -175,8 +180,12 @@ class StockAlertRulesDialog(QDialog):
         note = QLabel("As regras ficam salvas neste computador e são verificadas com os dados da última análise.")
         note.setObjectName("muted")
         note.setWordWrap(True)
+        back = QPushButton("← VOLTAR À TELA INICIAL")
+        back.setObjectName("Ghost")
+        back.clicked.connect(self.accept)
+        row.addWidget(back)
         row.addWidget(note, 1)
-        close = QPushButton("CONCLUÍDO")
+        close = QPushButton("FECHAR")
         close.setObjectName("Ghost")
         close.clicked.connect(self.accept)
         row.addWidget(close)
