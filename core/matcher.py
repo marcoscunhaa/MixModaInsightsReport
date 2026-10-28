@@ -73,8 +73,25 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     )
     estoque = stock_group.drop(columns=["_valor_compra_total", "preco_compra_fallback"])
 
-    # Vendas só entram quando código + descrição existem no estoque da mesma loja.
-    vs = vendas.groupby(["codigo_barras", "descricao_norm"], as_index=False)["quantidade_vendida"].sum()
+    # O estoque fornece a descrição atual. Para códigos únicos no estoque, vendas
+    # com descrições antigas são associadas ao produto pelo código de barras.
+    # Se um código aparecer com mais de uma descrição atual, mantém-se a descrição
+    # como desempate para evitar duplicar as vendas entre produtos ambíguos.
+    stock_desc_counts = estoque.groupby("codigo_barras")["descricao_norm"].nunique()
+    unique_stock_codes = set(stock_desc_counts[stock_desc_counts == 1].index)
+    current_description = (
+        estoque[estoque.codigo_barras.isin(unique_stock_codes)]
+        .drop_duplicates("codigo_barras")
+        .set_index("codigo_barras")["descricao_norm"]
+    )
+    vendas["_descricao_match"] = vendas["descricao_norm"]
+    unique_code_mask = vendas["codigo_barras"].isin(unique_stock_codes)
+    vendas.loc[unique_code_mask, "_descricao_match"] = (
+        vendas.loc[unique_code_mask, "codigo_barras"].map(current_description)
+    )
+    vs = vendas.groupby(
+        ["codigo_barras", "_descricao_match"], as_index=False
+    )["quantidade_vendida"].sum().rename(columns={"_descricao_match": "descricao_norm"})
     merged = estoque.merge(vs, on=["codigo_barras", "descricao_norm"], how="left")
     merged["quantidade_vendida"] = merged["quantidade_vendida"].fillna(0)
     merged["loja"] = loja
@@ -130,8 +147,11 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     merged["subclasse"] = merged["subclasse_ref"].fillna("SEM CLASSIFICAÇÃO")
 
     stock_keys = set(zip(estoque.codigo_barras, estoque.descricao_norm))
-    sales_keys = set(zip(vendas.codigo_barras, vendas.descricao_norm))
-    unmatched_mask = [key not in stock_keys for key in zip(vendas.codigo_barras, vendas.descricao_norm)]
+    sales_keys = set(zip(vendas.codigo_barras, vendas["_descricao_match"]))
+    unmatched_mask = [
+        key not in stock_keys
+        for key in zip(vendas.codigo_barras, vendas["_descricao_match"])
+    ]
     unmatched_sales = vendas.loc[unmatched_mask]
     unmatched_products = unmatched_sales.groupby(
         ["codigo_barras", "descricao_norm"], as_index=False
