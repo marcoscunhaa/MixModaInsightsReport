@@ -7,7 +7,7 @@ from PySide6.QtGui import QColor, QFont
 from ui.widgets import Card, RankCard
 from ui.product_modal import ProductModal
 from charts.dashboard_charts import make_chart
-from core.analyzer import filter_analysis,kpis,top_sold,stagnant,critical
+from core.analyzer import filter_analysis,kpis,top_sold,stagnant,critical,rupture
 from core.insights import generate_insights
 from utils.normalization import normalize_text
 from exports.pdf_export import export_dashboard_pdf
@@ -230,13 +230,27 @@ class DashboardPage(QWidget):
     def open_row_dict(self,row): ProductModal(row,self).exec()
     def detail(self,name,d):
         # KPIs financeiros/quantitativos abrem o mesmo conjunto de dados que compõe o número.
+        sem_vendas = d[d.produto_sem_venda].sort_values(
+            ["valor_estoque", "quantidade_estoque"], ascending=[False, False], kind="stable"
+        )
+        criticos_kpi = d[d.status_estoque == "CRÍTICO"].sort_values(
+            ["risco_ruptura", "cobertura", "quantidade_vendida", "valor_vendido"],
+            ascending=[False, True, False, False],
+            kind="stable",
+        )
         mapping={
-            "Valor em estoque": d[d.quantidade_estoque>0].sort_values("valor_estoque",ascending=False),
-            "Unidades vendidas": d[d.quantidade_vendida>0].sort_values("quantidade_vendida",ascending=False),
-            "Produtos sem vendas":d[d.produto_sem_venda],
-            "Produtos em ruptura":d[d.ruptura],
-            "Críticos":critical(d),"Produtos críticos":critical(d),
-            "Em ruptura":d[d.ruptura],"Sem vendas":d[d.produto_sem_venda]
+            "Valor em estoque": d[d.quantidade_estoque>0].sort_values(
+                ["valor_estoque", "quantidade_estoque"], ascending=[False, False], kind="stable"
+            ),
+            "Unidades vendidas": d[d.quantidade_vendida>0].sort_values(
+                ["quantidade_vendida", "valor_vendido"], ascending=[False, False], kind="stable"
+            ),
+            "Produtos sem vendas": sem_vendas,
+            "Produtos em ruptura": rupture(d),
+            "Críticos": criticos_kpi,
+            "Produtos críticos": criticos_kpi,
+            "Em ruptura": rupture(d),
+            "Sem vendas": sem_vendas,
         }
         if name in mapping:self.show_product_list(name,mapping[name])
     def show_product_list(self,title,d):
