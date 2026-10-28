@@ -13,7 +13,7 @@ from core.stock_alerts import StockAlertStore
 from ui.analysis_page import STORES
 from utils.formatting import brl, br_number
 from utils.normalization import normalize_barcode, normalize_text
-from ui.window_chrome import install_mac_window_chrome, show_message
+from ui.window_chrome import confirm_action, install_mac_window_chrome, show_message
 
 
 PALETTE = """
@@ -161,14 +161,14 @@ class StockAlertRulesDialog(QDialog):
         heading.addWidget(self.rule_count)
         layout.addLayout(heading)
 
-        self.rules_table = QTableWidget(0, 5)
-        self.rules_table.setHorizontalHeaderLabels(["Produto", "Código", "Loja", "Limite de estoque", ""])
+        self.rules_table = QTableWidget(0, 6)
+        self.rules_table.setHorizontalHeaderLabels(["Produto", "Código", "Loja", "Limite", "Editar", "Excluir"])
         self.rules_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.rules_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.rules_table.setAlternatingRowColors(True)
         self.rules_table.verticalHeader().setVisible(False)
         self.rules_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for column in (1, 2, 3, 4):
+        for column in (1, 2, 3, 4, 5):
             self.rules_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.rules_table, 1)
         return panel
@@ -267,18 +267,81 @@ class StockAlertRulesDialog(QDialog):
             ]
             for col, value in enumerate(values):
                 self.rules_table.setItem(row, col, QTableWidgetItem(value))
-            remove = QPushButton("Remover")
-            remove.setObjectName("Danger")
+
+            edit = QPushButton("Editar")
+            edit.setMinimumWidth(68)
+            edit.setFixedHeight(30)
+            edit.setCursor(Qt.CursorShape.PointingHandCursor)
+            edit.setStyleSheet(
+                "QPushButton{background:#EAF0FF;color:#2854D9;border:1px solid #CEDAFF;"
+                "border-radius:8px;padding:4px 10px;font-weight:800;}"
+                "QPushButton:hover{background:#DCE6FF;}"
+            )
+            edit.clicked.connect(lambda checked=False, saved=dict(rule): self.edit_rule(saved))
+            self.rules_table.setCellWidget(row, 4, edit)
+
+            remove = QPushButton("Excluir")
+            remove.setMinimumWidth(72)
+            remove.setFixedHeight(30)
+            remove.setCursor(Qt.CursorShape.PointingHandCursor)
+            remove.setStyleSheet(
+                "QPushButton{background:#FFF0F2;color:#D9284B;border:1px solid #FFD0D9;"
+                "border-radius:8px;padding:4px 10px;font-weight:900;}"
+                "QPushButton:hover{background:#FFE0E5;border-color:#F4A8B5;}"
+            )
             remove.clicked.connect(lambda checked=False, rule_id=rule.get("id"): self.remove_rule(rule_id))
-            self.rules_table.setCellWidget(row, 4, remove)
-            self.rules_table.setRowHeight(row, 40)
+            self.rules_table.setCellWidget(row, 5, remove)
+            self.rules_table.setRowHeight(row, 42)
+
+    def edit_rule(self, rule):
+        key = (
+            normalize_barcode(rule.get("codigo_barras")),
+            normalize_text(rule.get("descricao")),
+        )
+        product = self.products_by_key.get(key)
+        if not product:
+            show_message(
+                self,
+                "warning",
+                "Produto não encontrado",
+                "Este produto não está no catálogo carregado. Remova a regra ou selecione outro produto.",
+            )
+            return
+
+        description = str(product.get("descricao", ""))
+        self.search.setText(str(product.get('codigo_barras', '')))
+        for index in range(self.results.count()):
+            item = self.results.item(index)
+            if item.data(Qt.ItemDataRole.UserRole) == key:
+                self.results.setCurrentItem(item)
+                break
+        store_index = self.store.findData(rule.get("loja", "*"))
+        if store_index >= 0:
+            self.store.setCurrentIndex(store_index)
+        self.minimum.setValue(int(rule.get("estoque_minimo", 0)))
+        self.status.setText("Ajuste o limite e salve para atualizar esta regra.")
+        self.search.setFocus()
 
     def remove_rule(self, rule_id):
+        rule = next((item for item in self.alert_store.load_rules() if str(item.get("id")) == str(rule_id)), None)
+        if not rule:
+            self.refresh_rules()
+            return
+        confirmed = confirm_action(
+            self,
+            "Excluir regra de estoque",
+            f"Excluir a regra de “{rule.get('descricao', 'produto')}” para "
+            f"{'todas as lojas' if rule.get('loja', '*') == '*' else rule.get('loja')}?",
+            "Excluir regra",
+        )
+        if not confirmed:
+            return
         try:
             self.alert_store.remove_rule(rule_id)
         except OSError as error:
             show_message(self, "critical", "Não foi possível remover", str(error))
             return
+        self.status.setText("Regra removida.")
         self.refresh_rules()
 
 
