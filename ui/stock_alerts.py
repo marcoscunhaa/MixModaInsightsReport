@@ -10,10 +10,11 @@ from PySide6.QtWidgets import (
 from rapidfuzz import fuzz
 
 from core.stock_alerts import StockAlertStore
+from exports.stock_alerts_export import export_stock_alerts_xlsx
 from ui.analysis_page import STORES
 from utils.formatting import brl, br_number
 from utils.normalization import normalize_barcode, normalize_text
-from ui.window_chrome import confirm_action, install_mac_window_chrome, show_message
+from ui.window_chrome import confirm_action, get_save_file, install_mac_window_chrome, show_message
 
 
 PALETTE = """
@@ -348,6 +349,7 @@ class StockAlertRulesDialog(QDialog):
 class StockAlertsDialog(QDialog):
     def __init__(self, alerts, parent=None):
         super().__init__(parent)
+        self.alerts = list(alerts)
         self.setWindowTitle("Produtos em atenção • Mix Moda")
         self.resize(900, 620)
         self.setMinimumSize(700, 440)
@@ -413,8 +415,41 @@ class StockAlertsDialog(QDialog):
         count = QLabel(f"{len(alerts)} produto(s) dentro da faixa configurada")
         count.setObjectName("muted")
         footer.addWidget(count, 1)
+        export_button = QPushButton("EXPORTAR EXCEL")
+        export_button.setEnabled(bool(self.alerts))
+        export_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        export_button.setStyleSheet(
+            "QPushButton{background:#16836D;color:white;border:0;border-radius:10px;"
+            "padding:9px 15px;font-weight:900;}"
+            "QPushButton:hover{background:#106B59;}"
+            "QPushButton:disabled{background:#D8E0E9;color:#8793A5;}"
+        )
+        export_button.clicked.connect(self.export_excel)
+        footer.addWidget(export_button)
         close = QPushButton("FECHAR")
         close.setObjectName("Ghost")
         close.clicked.connect(self.accept)
         footer.addWidget(close)
         root.addLayout(footer)
+
+    def export_excel(self):
+        path = get_save_file(
+            self,
+            "Exportar alertas para Excel",
+            "MixModa_Reposicao_Estoque.xlsx",
+            "Excel (*.xlsx)",
+            "xlsx",
+        )
+        if not path:
+            return
+        try:
+            export_stock_alerts_xlsx(path, self.alerts)
+        except (OSError, ValueError, ImportError) as error:
+            show_message(self, "critical", "Falha ao exportar", str(error))
+            return
+        show_message(
+            self,
+            "information",
+            "Planilha exportada",
+            f"Arquivo salvo com sucesso em:\n{path}",
+        )
