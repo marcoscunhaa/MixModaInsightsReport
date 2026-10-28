@@ -8,6 +8,8 @@ from reportlab.lib.enums import TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from core.analyzer import critical as ranked_critical, top_sold
+
 from reportlab.platypus import (
     Flowable,
     PageBreak,
@@ -314,14 +316,11 @@ def _store_table(df, styles, width):
     return _table(data, widths)
 
 
-def _critical_table(df, styles, width, limit=14):
-    critical = df[df["status_estoque"].isin(["SEM ESTOQUE", "CRÍTICO", "BAIXO"])].copy()
-    priority = {"SEM ESTOQUE": 0, "CRÍTICO": 1, "BAIXO": 2}
-    critical["_priority"] = critical["status_estoque"].map(priority)
-    critical = critical.sort_values(["_priority", "quantidade_vendida"], ascending=[True, False]).head(limit)
+def _critical_table(df, styles, width, limit=20):
+    critical_rows = ranked_critical(df, limit)
     headers = ["Produto", "Grupo", "Loja", "Estoque", "Vendas", "Status"]
     data = [[_paragraph(h, styles["table_head"]) for h in headers]]
-    for _, row in critical.iterrows():
+    for _, row in critical_rows.iterrows():
         data.append([
             _paragraph(str(row.descricao), styles["table"]),
             _paragraph(str(row.grupo), styles["table"]),
@@ -337,7 +336,7 @@ def _critical_table(df, styles, width, limit=14):
             ("TEXTCOLOR", (5, 1), (5, -1), PINK),
             ("FONTNAME", (5, 1), (5, -1), "Helvetica-Bold"),
         ]))
-    return table, len(critical)
+    return table, len(critical_rows)
 
 
 def _audit_table(audit, styles, width):
@@ -367,6 +366,13 @@ def _unmatched_table(audit, styles, width):
     if not items:
         return _paragraph("Nenhum item de venda ficou sem correspondência no estoque.", styles["body"])
 
+    items = sorted(
+        items,
+        key=lambda item: (
+            -_safe_float(item.get("quantidade_vendida", 0)),
+            str(item.get("descricao", "")).casefold(),
+        ),
+    )[:20]
     headers = ["Código de barras", "Descrição do produto", "Loja", "Unidades vendidas"]
     data = [[_paragraph(header, styles["table_head"]) for header in headers]]
     for item in items:
@@ -479,9 +485,9 @@ def export_dashboard_pdf(path, df, period, loja, audit):
     story.extend([PageBreak(), _section_heading("Desempenho comercial", styles,
                                                 "Receita estimada pela regra de preço configurada no aplicativo."),
                   _store_table(df, styles, content_width), Spacer(1, 16)])
-    story.append(_section_heading("Produtos líderes", styles,
-                                  "Ordenados por unidades vendidas no período."))
-    top = df.sort_values("quantidade_vendida", ascending=False).head(14) if not df.empty else df
+    story.extend([PageBreak(), _section_heading("Produtos líderes", styles,
+                                  "Top 20 ordenados por unidades vendidas e faturamento estimado.")])
+    top = top_sold(df, 20) if not df.empty else df
     headers = ["#", "Produto", "Loja", "Grupo", "Unidades", "Receita estimada", "Estoque"]
     data = [[_paragraph(h, styles["table_head"]) for h in headers]]
     for rank, (_, row) in enumerate(top.iterrows(), 1):
@@ -509,7 +515,7 @@ def export_dashboard_pdf(path, df, period, loja, audit):
     story.extend([PageBreak(), _section_heading("Vendas sem correspondência no estoque", styles),
                   _paragraph(
                       f"{len(unmatched_items)} combinações de venda não foram encontradas no estoque. "
-                      "A tabela identifica os itens para conferência no sistema da loja.", styles["muted"]
+                      "A tabela mostra os 20 itens com maior volume vendido para conferência.", styles["muted"]
                   ), Spacer(1, 5),
                   _unmatched_table(audit or {}, styles, content_width),
                   PageBreak(), _section_heading("Qualidade e cobertura dos dados", styles),
@@ -517,8 +523,9 @@ def export_dashboard_pdf(path, df, period, loja, audit):
                   _section_heading("Legenda dos indicadores", styles),
                   _audit_legend(styles, content_width), Spacer(1, 5)])
     story.append(_paragraph(
-        "As correspondências usam código de barras e descrição normalizada. "
-        "Vendas sem correspondência ficam fora dos indicadores de produto.", styles["muted"]
+        "O código de barras identifica o produto quando é único no estoque; códigos associados a "
+        "descrições diferentes usam a descrição para desempate. Vendas sem correspondência ficam "
+        "fora dos indicadores de produto.", styles["muted"]
     ))
 
     def page_chrome(canvas, document):
