@@ -12,6 +12,7 @@ from core.insights import generate_insights
 from utils.normalization import normalize_text
 from exports.pdf_export import export_dashboard_pdf
 from ui.stock_alerts import StockAlertsDialog
+from ui.window_chrome import install_mac_window_chrome
 
 SUBCLASS_EMOJIS = ["👗","👚","👕","👖","👟","🥿","👜","💄","💍","🧸","🏠","🛏️","🍳","🧴","🧢","🩱","🩴","🎀","🧦","🧺"]
 SUBCLASS_COLORS = ["#5B6CFF","#E85D8A","#00A88F","#FFB52E","#19A9C7","#8B6FE8","#FF7A59","#D94D9A","#36A269","#F06A9B","#4B8EF7","#12B8A6"]
@@ -47,7 +48,7 @@ class HierarchyExplorer(QDialog):
     def __init__(self, df, start_group=None, parent=None):
         super().__init__(parent); self.df=df.copy(); self.path=[]
         self.setWindowTitle("Explorador de Produtos • Mix Moda Insights"); self.resize(1180,720)
-        root=QVBoxLayout(self); root.setContentsMargins(22,20,22,22); root.setSpacing(12)
+        root=QVBoxLayout(self); root.setContentsMargins(12,8,12,12); root.setSpacing(12); install_mac_window_chrome(self,root)
         head=QHBoxLayout(); titlebox=QVBoxLayout(); self.title=QLabel("Explorador de catálogo"); self.title.setStyleSheet("font-size:24px;font-weight:900;color:#12213D;"); titlebox.addWidget(self.title)
         self.crumb=QLabel(""); self.crumb.setStyleSheet("color:#64728A;font-size:12px;font-weight:800;"); titlebox.addWidget(self.crumb); head.addLayout(titlebox); head.addStretch()
         self.back=QPushButton("← Voltar"); self.back.setObjectName("Ghost"); self.back.clicked.connect(self.go_back); head.addWidget(self.back); root.addLayout(head)
@@ -239,7 +240,7 @@ class DashboardPage(QWidget):
         }
         if name in mapping:self.show_product_list(name,mapping[name])
     def show_product_list(self,title,d):
-        dlg=QDialog(self); dlg.setWindowTitle(title); dlg.resize(1180,700); l=QVBoxLayout(dlg)
+        dlg=QDialog(self); dlg.setWindowTitle(title); dlg.resize(1180,700); l=QVBoxLayout(dlg); l.setContentsMargins(12,8,12,12); install_mac_window_chrome(dlg,l)
         head=QLabel(f"{title} • {br_number(len(d),0)} registros")
         head.setStyleSheet("font-size:18px;font-weight:900;color:#12213D;padding:4px;"); l.addWidget(head)
         t=QTableWidget(len(d),8); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setHorizontalHeaderLabels(["Código","Produto","Grupo","Subclasse","Loja","Estoque","Vendas","Valor estoque"]); t.setSortingEnabled(False); rows=list(d.iterrows())
