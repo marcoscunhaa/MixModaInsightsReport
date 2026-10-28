@@ -185,10 +185,6 @@ class StockAlertRulesDialog(QDialog):
         back.clicked.connect(self.accept)
         row.addWidget(back)
         row.addWidget(note, 1)
-        close = QPushButton("FECHAR")
-        close.setObjectName("Ghost")
-        close.clicked.connect(self.accept)
-        row.addWidget(close)
         return row
 
     def refresh_products(self, text):
