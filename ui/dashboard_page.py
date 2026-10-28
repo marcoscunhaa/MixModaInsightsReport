@@ -114,7 +114,7 @@ class DashboardPage(QWidget):
         snapshot = self.alert_store.load_snapshot() if self.alert_store else {"rows": []}
         alerts = self.alert_store.evaluate(snapshot.get("rows", [])) if self.alert_store else []
         count = len(alerts)
-        self.alert_button.setText(f"♢  ALERTAS  ·  {count}")
+        self.alert_button.setText(f"🔔  ALERTAS  ·  {count}")
         self.alert_button.setStyleSheet(
             "QPushButton{background:#FFF0F1;color:#BD3049;border:1px solid #F0B7C0;"
             "border-radius:12px;padding:10px 15px;font-weight:900;}"
