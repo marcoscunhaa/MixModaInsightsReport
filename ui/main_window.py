@@ -21,6 +21,7 @@ from core.stock_alerts import StockAlertStore
 from ui.analysis_page import AnalysisPage
 from ui.dashboard_page import DashboardPage
 from ui.stock_alerts import StockAlertRulesDialog
+from ui.window_chrome import install_mac_window_chrome
 from ui.styles import APP_QSS
 from utils.formatting import br_number
 
@@ -42,7 +43,13 @@ class MainWindow(QMainWindow):
         )
 
         self.stack = QStackedWidget()
-        self.setCentralWidget(self.stack)
+        shell = QWidget()
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setSpacing(0)
+        shell_layout.addWidget(self.stack)
+        self.setCentralWidget(shell)
+        install_mac_window_chrome(self, shell_layout)
         self.home = self.home_page()
         self.analysis = AnalysisPage(on_home=self.open_home)
         self.analysis.generate.connect(self.generate)
