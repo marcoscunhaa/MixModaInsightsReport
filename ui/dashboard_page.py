@@ -11,6 +11,7 @@ from core.analyzer import filter_analysis,kpis,top_sold,stagnant,critical
 from core.insights import generate_insights
 from utils.normalization import normalize_text
 from exports.pdf_export import export_dashboard_pdf
+from ui.stock_alerts import StockAlertsDialog
 
 SUBCLASS_EMOJIS = ["👗","👚","👕","👖","👟","🥿","👜","💄","💍","🧸","🏠","🛏️","🍳","🧴","🧢","🩱","🩴","🎀","🧦","🧺"]
 SUBCLASS_COLORS = ["#5B6CFF","#E85D8A","#00A88F","#FFB52E","#19A9C7","#8B6FE8","#FF7A59","#D94D9A","#36A269","#F06A9B","#4B8EF7","#12B8A6"]
@@ -90,12 +91,17 @@ class HierarchyExplorer(QDialog):
         elif len(self.path)==1: self.render_groups()
 
 class DashboardPage(QWidget):
-    def __init__(self,df,period,audit,parent=None,on_home=None):
-        super().__init__(parent); self.df=df; self.period=period; self.audit=audit
+    def __init__(self,df,period,audit,parent=None,on_home=None,alert_store=None):
+        super().__init__(parent); self.df=df; self.period=period; self.audit=audit; self.alert_store=alert_store
         root=QVBoxLayout(self); root.setContentsMargins(28,18,28,22); root.setSpacing(12)
         head=QHBoxLayout(); brand=QVBoxLayout(); title=QLabel("MIX MODA INSIGHTS"); title.setObjectName("Title"); brand.addWidget(title); brand.addWidget(QLabel("Central executiva de estoque, vendas, faturamento e rotação por loja")); head.addLayout(brand); head.addStretch();
         if on_home:
             home_button=QPushButton("← INÍCIO"); home_button.setObjectName("Ghost"); home_button.clicked.connect(on_home); head.addWidget(home_button)
+        self.alert_button=QPushButton()
+        self.alert_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.alert_button.clicked.connect(self.open_stock_alerts)
+        head.addWidget(self.alert_button)
+        self.refresh_alert_button()
         pdf=QPushButton("EXPORTAR PDF"); pdf.clicked.connect(self.export_pdf); head.addWidget(pdf); root.addLayout(head)
         filters=QFrame(); filters.setObjectName("Panel"); fl=QHBoxLayout(filters); fl.setContentsMargins(12,10,12,10); fl.setSpacing(8)
         self.store=QComboBox(); self.store.addItem("Todas as lojas"); self.store.addItems(sorted(df.loja.dropna().unique())); self.group=QComboBox(); self.group.addItem("Todos os grupos"); self.group.addItems(sorted(df.grupo.dropna().unique())); self.sub=QComboBox(); self.sub.addItem("Todas as subclasses"); self.status=QComboBox(); self.status.addItems(["Todos os status","SEM ESTOQUE","CRÍTICO","BAIXO","NORMAL","EXCESSO","SEM VENDA"]); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código, grupo ou subclasse...")
@@ -103,6 +109,30 @@ class DashboardPage(QWidget):
         root.addWidget(filters)
         sc=QScrollArea(); sc.setWidgetResizable(True); inner=QWidget(); self.body=QVBoxLayout(inner); self.body.setContentsMargins(0,0,6,0); self.body.setSpacing(14); sc.setWidget(inner); root.addWidget(sc,1)
         self.store.currentTextChanged.connect(self.refresh); self.group.currentTextChanged.connect(self.refresh); self.sub.currentTextChanged.connect(self.refresh); self.status.currentTextChanged.connect(self.refresh); self.search.textChanged.connect(self.refresh); self.refresh()
+
+    def refresh_alert_button(self):
+        snapshot = self.alert_store.load_snapshot() if self.alert_store else {"rows": []}
+        alerts = self.alert_store.evaluate(snapshot.get("rows", [])) if self.alert_store else []
+        count = len(alerts)
+        self.alert_button.setText(f"♢  ALERTAS  ·  {count}")
+        self.alert_button.setStyleSheet(
+            "QPushButton{background:#FFF0F1;color:#BD3049;border:1px solid #F0B7C0;"
+            "border-radius:12px;padding:10px 15px;font-weight:900;}"
+            "QPushButton:hover{background:#FFE1E5;border-color:#E98A98;}"
+            if count else
+            "QPushButton{background:#F1F4FA;color:#556782;border:1px solid #DCE4EF;"
+            "border-radius:12px;padding:10px 15px;font-weight:900;}"
+            "QPushButton:hover{background:#E8EEF8;}"
+        )
+        self.alert_button.setToolTip(
+            f"{count} produto(s) atingiram suas regras de estoque."
+            if count else "Nenhum produto atingiu suas regras de estoque."
+        )
+
+    def open_stock_alerts(self):
+        snapshot = self.alert_store.load_snapshot() if self.alert_store else {"rows": []}
+        alerts = self.alert_store.evaluate(snapshot.get("rows", [])) if self.alert_store else []
+        StockAlertsDialog(alerts, self).exec()
 
     def current_df(self):
         status="Todos" if self.status.currentText()=="Todos os status" else self.status.currentText(); loja="Todas" if self.store.currentText()=="Todas as lojas" else self.store.currentText(); grupo="Todos" if self.group.currentText()=="Todos os grupos" else self.group.currentText(); sub="Todas" if self.sub.currentText()=="Todas as subclasses" else self.sub.currentText(); return filter_analysis(self.df,loja,grupo,sub,self.search.text(),status)
