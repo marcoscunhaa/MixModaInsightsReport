@@ -1,5 +1,7 @@
+from pathlib import Path
 from PySide6.QtCore import Signal,QDate
-from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QComboBox,QDateEdit,QPushButton,QLabel,QFileDialog,QMessageBox,QFrame,QScrollArea
+from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QComboBox,QDateEdit,QPushButton,QLabel,QFrame,QScrollArea
+from ui.window_chrome import get_open_file, show_message
 
 STORES = ("Sitio São João", "Palmeiras", "Sapiranga", "Pedras")
 
@@ -15,17 +17,31 @@ class StoreRow(QFrame):
         bs=QPushButton("Selecionar estoque"); bs.setObjectName("Secondary"); bs.clicked.connect(self.pick_stock); bv=QPushButton("Selecionar vendas"); bv.setObjectName("Secondary"); bv.clicked.connect(self.pick_sales)
         form.addRow("Nome da loja",self.loja); form.addRow(bs,self.stock); form.addRow(bv,self.sales); l.addLayout(form); self.stock_path=None; self.sales_path=None
     def pick_stock(self):
-        p,_=QFileDialog.getOpenFileName(self,"Selecionar estoque","","Planilhas (*.xlsx *.xls)")
-        if p:self.stock_path=p; self.stock.setText("✓ "+p.split("/")[-1])
+        try:
+            path = get_open_file(self, "Selecionar estoque", "Planilhas (*.xlsx *.xls)")
+        except Exception as error:
+            show_message(self, "critical", "Não foi possível abrir os arquivos", str(error))
+            return
+        if path:
+            self.stock_path = path
+            self.stock.setText("✓ " + Path(path).name)
+
     def pick_sales(self):
-        p,_=QFileDialog.getOpenFileName(self,"Selecionar vendas","","Planilhas (*.xlsx *.xls)")
-        if p:self.sales_path=p; self.sales.setText("✓ "+p.split("/")[-1])
+        try:
+            path = get_open_file(self, "Selecionar vendas", "Planilhas (*.xlsx *.xls)")
+        except Exception as error:
+            show_message(self, "critical", "Não foi possível abrir os arquivos", str(error))
+            return
+        if path:
+            self.sales_path = path
+            self.sales.setText("✓ " + Path(path).name)
 
 class AnalysisPage(QWidget):
     generate=Signal(dict)
-    def __init__(self,parent=None):
+    def __init__(self,parent=None,on_home=None):
         super().__init__(parent); self.rows=[]; root=QVBoxLayout(self); root.setContentsMargins(34,26,34,26); root.setSpacing(16)
-        title=QLabel("Nova análise multi-lojas"); title.setObjectName("Title"); root.addWidget(title); root.addWidget(QLabel("Selecione até 4 lojas, cada uma uma vez. O dashboard consolida os dados e permite filtrar por unidade."))
+        heading=QHBoxLayout(); back=QPushButton("← TELA INICIAL"); back.setObjectName("Ghost"); back.clicked.connect(on_home or (lambda: None)); heading.addWidget(back); heading.addStretch()
+        title=QLabel("Nova análise multi-lojas"); title.setObjectName("Title"); heading.addWidget(title); heading.addStretch(); root.addLayout(heading); root.addWidget(QLabel("Selecione até 4 lojas, cada uma uma vez. O dashboard consolida os dados e permite filtrar por unidade."))
         top=QFrame(); top.setObjectName("Panel"); f=QFormLayout(top); f.setContentsMargins(20,18,20,18)
         self.ini=QDateEdit(QDate.currentDate().addMonths(-1)); self.ini.setCalendarPopup(True); self.fim=QDateEdit(QDate.currentDate()); self.fim.setCalendarPopup(True)
         f.addRow("Período inicial",self.ini); f.addRow("Período final",self.fim); root.addWidget(top)
@@ -41,14 +57,14 @@ class AnalysisPage(QWidget):
         for i,r in enumerate(self.rows,1): r.index=i; r.title.setText(f"LOJA {i}")
         self.add_button.setEnabled(True)
     def submit(self):
-        if self.ini.date()>self.fim.date(): QMessageBox.warning(self,"Período inválido","A data inicial não pode ser posterior à final."); return
+        if self.ini.date()>self.fim.date(): show_message(self, "warning", "Período inválido","A data inicial não pode ser posterior à final."); return
         stores=[]
         for r in self.rows:
             loja=r.loja.currentData()
             if not loja or not r.stock_path or not r.sales_path:
-                QMessageBox.warning(self,"Dados incompletos","Preencha loja, estoque e vendas de todas as lojas."); return
+                show_message(self, "warning", "Dados incompletos","Preencha loja, estoque e vendas de todas as lojas."); return
             stores.append({"loja":loja,"estoque_path":r.stock_path,"vendas_path":r.sales_path})
         selected=[s["loja"] for s in stores]
         if len(selected)!=len(set(selected)):
-            QMessageBox.warning(self,"Loja repetida","Selecione cada loja no máximo uma vez."); return
+            show_message(self, "warning", "Loja repetida","Selecione cada loja no máximo uma vez."); return
         self.generate.emit({"lojas":stores,"data_inicio":self.ini.date().toPython(),"data_fim":self.fim.date().toPython()})

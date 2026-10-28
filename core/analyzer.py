@@ -17,8 +17,40 @@ def kpis(df):
     "Produtos críticos":int((df.status_estoque=="CRÍTICO").sum()),"Giro médio":df.giro.mean() if len(df) else 0,
     "Margem potencial":(df.margem_unitaria*df.quantidade_estoque).sum(),"Faturamento estimado":df.valor_vendido.sum()}
 
-def top_sold(df,n=10): return df.sort_values("quantidade_vendida",ascending=False).head(n)
-def stagnant(df,n=10): return df[(df.quantidade_estoque>0)&(df.quantidade_vendida<=0)].sort_values("valor_estoque",ascending=False).head(n)
+def top_sold(df,n=10):
+    return df.sort_values(
+        ["quantidade_vendida", "valor_vendido"],
+        ascending=[False, False],
+        kind="stable",
+    ).head(n)
+
+
+def stagnant(df,n=10):
+    return (
+        df[(df.quantidade_estoque > 0) & (df.quantidade_vendida <= 0)]
+        .sort_values(["valor_estoque", "quantidade_estoque"], ascending=[False, False], kind="stable")
+        .head(n)
+    )
+
+
+def rupture(df,n=None):
+    """Rank stockout products by observed demand, then estimated sales value."""
+    x = df[df.ruptura].sort_values(
+        ["quantidade_vendida", "valor_vendido"],
+        ascending=[False, False],
+        kind="stable",
+    )
+    return x if n is None else x.head(n)
+
+
 def critical(df,n=None):
-    x=df[df.status_estoque.isin(["SEM ESTOQUE","CRÍTICO","BAIXO"])].sort_values(["risco_ruptura","quantidade_vendida"],ascending=[False,False])
+    """Rank replenishment attention by severity, coverage risk, and demand."""
+    x = df[df.status_estoque.isin(["SEM ESTOQUE", "CRÍTICO", "BAIXO"])].copy()
+    status_priority = {"SEM ESTOQUE": 0, "CRÍTICO": 1, "BAIXO": 2}
+    x["_prioridade_status"] = x.status_estoque.map(status_priority)
+    x = x.sort_values(
+        ["_prioridade_status", "risco_ruptura", "cobertura", "quantidade_vendida", "valor_vendido"],
+        ascending=[True, False, True, False, False],
+        kind="stable",
+    ).drop(columns="_prioridade_status")
     return x if n is None else x.head(n)

@@ -26,3 +26,10 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 - A classificação oficial por loja + código + descrição está incorporada em `data/catalogo_produtos_estoque_geral.json`.
 - A análise permite selecionar até quatro lojas, uma vez cada: Sitio São João, Palmeiras, Sapiranga e Pedras.
 - Explorador hierárquico: **Grupo → Subclasse → Produto → Detalhes**.
+
+## Alertas de estoque crítico
+
+- Pesquise produtos pelo nome ou código de barras; a lista sugere resultados aproximados do catálogo oficial.
+- Cada regra define um limite mínimo de unidades (o alerta aparece nesse número ou abaixo) e pode valer para uma loja ou para todas.
+- As regras ficam salvas em `data/stock_alert_rules.json`; a última análise fica em `data/stock_alert_snapshot.json`.
+- Na dashboard, o ícone de alertas destaca quantos produtos atingiram as regras e abre a relação com código, loja, quantidade e preço de venda.

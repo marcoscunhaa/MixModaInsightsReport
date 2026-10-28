@@ -1,6 +1,7 @@
 from utils.formatting import brl, br_number
 from PySide6.QtWidgets import QDialog,QVBoxLayout,QGridLayout,QLabel,QPushButton,QFrame,QHBoxLayout,QWidget
 from PySide6.QtCore import Qt
+from ui.window_chrome import install_mac_window_chrome
 
 class ProductModal(QDialog):
     def __init__(self,row,parent=None):
@@ -25,7 +26,7 @@ class ProductModal(QDialog):
             QPushButton#close{background:#24324A;color:#FFFFFF;border:none;border-radius:11px;padding:11px 26px;font-weight:750;}
             QPushButton#close:hover{background:#3A4B68;}
         """)
-        root=QVBoxLayout(self); root.setContentsMargins(20,20,20,18); root.setSpacing(14)
+        root=QVBoxLayout(self); root.setContentsMargins(12,8,12,12); root.setSpacing(14); install_mac_window_chrome(self,root)
 
         hero=QFrame(); hero.setObjectName("hero")
         hl=QVBoxLayout(hero); hl.setContentsMargins(22,20,22,20); hl.setSpacing(6)
