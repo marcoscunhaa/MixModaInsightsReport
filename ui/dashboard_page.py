@@ -9,7 +9,7 @@ from ui.product_modal import ProductModal
 from charts.dashboard_charts import make_chart
 from core.analyzer import filter_analysis,kpis,top_sold,stagnant,critical,rupture
 from core.insights import generate_insights
-from utils.normalization import normalize_text
+from utils.normalization import normalize_barcode, normalize_text
 from exports.pdf_export import export_dashboard_pdf
 from ui.stock_alerts import StockAlertsDialog
 from ui.window_chrome import get_save_file, install_mac_window_chrome, show_message
@@ -102,7 +102,6 @@ class DashboardPage(QWidget):
         self.alert_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.alert_button.clicked.connect(self.open_stock_alerts)
         head.addWidget(self.alert_button)
-        self.refresh_alert_button()
         pdf=QPushButton("EXPORTAR PDF"); pdf.clicked.connect(self.export_pdf); head.addWidget(pdf); root.addLayout(head)
         filters=QFrame(); filters.setObjectName("Panel"); fl=QHBoxLayout(filters); fl.setContentsMargins(12,10,12,10); fl.setSpacing(8)
         self.store=QComboBox(); self.store.addItem("Todas as lojas"); self.store.addItems(sorted(df.loja.dropna().unique())); self.group=QComboBox(); self.group.addItem("Todos os grupos"); self.group.addItems(sorted(df.grupo.dropna().unique())); self.sub=QComboBox(); self.sub.addItem("Todas as subclasses"); self.status=QComboBox(); self.status.addItems(["Todos os status","SEM ESTOQUE","CRÍTICO","BAIXO","NORMAL","EXCESSO","SEM VENDA"]); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código, grupo ou subclasse...")
@@ -111,9 +110,30 @@ class DashboardPage(QWidget):
         sc=QScrollArea(); sc.setWidgetResizable(True); inner=QWidget(); self.body=QVBoxLayout(inner); self.body.setContentsMargins(0,0,6,0); self.body.setSpacing(14); sc.setWidget(inner); root.addWidget(sc,1)
         self.store.currentTextChanged.connect(self.refresh); self.group.currentTextChanged.connect(self.refresh); self.sub.currentTextChanged.connect(self.refresh); self.status.currentTextChanged.connect(self.refresh); self.search.textChanged.connect(self.refresh); self.refresh()
 
+    def _filtered_alerts(self):
+        if not self.alert_store:
+            return []
+        snapshot = self.alert_store.load_snapshot()
+        alerts = self.alert_store.evaluate(snapshot.get("rows", []))
+        visible = {
+            (
+                normalize_barcode(row.codigo_barras),
+                normalize_text(row.descricao),
+                normalize_text(row.loja),
+            )
+            for row in self.current_df().itertuples(index=False)
+        }
+        return [
+            alert for alert in alerts
+            if (
+                normalize_barcode(alert.get("codigo_barras")),
+                normalize_text(alert.get("descricao")),
+                normalize_text(alert.get("loja")),
+            ) in visible
+        ]
+
     def refresh_alert_button(self):
-        snapshot = self.alert_store.load_snapshot() if self.alert_store else {"rows": []}
-        alerts = self.alert_store.evaluate(snapshot.get("rows", [])) if self.alert_store else []
+        alerts = self._filtered_alerts()
         count = len(alerts)
         self.alert_button.setText(f"🔔  ALERTAS  ·  {count}")
         self.alert_button.setStyleSheet(
@@ -131,9 +151,7 @@ class DashboardPage(QWidget):
         )
 
     def open_stock_alerts(self):
-        snapshot = self.alert_store.load_snapshot() if self.alert_store else {"rows": []}
-        alerts = self.alert_store.evaluate(snapshot.get("rows", [])) if self.alert_store else []
-        StockAlertsDialog(alerts, self).exec()
+        StockAlertsDialog(self._filtered_alerts(), self).exec()
 
     def current_df(self):
         status="Todos" if self.status.currentText()=="Todos os status" else self.status.currentText(); loja="Todas" if self.store.currentText()=="Todas as lojas" else self.store.currentText(); grupo="Todos" if self.group.currentText()=="Todos os grupos" else self.group.currentText(); sub="Todas" if self.sub.currentText()=="Todas as subclasses" else self.sub.currentText(); return filter_analysis(self.df,loja,grupo,sub,self.search.text(),status)
@@ -159,7 +177,7 @@ class DashboardPage(QWidget):
         subclasses=sorted(options.subclasse.dropna().unique())
         self.sub.blockSignals(True); self.sub.clear(); self.sub.addItem("Todas as subclasses"); self.sub.addItems(subclasses)
         self.sub.setCurrentText(old_sub if old_sub in [self.sub.itemText(i) for i in range(self.sub.count())] else "Todas as subclasses"); self.sub.blockSignals(False)
-        d=self.current_df(); self.clear_body(); kp=kpis(d); grid=QGridLayout(); grid.setHorizontalSpacing(10); grid.setVerticalSpacing(10)
+        d=self.current_df(); self.refresh_alert_button(); self.clear_body(); kp=kpis(d); grid=QGridLayout(); grid.setHorizontalSpacing(10); grid.setVerticalSpacing(10)
         specs=[("Valor em estoque",brl(kp['Valor em estoque']),"#2854D9","▣"),("Unidades em estoque",br_number(kp['Unidades em estoque'],0),"#16B8C8","▥"),("Unidades vendidas",br_number(kp['Unidades vendidas'],0),"#0F9D8A","↗"),("Produtos ativos",br_number(kp['Produtos ativos analisados'],0),"#7C6FE6","●"),("Sem vendas",br_number(kp['Produtos sem vendas'],0),"#E85D8A","○"),("Em ruptura",br_number(kp['Produtos em ruptura'],0),"#D9485F","!"),("Críticos",br_number(kp['Produtos críticos'],0),"#F3B63F","◆"),("Giro médio do período",f"{kp['Giro médio']:.1f}%","#2854D9","↻"),("Margem potencial",brl(kp['Margem potencial']),"#0F9D8A","%"),("Faturamento estimado",brl(kp['Faturamento estimado']),"#16B8C8","$")]
         for i,(n,v,a,ic) in enumerate(specs): c=Card(n,v,a,ic); c.clicked.connect(lambda name=n:self.detail(name,d)); grid.addWidget(c,i//5,i%5)
         self.body.addLayout(grid)
