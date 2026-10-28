@@ -19,7 +19,6 @@ from core.matcher import build_analysis, load_classification
 from core.models import AnalysisConfig
 from core.stock_alerts import StockAlertStore
 from ui.analysis_page import AnalysisPage
-from ui.catalog_page import CatalogPage
 from ui.dashboard_page import DashboardPage
 from ui.stock_alerts import StockAlertRulesDialog
 from ui.styles import APP_QSS
@@ -45,7 +44,7 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
         self.home = self.home_page()
-        self.analysis = AnalysisPage()
+        self.analysis = AnalysisPage(on_home=self.open_home)
         self.analysis.generate.connect(self.generate)
         self.stack.addWidget(self.home)
         self.stack.addWidget(self.analysis)
@@ -72,13 +71,9 @@ class MainWindow(QMainWindow):
         analysis_button = QPushButton("CRIAR NOVA ANÁLISE  →")
         analysis_button.clicked.connect(lambda: self.stack.setCurrentWidget(self.analysis))
         actions.addWidget(analysis_button)
-        catalog_button = QPushButton("EXPLORAR CATÁLOGO")
-        catalog_button.setObjectName("Secondary")
-        catalog_button.clicked.connect(self.open_catalog)
-        actions.addWidget(catalog_button)
         alerts_button = QPushButton("CONFIGURAR ALERTAS")
         alerts_button.setObjectName("Secondary")
-        alerts_button.clicked.connect(self.open_stock_alerts)
+        alerts_button.clicked.connect(lambda: self.open_stock_alerts())
         actions.addWidget(alerts_button)
         actions.addStretch()
         layout.addLayout(actions)
@@ -94,15 +89,16 @@ class MainWindow(QMainWindow):
         layout.addWidget(footer)
         return widget
 
-    def open_catalog(self):
-        if not hasattr(self, "catpage"):
-            self.catpage = CatalogPage(self.catalog)
-            self.stack.addWidget(self.catpage)
-        self.stack.setCurrentWidget(self.catpage)
-
     def open_stock_alerts(self):
-        dialog = StockAlertRulesDialog(self.catalog, self.alert_store, self)
-        dialog.exec()
+        try:
+            dialog = StockAlertRulesDialog(self.catalog, self.alert_store, self)
+            dialog.exec()
+        except Exception as error:
+            QMessageBox.critical(
+                self,
+                "Não foi possível abrir as regras",
+                f"O formulário de alertas encontrou um erro.\n\n{type(error).__name__}: {error}",
+            )
 
     def open_home(self):
         self.stack.setCurrentWidget(self.home)
