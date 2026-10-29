@@ -1,5 +1,7 @@
-def filter_analysis(df,loja="Todas",grupo="Todos",subclasse="Todas",busca="",status="Todos"):
+def filter_analysis(df,loja="Todas",grupo="Todos",subclasse="Todas",busca="",status="Todos",somente_zerados=False):
     out=df
+    # Estoque zerado ou negativo (venda sem entrada no sistema da loja).
+    if somente_zerados:out=out[out.quantidade_estoque<=0]
     if loja!="Todas":out=out[out.loja==loja]
     if grupo!="Todos":out=out[out.grupo==grupo]
     if subclasse!="Todas":out=out[out.subclasse==subclasse]

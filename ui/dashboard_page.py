@@ -105,10 +105,14 @@ class DashboardPage(QWidget):
         pdf=QPushButton("EXPORTAR PDF"); pdf.clicked.connect(self.export_pdf); head.addWidget(pdf); root.addLayout(head)
         filters=QFrame(); filters.setObjectName("Panel"); fl=QHBoxLayout(filters); fl.setContentsMargins(12,10,12,10); fl.setSpacing(8)
         self.store=QComboBox(); self.store.addItem("Todas as lojas"); self.store.addItems(sorted(df.loja.dropna().unique())); self.group=QComboBox(); self.group.addItem("Todos os grupos"); self.group.addItems(sorted(df.grupo.dropna().unique())); self.sub=QComboBox(); self.sub.addItem("Todas as subclasses"); self.status=QComboBox(); self.status.addItems(["Todos os status","SEM ESTOQUE","CRÍTICO","BAIXO","NORMAL","EXCESSO","SEM VENDA"]); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código, grupo ou subclasse...")
-        for w in (self.store,self.group,self.sub,self.status,self.search): fl.addWidget(w)
+        self.zero_stock=QPushButton("⛔  ZERADOS / NEGATIVOS"); self.zero_stock.setCheckable(True); self.zero_stock.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.zero_stock.setToolTip("Mostrar apenas produtos com estoque zerado ou abaixo de zero.")
+        self.zero_stock.setStyleSheet("QPushButton{background:#FFFFFF;color:#B91C3A;border:1px solid #F3C4CD;border-radius:12px;padding:10px 14px;font-weight:900;}"
+            "QPushButton:hover{background:#FFF0F2;} QPushButton:checked{background:#D9284B;color:#FFFFFF;border-color:#D9284B;}")
+        for w in (self.store,self.group,self.sub,self.status,self.search,self.zero_stock): fl.addWidget(w)
         root.addWidget(filters)
         sc=QScrollArea(); sc.setWidgetResizable(True); inner=QWidget(); self.body=QVBoxLayout(inner); self.body.setContentsMargins(0,0,6,0); self.body.setSpacing(14); sc.setWidget(inner); root.addWidget(sc,1)
-        self.store.currentTextChanged.connect(self.refresh); self.group.currentTextChanged.connect(self.refresh); self.sub.currentTextChanged.connect(self.refresh); self.status.currentTextChanged.connect(self.refresh); self.search.textChanged.connect(self.refresh); self.refresh()
+        self.store.currentTextChanged.connect(self.refresh); self.group.currentTextChanged.connect(self.refresh); self.sub.currentTextChanged.connect(self.refresh); self.status.currentTextChanged.connect(self.refresh); self.search.textChanged.connect(self.refresh); self.zero_stock.toggled.connect(lambda _checked: self.refresh()); self.refresh()
 
     def _filtered_alerts(self):
         if not self.alert_store:
@@ -154,7 +158,7 @@ class DashboardPage(QWidget):
         StockAlertsDialog(self._filtered_alerts(), self).exec()
 
     def current_df(self):
-        status="Todos" if self.status.currentText()=="Todos os status" else self.status.currentText(); loja="Todas" if self.store.currentText()=="Todas as lojas" else self.store.currentText(); grupo="Todos" if self.group.currentText()=="Todos os grupos" else self.group.currentText(); sub="Todas" if self.sub.currentText()=="Todas as subclasses" else self.sub.currentText(); return filter_analysis(self.df,loja,grupo,sub,self.search.text(),status)
+        status="Todos" if self.status.currentText()=="Todos os status" else self.status.currentText(); loja="Todas" if self.store.currentText()=="Todas as lojas" else self.store.currentText(); grupo="Todos" if self.group.currentText()=="Todos os grupos" else self.group.currentText(); sub="Todas" if self.sub.currentText()=="Todas as subclasses" else self.sub.currentText(); return filter_analysis(self.df,loja,grupo,sub,self.search.text(),status,self.zero_stock.isChecked())
     def clear_body(self):
         while self.body.count():
             item=self.body.takeAt(0)

@@ -49,3 +49,7 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 - A descrição de cada loja é preservada quando difere da descrição geral, porque o cruzamento com as vendas usa loja + código + descrição. Ao trocar a descrição geral, só as lojas que usavam a mesma descrição acompanham.
 - Códigos que viram o mesmo número sem os zeros à esquerda são bloqueados em produtos novos.
 - No executável, o catálogo embutido é copiado na primeira execução para a pasta `data` ao lado do `.exe` (ou para a pasta de dados do usuário) e as edições vão para essa cópia. Um `.exe` novo com catálogo atualizado não sobrescreve essa cópia; para recomeçar do catálogo embutido, apague-a.
+
+## Dashboard: estoque zerado ou negativo
+
+- O botão **⛔ ZERADOS / NEGATIVOS** na barra de filtros mostra só produtos com estoque igual ou abaixo de zero (venda sem entrada no sistema). Ele combina com os filtros de loja, grupo, subclasse, status e busca, e vale também para o PDF exportado.
