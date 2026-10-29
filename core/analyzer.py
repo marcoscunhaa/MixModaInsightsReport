@@ -33,6 +33,15 @@ def stagnant(df,n=10):
     )
 
 
+def idle_stock(df,n=20):
+    """Estoque parado: sem venda no período, ordenado pela maior quantidade em estoque."""
+    return (
+        df[(df.quantidade_estoque > 0) & (df.quantidade_vendida <= 0)]
+        .sort_values(["quantidade_estoque", "valor_estoque"], ascending=[False, False], kind="stable")
+        .head(n)
+    )
+
+
 def rupture(df,n=None):
     """Rank stockout products by observed demand, then estimated sales value."""
     x = df[df.ruptura].sort_values(

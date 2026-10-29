@@ -24,3 +24,15 @@ def test_status_filters_zero_and_negative():
 
 def test_filter_off_keeps_everything():
     assert len(filter_analysis(frame())) == 4
+
+
+def test_idle_stock_ranks_unsold_by_quantity():
+    from core.analyzer import idle_stock
+    df = pd.DataFrame({
+        "descricao": ["A", "B", "C", "D", "E"],
+        "quantidade_estoque": [5, 40, 12, 0, 30],
+        "quantidade_vendida": [0, 0, 0, 0, 3],
+        "valor_estoque": [500, 40, 120, 0, 300],
+    })
+    assert list(idle_stock(df, 2).descricao) == ["B", "C"]
+    assert list(idle_stock(df).descricao) == ["B", "C", "A"]

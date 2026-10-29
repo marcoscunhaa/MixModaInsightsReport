@@ -54,3 +54,7 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 
 - Status de estoque: **NEGATIVO** (estoque abaixo de zero, venda sem entrada no sistema) e **SEM ESTOQUE** (estoque igual a zero, com ou sem venda). Os dois aparecem no filtro de status.
 - Com um desses status selecionado, clicar no KPI **Valor em estoque** lista esses produtos, dos mais negativos para os zerados, com estoque, vendas, preço, faturamento e status. Um clique na linha abre o card do produto.
+
+## PDF exportado
+
+- Depois de **Prioridades de estoque**, a página **Estoque parado** mostra os 20 produtos sem nenhuma venda no período com a maior quantidade em estoque (estoque, custo unitário e valor parado), com o total de produtos, unidades e valor parado no topo.
