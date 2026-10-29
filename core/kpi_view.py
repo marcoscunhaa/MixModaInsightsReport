@@ -3,7 +3,7 @@
 Fica fora da interface para poder ser testado: cada KPI tem nome claro, valor,
 uma frase explicando o número e um tom (bom, alerta, ruim) que define a cor.
 """
-from core.analyzer import kpis, single_product_labels
+from core.analyzer import kpis, rupture, single_product_labels
 from core.models import AnalysisConfig
 from utils.formatting import brl, br_number
 
@@ -106,3 +106,42 @@ def kpi_cards(d):
             if item["key"] in labels:
                 item.update(value=labels[item["key"]], hint=hints[item["key"]], tone=tones[item["key"]])
     return cards
+
+
+def store_list_view(key, d, status="Todos os status"):
+    """O que a lista "por loja" de cada KPI mostra.
+
+    Devolve {title, emoji, rows, value, kind, ascending, note} ou None se o KPI não
+    tem lista. `kind`: "money" (R$), "stock" (destaca zerado/negativo) ou "units".
+    """
+    zero_or_negative = status in ("SEM ESTOQUE", "NEGATIVO")
+    views = {
+        "Valor em estoque": (
+            dict(title=f"Valor em estoque • {'Negativos' if status == 'NEGATIVO' else 'Sem estoque'}",
+                 emoji="💰", rows=d, value="quantidade_estoque", kind="stock", ascending=True,
+                 note="Unidades em estoque de cada loja (zerados e negativos).")
+            if zero_or_negative else
+            dict(title="Valor em estoque por loja", emoji="💰", rows=d[d.quantidade_estoque > 0],
+                 value="valor_estoque", kind="money", ascending=False,
+                 note="Custo do estoque de cada produto em cada loja.")
+        ),
+        "Unidades em estoque": dict(
+            title="Estoque por loja", emoji="📦", rows=d, value="quantidade_estoque", kind="stock",
+            ascending=False, note="Unidades em estoque de cada produto em cada loja."),
+        "Unidades vendidas": dict(
+            title="Vendas por loja", emoji="🛒", rows=d[d.quantidade_vendida > 0], value="quantidade_vendida",
+            kind="units", ascending=False, note="Unidades vendidas no período em cada loja."),
+        "Sem vendas": dict(
+            title="Sem vendas • estoque parado por loja", emoji="💤", rows=d[d.produto_sem_venda],
+            value="quantidade_estoque", kind="stock", ascending=False,
+            note="Unidades em estoque dos produtos que não venderam nada no período naquela loja."),
+        "Em ruptura": dict(
+            title="Em ruptura • vendas por loja", emoji="🚫", rows=rupture(d), value="quantidade_vendida",
+            kind="units", ascending=False,
+            note="Quanto cada loja vendeu do produto no período antes de ficar sem estoque."),
+        "Críticos": dict(
+            title="Estoque crítico por loja", emoji="⚠️", rows=d[d.status_estoque == "CRÍTICO"],
+            value="quantidade_estoque", kind="stock", ascending=True,
+            note=f"Unidades em estoque dos produtos com até {br_number(CRITICAL, 0)} un. naquela loja."),
+    }
+    return views.get(key)

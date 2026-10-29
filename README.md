@@ -65,9 +65,12 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 - Cada KPI mostra emoji, nome, valor e uma frase que explica o número (ex.: "59% dos produtos não venderam"). Em ruptura, Estoque crítico e Sem vendas ficam vermelhos/âmbar quando há casos e verdes com ✓ quando não há. Cards com "Ver lista ›" abrem os produtos.
 - O status do estoque é escolhido em pílulas com a contagem de cada status (Negativo, Sem estoque, Crítico, Baixo, Sem venda, Excesso, Normal); passar o mouse mostra a regra de cada um. As contagens seguem os demais filtros.
 
-## Dashboard: estoque por loja
+## Dashboard: listas por loja
 
-- Em análises com várias lojas, o KPI **Unidades em estoque** mostra a divisão por loja (ex.: "Pedras 33 · Sapiranga 43"). Ao clicar, abre a lista **Estoque por loja**: uma linha por produto, uma coluna por loja, o total do produto e o total de cada loja. Zerado fica em âmbar, negativo em vermelho e "—" indica que o produto não está na planilha daquela loja. Clicar numa quantidade abre o card do produto naquela loja.
+- Todo KPI com **Ver lista ›** abre no formato produto × loja: uma linha por produto, uma coluna por loja, o total do produto e uma linha de total por loja, com chips de cada loja no topo. Clicar numa loja abre o card do produto naquela loja.
+- O número de cada célula depende do KPI: **Valor em estoque** (R$ do estoque), **Unidades em estoque**, **Unidades vendidas** (vendas do período), **Sem vendas** (unidades paradas), **Em ruptura** (quanto vendeu antes de zerar) e **Estoque crítico** (unidades). Com o status Sem estoque ou Negativo selecionado, o Valor em estoque lista as unidades zeradas/negativas.
+- Zerado fica em âmbar e negativo em vermelho; "—" indica que o produto não entra naquela lista naquela loja (ou, no estoque, que não está na planilha da loja).
+- Em análises com várias lojas, o KPI Unidades em estoque também mostra a divisão por loja na frase do card.
 
 ## Dashboard: produto isolado
 

@@ -23,12 +23,12 @@ def kpis(df):
     "Produtos críticos":int((df.status_estoque=="CRÍTICO").sum()),"Giro médio":df.giro.mean() if len(df) else 0,
     "Margem potencial":(df.margem_unitaria*df.quantidade_estoque).sum(),"Faturamento estimado":df.valor_vendido.sum()}
 
-def stock_by_store(df):
-    """Unidades em estoque de cada produto por loja (uma coluna por loja).
+def pivot_by_store(df, value="quantidade_estoque", ascending=False):
+    """Uma métrica (`value`) de cada produto por loja, uma coluna por loja.
 
     O produto é identificado pelo código de barras, porque a descrição pode
-    variar entre lojas; o nome exibido é o mais frequente. Loja onde o produto
-    não aparece na planilha fica vazia (NaN), diferente de estoque zero.
+    variar entre lojas; o nome exibido é o mais frequente. Loja sem linha do
+    produto em `df` fica vazia (NaN), diferente de zero.
     Retorna (tabela, lojas, totais por loja).
     """
     if df.empty:
@@ -37,13 +37,18 @@ def stock_by_store(df):
     names = (df.groupby("codigo_barras").descricao
              .agg(lambda s: s.value_counts().index[0]).rename("descricao"))
     groups = df.groupby("codigo_barras")[["grupo", "subclasse"]].first()
-    pivot = df.pivot_table(index="codigo_barras", columns="loja", values="quantidade_estoque",
+    pivot = df.pivot_table(index="codigo_barras", columns="loja", values=value,
                            aggfunc="sum").reindex(columns=stores)
     table = pd.concat([names, groups, pivot], axis=1).reset_index()
     table["total"] = table[stores].sum(axis=1, min_count=1).fillna(0)
-    table = table.sort_values(["total", "descricao"], ascending=[False, True], kind="stable").reset_index(drop=True)
-    totals = {store: float(df.loc[df.loja == store, "quantidade_estoque"].sum()) for store in stores}
+    table = table.sort_values(["total", "descricao"], ascending=[ascending, True], kind="stable").reset_index(drop=True)
+    totals = {store: float(df.loc[df.loja == store, value].sum()) for store in stores}
     return table, stores, totals
+
+
+def stock_by_store(df):
+    """Unidades em estoque de cada produto por loja."""
+    return pivot_by_store(df, "quantidade_estoque")
 
 
 def single_product_labels(df):

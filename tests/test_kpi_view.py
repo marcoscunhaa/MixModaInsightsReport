@@ -44,3 +44,15 @@ def test_status_counts_cover_every_option():
     counts = status_counts(frame([(0, 5, "SEM ESTOQUE"), (-1, 1, "NEGATIVO"), (0, 0, "SEM ESTOQUE")]))
     assert counts == {"SEM ESTOQUE": 2, "NEGATIVO": 1, "Todos os status": 3}
     assert {value for value, *_ in STATUS_OPTIONS} >= {"NEGATIVO", "SEM ESTOQUE", "CRÍTICO", "BAIXO", "SEM VENDA", "EXCESSO", "NORMAL"}
+
+
+def test_store_list_views_pick_rows_and_metric():
+    from core.kpi_view import store_list_view
+    df = frame([(0, 5, "SEM ESTOQUE"), (1, 0, "CRÍTICO"), (10, 2, "NORMAL"), (8, 0, "SEM VENDA")])
+    assert store_list_view("Unidades vendidas", df)["value"] == "quantidade_vendida"
+    assert len(store_list_view("Unidades vendidas", df)["rows"]) == 2
+    assert len(store_list_view("Sem vendas", df)["rows"]) == 2
+    assert len(store_list_view("Em ruptura", df)["rows"]) == 1
+    assert store_list_view("Valor em estoque", df)["kind"] == "money"
+    assert store_list_view("Valor em estoque", df, "NEGATIVO")["kind"] == "stock"
+    assert store_list_view("Margem potencial", df) is None
