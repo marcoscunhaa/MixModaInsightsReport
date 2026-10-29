@@ -55,6 +55,11 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 - Status de estoque: **NEGATIVO** (estoque abaixo de zero, venda sem entrada no sistema) e **SEM ESTOQUE** (estoque igual a zero, com ou sem venda). Os dois aparecem no filtro de status.
 - Com um desses status selecionado, clicar no KPI **Valor em estoque** lista esses produtos, dos mais negativos para os zerados, com estoque, vendas, preço, faturamento e status. Um clique na linha abre o card do produto.
 
+## Dashboard: KPIs e status
+
+- Cada KPI mostra emoji, nome, valor e uma frase que explica o número (ex.: "59% dos produtos não venderam"). Em ruptura, Estoque crítico e Sem vendas ficam vermelhos/âmbar quando há casos e verdes com ✓ quando não há. Cards com "Ver lista ›" abrem os produtos.
+- O status do estoque é escolhido em pílulas com a contagem de cada status (Negativo, Sem estoque, Crítico, Baixo, Sem venda, Excesso, Normal); passar o mouse mostra a regra de cada um. As contagens seguem os demais filtros.
+
 ## Dashboard: produto isolado
 
 - Quando os filtros deixam um único produto, os KPIs de contagem mostram texto em vez de 0 ou 1: **Em ruptura** → SEM ESTOQUE / ESTOQUE NEGATIVO / COM ESTOQUE; **Sem vendas** → SEM VENDAS / COM VENDAS; **Críticos** → o status do produto; **Produtos ativos** → 1 PRODUTO.
