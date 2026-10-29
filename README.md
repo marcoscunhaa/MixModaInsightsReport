@@ -36,7 +36,7 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 ## Alertas de estoque crítico
 
 - Pesquise produtos pelo nome ou código de barras; a lista sugere resultados aproximados do catálogo oficial.
-- Cada regra define um limite mínimo de unidades (o alerta aparece nesse número ou abaixo) e pode valer para uma loja ou para todas.
+- Cada regra define um limite mínimo de unidades (o alerta aparece nesse número ou abaixo). As lojas são marcadas em caixas de seleção: **Todas as lojas** ou uma ou mais lojas específicas (cada loja marcada vira uma regra). Ao editar uma regra e desmarcar a loja dela, a regra antiga é removida.
 - As regras ficam salvas em `data/stock_alert_rules.json`; a última análise fica em `data/stock_alert_snapshot.json`.
 - Na dashboard, o ícone de alertas destaca quantos produtos atingiram as regras e abre a relação com código, loja, quantidade e preço de venda.
 

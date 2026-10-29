@@ -3,7 +3,7 @@ import re
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QApplication, QAbstractItemView, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout,
+    QApplication, QAbstractItemView, QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout,
     QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, 
     QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
@@ -29,6 +29,9 @@ QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border:1px solid #5675E8; bac
 QListWidget, QTableWidget { background:#FFFFFF; border:1px solid #E2E8F1; border-radius:10px; }
 QListWidget::item { padding:9px; border-bottom:1px solid #EEF1F6; }
 QListWidget::item:selected { background:#EEF2FF; color:#18377C; }
+QCheckBox { color:#233451; font-size:12px; font-weight:700; spacing:7px; }
+QCheckBox:disabled { color:#A3AEC0; }
+QCheckBox#allStores { color:#2854D9; font-weight:900; }
 """
 
 
@@ -49,6 +52,7 @@ class StockAlertRulesDialog(QDialog):
             for p in self.products
         }
         self.selected_product = None
+        self.editing_rule = None
         self.setWindowTitle("Regras de estoque • Mix Moda")
         screen = self.screen() or QApplication.primaryScreen()
         available = screen.availableGeometry() if screen else None
@@ -113,19 +117,15 @@ class StockAlertRulesDialog(QDialog):
         grid = QGridLayout()
         grid.setHorizontalSpacing(12)
         grid.setVerticalSpacing(6)
-        grid.addWidget(self._field_label("LOJA"), 0, 0)
-        self.store = QComboBox()
-        self.store.addItem("Todas as lojas", "*")
-        for store in STORES:
-            self.store.addItem(store, store)
-        grid.addWidget(self.store, 1, 0)
+        grid.addWidget(self._field_label("LOJAS"), 0, 0)
+        grid.addWidget(self._store_checkboxes(), 1, 0)
 
         grid.addWidget(self._field_label("ESTOQUE MÍNIMO"), 0, 1)
         self.minimum = QSpinBox()
         self.minimum.setRange(0, 100000)
         self.minimum.setValue(3)
         self.minimum.setToolTip("Avisar quando o estoque ficar igual ou abaixo deste limite.")
-        grid.addWidget(self.minimum, 1, 1)
+        grid.addWidget(self.minimum, 1, 1, Qt.AlignmentFlag.AlignTop)
         grid.setColumnStretch(0, 2)
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
@@ -141,6 +141,40 @@ class StockAlertRulesDialog(QDialog):
         actions.addWidget(self.save_button)
         layout.addLayout(actions)
         return panel
+
+    def _store_checkboxes(self):
+        """"Todas as lojas" ou lojas específicas; cada loja marcada vira uma regra."""
+        box = QWidget()
+        grid = QGridLayout(box)
+        grid.setContentsMargins(0, 2, 0, 0)
+        grid.setHorizontalSpacing(18)
+        grid.setVerticalSpacing(8)
+        self.all_stores = QCheckBox("Todas as lojas")
+        self.all_stores.setObjectName("allStores")
+        self.all_stores.toggled.connect(self._toggle_all_stores)
+        grid.addWidget(self.all_stores, 0, 0)
+        self.store_checks = []
+        for index, store in enumerate(STORES, start=1):
+            check = QCheckBox(store)
+            self.store_checks.append((check, store))
+            grid.addWidget(check, index // 3, index % 3)
+        grid.setColumnStretch(3, 1)
+        self.all_stores.setChecked(True)
+        return box
+
+    def _toggle_all_stores(self, checked):
+        for check, _store in self.store_checks:
+            check.setEnabled(not checked)
+
+    def _set_selected_stores(self, store):
+        self.all_stores.setChecked(store == "*")
+        for check, name in self.store_checks:
+            check.setChecked(store != "*" and normalize_text(name) == normalize_text(store))
+
+    def _selected_stores(self):
+        if self.all_stores.isChecked():
+            return ["*"]
+        return [name for check, name in self.store_checks if check.isChecked()]
 
     @staticmethod
     def _field_label(text):
@@ -240,19 +274,32 @@ class StockAlertRulesDialog(QDialog):
     def save_rule(self):
         if not self.selected_product:
             return
+        stores = self._selected_stores()
+        if not stores:
+            show_message(self, "warning", "Escolha as lojas", "Marque \"Todas as lojas\" ou pelo menos uma loja.")
+            return
         minimum = self.minimum.value()
         product = self.selected_product
+        key = (normalize_barcode(product.get("codigo_barras")), normalize_text(product.get("descricao")))
         try:
-            self.alert_store.upsert_rule({
-                "codigo_barras": product.get("codigo_barras"),
-                "descricao": product.get("descricao"),
-                "loja": self.store.currentData(),
-                "estoque_minimo": minimum,
-            })
+            for store in stores:
+                self.alert_store.upsert_rule({
+                    "codigo_barras": product.get("codigo_barras"),
+                    "descricao": product.get("descricao"),
+                    "loja": store,
+                    "estoque_minimo": minimum,
+                })
+            # Editando uma regra cuja loja foi desmarcada: a regra antiga sai.
+            rule = self.editing_rule
+            if rule and key == (normalize_barcode(rule.get("codigo_barras")), normalize_text(rule.get("descricao"))):
+                if normalize_text(rule.get("loja", "*")) not in {normalize_text(s) for s in stores}:
+                    self.alert_store.remove_rule(rule.get("id"))
         except (OSError, ValueError) as error:
             show_message(self, "critical", "Não foi possível salvar", str(error))
             return
-        self.status.setText("Regra salva. O alerta será mostrado quando o estoque atingir o limite ou ficar abaixo.")
+        self.editing_rule = None
+        where = "todas as lojas" if stores == ["*"] else f"{len(stores)} loja(s)"
+        self.status.setText(f"Regra salva para {where}. O alerta aparece quando o estoque atingir o limite ou ficar abaixo.")
         self.refresh_rules()
 
     def refresh_rules(self):
@@ -316,9 +363,8 @@ class StockAlertRulesDialog(QDialog):
             if item.data(Qt.ItemDataRole.UserRole) == key:
                 self.results.setCurrentItem(item)
                 break
-        store_index = self.store.findData(rule.get("loja", "*"))
-        if store_index >= 0:
-            self.store.setCurrentIndex(store_index)
+        self._set_selected_stores(rule.get("loja", "*"))
+        self.editing_rule = dict(rule)
         self.minimum.setValue(int(rule.get("estoque_minimo", 0)))
         self.status.setText("Ajuste o limite e salve para atualizar esta regra.")
         self.search.setFocus()
