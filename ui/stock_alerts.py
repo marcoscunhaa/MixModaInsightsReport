@@ -2,7 +2,7 @@
 import re
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QIntValidator
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout,
     QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, 
@@ -69,11 +69,12 @@ QFrame#card QCheckBox:hover { border-color:#AFC2FF; }
 QFrame#card QCheckBox:checked { background:#EEF3FF; border-color:#2F5BEA; color:#2F5BEA; }
 QFrame#card QCheckBox:disabled { background:#F7F8FB; border-color:#E8EDF4; color:#A3AEC0; }
 QFrame#card QCheckBox#allStores:checked { background:#2F5BEA; border-color:#2F5BEA; color:#FFFFFF; }
-QFrame#card QSpinBox { background:#F8FAFD; border:1px solid #DCE4F0; border-radius:12px; padding:8px; color:#12213D;
-    font-size:16px; font-weight:900; }
-QFrame#card QSpinBox QLineEdit { border:none; background:transparent; padding:0; }
+QFrame#card QLineEdit#minimumField { background:#F8FAFD; border:1px solid #DCE4F0; border-radius:12px; padding:0 6px;
+    color:#12213D; font-size:16px; font-weight:900; min-height:0; }
+QFrame#card QLineEdit#minimumField:focus { border:1px solid #5675E8; background:#FFFFFF; }
 QLabel#footNote { color:#7A879D; font-size:11px; }
-QFrame#card QPushButton#stepper { background:#EEF2FF; color:#2F5BEA; border:none; border-radius:12px; font-size:18px; font-weight:900; }
+QFrame#card QPushButton#stepper { background:#EEF2FF; color:#2F5BEA; border:none; border-radius:12px; font-size:18px; font-weight:900;
+    padding:0; min-width:40px; max-width:40px; min-height:40px; max-height:40px; }
 QFrame#card QPushButton#stepper:hover { background:#DCE6FF; }
 QFrame#card QPushButton#saveRule { border:none; border-radius:14px; padding:13px 18px; color:#FFFFFF; font-size:12px; font-weight:900;
     letter-spacing:0.5px; background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #2F5BEA,stop:1 #7C3AED); }
@@ -97,6 +98,37 @@ QFrame#card QPushButton#iconDelete { background:#FFF0F2; border:1px solid #FFD0D
 QFrame#card QPushButton#iconDelete:hover { background:#FFE0E5; }
 QFrame#card QLabel#emptyRules { color:#8A96AA; font-size:12px; padding:30px; }
 """
+
+
+class _IntField(QLineEdit):
+    """Campo numérico simples (só dígitos) com a interface do QSpinBox usada aqui.
+
+    Substitui o QSpinBox porque o estilo geral do app escondia o número dentro dele.
+    """
+
+    def __init__(self, value=0, minimum=0, maximum=100000, parent=None):
+        super().__init__(parent)
+        self._minimum, self._maximum = minimum, maximum
+        self.setValidator(QIntValidator(minimum, maximum, self))
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.editingFinished.connect(lambda: self.setValue(self.value()))
+        self.setValue(value)
+
+    def value(self):
+        try:
+            number = int(self.text())
+        except ValueError:
+            number = self._minimum
+        return max(self._minimum, min(self._maximum, number))
+
+    def setValue(self, value):
+        self.setText(str(max(self._minimum, min(self._maximum, int(value)))))
+
+    def stepUp(self):
+        self.setValue(self.value() + 1)
+
+    def stepDown(self):
+        self.setValue(self.value() - 1)
 
 
 def _panel():
@@ -241,12 +273,9 @@ class StockAlertRulesDialog(QDialog):
         minus.setObjectName("stepper")
         minus.setFixedSize(40, 40)
         limit.addWidget(minus)
-        self.minimum = QSpinBox()
-        self.minimum.setRange(0, 100000)
-        self.minimum.setValue(3)
-        self.minimum.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self.minimum.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.minimum.setFixedWidth(90)
+        self.minimum = _IntField(3, 0, 100000)
+        self.minimum.setObjectName("minimumField")
+        self.minimum.setFixedSize(90, 40)
         self.minimum.setToolTip("Avisar quando o estoque ficar igual ou abaixo deste limite.")
         limit.addWidget(self.minimum)
         plus = QPushButton("+")
