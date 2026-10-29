@@ -27,7 +27,7 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 ## Regras comerciais e classificação atualizadas
 - Produtos vendidos no período usam os preços da planilha de vendas: **preço de compra = coluna D**, **preço de venda = coluna F** e **faturamento = soma da coluna G**. Quando o mesmo produto aparece em várias linhas com preços diferentes, o faturamento é somado e o preço vira a média ponderada pela quantidade.
 - Nesse caso, o card do produto mostra o quadro **Valores de venda no período**, com cada preço, a quantidade e o faturamento daquele preço, e o total; o card mostra o **preço de venda** atual (coluna F da planilha de estoque, cruzada pelo código) e, ao lado, o **preço de venda médio** do período, usado nas margens.
-- Produtos sem venda no período mantêm a regra: preço de venda = **2x o preço de compra** do estoque.
+- Produtos sem venda no período usam o **preço de venda atual da planilha de estoque (coluna F)**. A regra de 2x o preço de compra só vale quando essa coluna vier vazia.
 - O valor em estoque continua sendo quantidade em estoque × preço de compra da planilha de estoque.
 - A classificação oficial por loja + código + descrição está incorporada em `data/catalogo_produtos_estoque_geral.json`.
 - A análise permite selecionar até cinco lojas, uma vez cada: Sitio São João, Palmeiras, Sapiranga, Pedras e Mix Cosméticos. A lista fica em `core/stores.py` e é usada em todos os seletores de loja.

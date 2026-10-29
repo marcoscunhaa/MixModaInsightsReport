@@ -12,7 +12,7 @@ SALES_MAP = {
     "preco_compra": 3, "preco_venda": 5, "faturamento": 6,
 }
 # Extrações antigas de vendas têm só A–C; os preços ausentes viram 0 e o
-# cruzamento usa a regra de 2x o preço de compra do estoque.
+# cruzamento usa o preço de venda da planilha de estoque (coluna F).
 SALES_REQUIRED = ("codigo_barras", "descricao", "quantidade_vendida")
 
 

@@ -205,8 +205,8 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     ]
 
     # Preços e faturamento vêm da planilha de vendas (D compra, F venda,
-    # G faturamento). Sem venda no período, vale a regra comercial: preço de
-    # venda = 2x o preço de compra do estoque.
+    # G faturamento). Sem venda no período, o preço de venda é o atual da
+    # planilha de estoque (coluna F); 2x o preço de compra só quando ela vier vazia.
     merged["preco_compra_estoque"] = pd.to_numeric(merged["preco_compra"], errors="coerce").fillna(0)
     sold = merged.quantidade_vendida > 0
     sold_qty = merged.quantidade_vendida.where(sold, 1)
@@ -215,9 +215,8 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     merged["preco_compra"] = (merged._custo_vendas / sold_qty).where(
         has_sales_cost, merged.preco_compra_estoque
     )
-    merged["preco_venda"] = (merged._faturamento / sold_qty).where(
-        has_sales_revenue, merged.preco_compra * 2
-    )
+    stock_price = merged.preco_venda_estoque.where(merged.preco_venda_estoque > 0, merged.preco_compra * 2)
+    merged["preco_venda"] = (merged._faturamento / sold_qty).where(has_sales_revenue, stock_price)
     # O valor do estoque continua usando o custo da planilha de estoque.
     merged["valor_estoque"] = merged.quantidade_estoque * merged.preco_compra_estoque
     merged["valor_vendido"] = merged._faturamento.where(

@@ -51,6 +51,7 @@ def test_prices_and_revenue_come_from_sales_sheet():
         ("7896722660389", "SQUISHY FIDGET", 5, 14.0, 29.99),
         ("7896717230006", "CHINELO ADULTO FEM DE 25", 2, 12.5, 26.99),
         ("7890000000001", "PRODUTO SEM VENDA", 3, 10.0, 0),
+        ("7908871903563", "TACA DE 363ML 3PCS", 4, 14.99, 29.99),          # caso real de Sapiranga
     ])
     frame = analyze(stock, sales)
 
@@ -76,8 +77,12 @@ def test_prices_and_revenue_come_from_sales_sheet():
 
     unsold = frame.loc["PRODUTO SEM VENDA"]
     assert (unsold.quantidade_vendida, unsold.valor_vendido) == (0, 0)
-    assert (unsold.preco_compra, unsold.preco_venda) == pytest.approx((10.0, 20.0))  # regra 2x
+    assert (unsold.preco_compra, unsold.preco_venda) == pytest.approx((10.0, 20.0))  # sem coluna F: 2x
     assert unsold.precos_venda == []
+
+    taca = frame.loc["TACA DE 363ML 3PCS"]                                   # sem venda: coluna F do estoque
+    assert (taca.preco_compra, taca.preco_venda) == pytest.approx((14.99, 29.99))
+    assert taca.margem_unitaria == pytest.approx(15.0)
 
 
 def test_old_sales_layout_with_three_columns_still_works():
