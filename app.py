@@ -4,6 +4,7 @@ from pathlib import Path
 from PySide6.QtCore import QStandardPaths
 from PySide6.QtWidgets import QApplication
 
+from core.catalog_editor import editable_catalog_path
 from ui.main_window import MainWindow
 
 
@@ -34,9 +35,12 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setOrganizationName("Mix Moda")
     app.setApplicationName("Mix Moda Insights")
-    window = MainWindow(
-        resource_path("data/catalogo_produtos_estoque_geral.json"),
-        persistent_data_directory(),
+    data_dir = persistent_data_directory()
+    # O JSON embutido no .exe é somente leitura; as edições do estoque vão para a
+    # cópia na pasta de dados (rodando pelo código-fonte é o próprio data/).
+    catalog_path = editable_catalog_path(
+        resource_path("data/catalogo_produtos_estoque_geral.json"), data_dir
     )
+    window = MainWindow(catalog_path, data_dir)
     window.show()
     sys.exit(app.exec())

@@ -20,6 +20,7 @@ from core.stock_alerts import StockAlertStore
 from ui.analysis_page import AnalysisPage
 from ui.dashboard_page import DashboardPage
 from ui.stock_alerts import StockAlertRulesDialog
+from ui.stock_explorer import StockExplorerPage
 from ui.window_chrome import install_mac_window_chrome, show_message
 from ui.styles import APP_QSS
 from utils.formatting import br_number
@@ -32,6 +33,7 @@ class MainWindow(QMainWindow):
         self.resize(1580, 980)
         self.setStyleSheet(APP_QSS)
 
+        self.catalog_path = catalog_path
         self.catalog = load_catalog(catalog_path)
         self.classification = load_classification_from_catalog(self.catalog, load_classification)
 
@@ -54,6 +56,7 @@ class MainWindow(QMainWindow):
         self.analysis.generate.connect(self.generate)
         self.stack.addWidget(self.home)
         self.stack.addWidget(self.analysis)
+        self.stock_explorer = None
 
 
     def home_page(self):
@@ -77,6 +80,10 @@ class MainWindow(QMainWindow):
         analysis_button = QPushButton("CRIAR NOVA ANÁLISE  →")
         analysis_button.clicked.connect(lambda: self.stack.setCurrentWidget(self.analysis))
         actions.addWidget(analysis_button)
+        stock_button = QPushButton("EXPLORAR ESTOQUE")
+        stock_button.setObjectName("Secondary")
+        stock_button.clicked.connect(lambda: self.open_stock_explorer())
+        actions.addWidget(stock_button)
         alerts_button = QPushButton("CONFIGURAR ALERTAS")
         alerts_button.setObjectName("Secondary")
         alerts_button.clicked.connect(lambda: self.open_stock_alerts())
@@ -86,14 +93,36 @@ class MainWindow(QMainWindow):
 
         layout.addStretch()
 
+        self.footer = QLabel()
+        self.footer.setObjectName("Muted")
+        self.refresh_footer()
+        layout.addWidget(self.footer)
+        return widget
+
+    def refresh_footer(self):
         meta = self.catalog.get("meta", {})
-        footer = QLabel(
+        self.footer.setText(
             f"Catálogo oficial • {br_number(meta.get('total_produtos_unicos_por_codigo', 0), 0)} códigos "
             f"• {meta.get('total_grupos', 0)} grupos • {meta.get('total_subclasses', 0)} subclasses"
         )
-        footer.setObjectName("Muted")
-        layout.addWidget(footer)
-        return widget
+
+    def open_stock_explorer(self):
+        if self.stock_explorer is None:
+            self.stock_explorer = StockExplorerPage(
+                self.catalog,
+                self.catalog_path,
+                on_home=self.open_home,
+                on_catalog_changed=self.catalog_changed,
+            )
+            self.stack.addWidget(self.stock_explorer)
+        else:
+            self.stock_explorer.reset()
+        self.stack.setCurrentWidget(self.stock_explorer)
+
+    def catalog_changed(self):
+        """O catálogo foi editado: a classificação usada nas próximas análises é refeita."""
+        self.classification = load_classification_from_catalog(self.catalog, load_classification)
+        self.refresh_footer()
 
     def open_stock_alerts(self):
         try:
