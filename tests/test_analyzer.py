@@ -15,13 +15,11 @@ def frame():
     })
 
 
-def test_only_zero_or_negative_stock():
-    assert list(filter_analysis(frame(), somente_zerados=True).descricao) == ["A", "B"]
-
-
-def test_zero_stock_filter_combines_with_others():
-    out = filter_analysis(frame(), loja="Pedras", status="CRÍTICO", somente_zerados=True)
-    assert list(out.descricao) == ["B"]
+def test_status_filters_zero_and_negative():
+    df = frame()
+    df["status_estoque"] = ["SEM ESTOQUE", "NEGATIVO", "NORMAL", "CRÍTICO"]
+    assert list(filter_analysis(df, status="NEGATIVO").descricao) == ["B"]
+    assert list(filter_analysis(df, status="SEM ESTOQUE").descricao) == ["A"]
 
 
 def test_filter_off_keeps_everything():

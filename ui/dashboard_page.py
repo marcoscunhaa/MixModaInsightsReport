@@ -104,15 +104,11 @@ class DashboardPage(QWidget):
         head.addWidget(self.alert_button)
         pdf=QPushButton("EXPORTAR PDF"); pdf.clicked.connect(self.export_pdf); head.addWidget(pdf); root.addLayout(head)
         filters=QFrame(); filters.setObjectName("Panel"); fl=QHBoxLayout(filters); fl.setContentsMargins(12,10,12,10); fl.setSpacing(8)
-        self.store=QComboBox(); self.store.addItem("Todas as lojas"); self.store.addItems(sorted(df.loja.dropna().unique())); self.group=QComboBox(); self.group.addItem("Todos os grupos"); self.group.addItems(sorted(df.grupo.dropna().unique())); self.sub=QComboBox(); self.sub.addItem("Todas as subclasses"); self.status=QComboBox(); self.status.addItems(["Todos os status","SEM ESTOQUE","CRÍTICO","BAIXO","NORMAL","EXCESSO","SEM VENDA"]); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código, grupo ou subclasse...")
-        self.zero_stock=QPushButton("⛔  ZERADOS / NEGATIVOS"); self.zero_stock.setCheckable(True); self.zero_stock.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.zero_stock.setToolTip("Mostrar apenas produtos com estoque zerado ou abaixo de zero.")
-        self.zero_stock.setStyleSheet("QPushButton{background:#FFFFFF;color:#B91C3A;border:1px solid #F3C4CD;border-radius:12px;padding:10px 14px;font-weight:900;}"
-            "QPushButton:hover{background:#FFF0F2;} QPushButton:checked{background:#D9284B;color:#FFFFFF;border-color:#D9284B;}")
-        for w in (self.store,self.group,self.sub,self.status,self.search,self.zero_stock): fl.addWidget(w)
+        self.store=QComboBox(); self.store.addItem("Todas as lojas"); self.store.addItems(sorted(df.loja.dropna().unique())); self.group=QComboBox(); self.group.addItem("Todos os grupos"); self.group.addItems(sorted(df.grupo.dropna().unique())); self.sub=QComboBox(); self.sub.addItem("Todas as subclasses"); self.status=QComboBox(); self.status.addItems(["Todos os status","SEM ESTOQUE","NEGATIVO","CRÍTICO","BAIXO","NORMAL","EXCESSO","SEM VENDA"]); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código, grupo ou subclasse...")
+        for w in (self.store,self.group,self.sub,self.status,self.search): fl.addWidget(w)
         root.addWidget(filters)
         sc=QScrollArea(); sc.setWidgetResizable(True); inner=QWidget(); self.body=QVBoxLayout(inner); self.body.setContentsMargins(0,0,6,0); self.body.setSpacing(14); sc.setWidget(inner); root.addWidget(sc,1)
-        self.store.currentTextChanged.connect(self.refresh); self.group.currentTextChanged.connect(self.refresh); self.sub.currentTextChanged.connect(self.refresh); self.status.currentTextChanged.connect(self.refresh); self.search.textChanged.connect(self.refresh); self.zero_stock.toggled.connect(lambda _checked: self.refresh()); self.refresh()
+        self.store.currentTextChanged.connect(self.refresh); self.group.currentTextChanged.connect(self.refresh); self.sub.currentTextChanged.connect(self.refresh); self.status.currentTextChanged.connect(self.refresh); self.search.textChanged.connect(self.refresh); self.refresh()
 
     def _filtered_alerts(self):
         if not self.alert_store:
@@ -158,7 +154,7 @@ class DashboardPage(QWidget):
         StockAlertsDialog(self._filtered_alerts(), self).exec()
 
     def current_df(self):
-        status="Todos" if self.status.currentText()=="Todos os status" else self.status.currentText(); loja="Todas" if self.store.currentText()=="Todas as lojas" else self.store.currentText(); grupo="Todos" if self.group.currentText()=="Todos os grupos" else self.group.currentText(); sub="Todas" if self.sub.currentText()=="Todas as subclasses" else self.sub.currentText(); return filter_analysis(self.df,loja,grupo,sub,self.search.text(),status,self.zero_stock.isChecked())
+        status="Todos" if self.status.currentText()=="Todos os status" else self.status.currentText(); loja="Todas" if self.store.currentText()=="Todas as lojas" else self.store.currentText(); grupo="Todos" if self.group.currentText()=="Todos os grupos" else self.group.currentText(); sub="Todas" if self.sub.currentText()=="Todas as subclasses" else self.sub.currentText(); return filter_analysis(self.df,loja,grupo,sub,self.search.text(),status)
     def clear_body(self):
         while self.body.count():
             item=self.body.takeAt(0)
@@ -244,7 +240,7 @@ class DashboardPage(QWidget):
                 t.setItem(i,j,item)
                 if critical_mode and c=="status_estoque":
                     status=str(val).upper(); item.setText(f"  {status}  ")
-                    colors={"CRÍTICO":("#FFF0F2","#D9284B"),"BAIXO":("#FFF5D9","#B77900"),"SEM ESTOQUE":("#FFE4E8","#B91C3A"),"NORMAL":("#E8FAF5","#087F6A"),"EXCESSO":("#EEF2FF","#4C5BD4")}
+                    colors={"CRÍTICO":("#FFF0F2","#D9284B"),"BAIXO":("#FFF5D9","#B77900"),"SEM ESTOQUE":("#FFE4E8","#B91C3A"),"NEGATIVO":("#7F1D1D","#FFFFFF"),"NORMAL":("#E8FAF5","#087F6A"),"EXCESSO":("#EEF2FF","#4C5BD4")}
                     bg,fg=colors.get(status,("#F1F4F8","#5F6D82")); item.setBackground(QColor(bg)); item.setForeground(QColor(fg)); item.setFont(QFont("Segoe UI",9,QFont.Weight.Bold))
         t.cellDoubleClicked.connect(lambda rr,cc,rs=rows:self.open_row(rs,rr)); self.body.addWidget(t)
     def open_row(self,rows,r):
@@ -260,10 +256,20 @@ class DashboardPage(QWidget):
             ascending=[False, True, False, False],
             kind="stable",
         )
-        mapping={
-            "Valor em estoque": d[d.quantidade_estoque>0].sort_values(
+        # Com o status SEM ESTOQUE ou NEGATIVO, o valor em estoque lista esses
+        # produtos (os mais negativos primeiro) em vez de só estoque positivo.
+        zero_or_negative = self.status.currentText() in ("SEM ESTOQUE", "NEGATIVO")
+        stock_value = (
+            d.sort_values(["quantidade_estoque", "valor_estoque"], ascending=[True, True], kind="stable")
+            if zero_or_negative else
+            d[d.quantidade_estoque>0].sort_values(
                 ["valor_estoque", "quantidade_estoque"], ascending=[False, False], kind="stable"
-            ),
+            )
+        )
+        if zero_or_negative and name == "Valor em estoque":
+            name = f"Valor em estoque • {'Negativos' if self.status.currentText() == 'NEGATIVO' else 'Sem estoque'}"
+        mapping={
+            name if zero_or_negative else "Valor em estoque": stock_value,
             "Unidades vendidas": d[d.quantidade_vendida>0].sort_values(
                 ["quantidade_vendida", "valor_vendido"], ascending=[False, False], kind="stable"
             ),
@@ -279,15 +285,25 @@ class DashboardPage(QWidget):
         dlg=QDialog(self); dlg.setWindowTitle(title); dlg.resize(1180,700); l=QVBoxLayout(dlg); l.setContentsMargins(12,8,12,12); install_mac_window_chrome(dlg,l)
         head=QLabel(f"{title} • {br_number(len(d),0)} registros")
         head.setStyleSheet("font-size:18px;font-weight:900;color:#12213D;padding:4px;"); l.addWidget(head)
-        t=QTableWidget(len(d),8); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setHorizontalHeaderLabels(["Código","Produto","Grupo","Subclasse","Loja","Estoque","Vendas","Valor estoque"]); t.setSortingEnabled(False); rows=list(d.iterrows())
+        hint=QLabel("Clique em um produto para abrir o card com todos os detalhes." if len(d) else "Nenhum produto com os filtros atuais.")
+        hint.setStyleSheet("color:#7A879D;font-size:11px;padding:0 4px 4px 4px;"); l.addWidget(hint)
+        headers=["Código","Produto","Grupo","Subclasse","Loja","Estoque","Vendas","Preço venda","Faturamento","Valor estoque","Status"]
+        status_colors={"NEGATIVO":("#7F1D1D","#FFFFFF"),"SEM ESTOQUE":("#FFE4E8","#B91C3A"),"CRÍTICO":("#FFF0F2","#D9284B"),"BAIXO":("#FFF5D9","#B77900"),"NORMAL":("#E8FAF5","#087F6A"),"EXCESSO":("#EEF2FF","#4C5BD4")}
+        t=QTableWidget(len(d),len(headers)); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setHorizontalHeaderLabels(headers); t.setSortingEnabled(False)
+        t.setSelectionBehavior(QTableWidget.SelectRows); t.verticalHeader().setVisible(False); t.setCursor(Qt.CursorShape.PointingHandCursor); rows=list(d.iterrows())
         for i,(_,r) in enumerate(rows):
-            vals=[r.codigo_barras,r.descricao,r.grupo,r.subclasse,r.loja,r.quantidade_estoque,r.quantidade_vendida,r.valor_estoque]
+            vals=[r.codigo_barras,r.descricao,r.grupo,r.subclasse,r.loja,r.quantidade_estoque,r.quantidade_vendida,r.preco_venda,r.valor_vendido,r.valor_estoque,r.status_estoque]
             for j,v in enumerate(vals):
-                if j==7: txt=brl(v)
+                if j in (7,8,9): txt=brl(v)
                 elif isinstance(v,(float,int)): txt=br_number(v,0)
                 else: txt=str(v)
-                t.setItem(i,j,QTableWidgetItem(txt))
-        t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.horizontalHeader().setStretchLastSection(True); t.setAlternatingRowColors(True); t.cellDoubleClicked.connect(lambda rr,cc:self.open_row_dict(rows[rr][1].to_dict())); l.addWidget(t); dlg.exec()
+                item=QTableWidgetItem(txt)
+                if j==5 and r.quantidade_estoque<0: item.setForeground(QColor("#B91C3A")); item.setFont(QFont("Segoe UI",9,QFont.Weight.Bold))
+                if j==10:
+                    bg,fg=status_colors.get(str(v).upper(),("#F1F4F8","#5F6D82")); item.setBackground(QColor(bg)); item.setForeground(QColor(fg)); item.setFont(QFont("Segoe UI",9,QFont.Weight.Bold))
+                t.setItem(i,j,item)
+        t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.horizontalHeader().setSectionResizeMode(1,QHeaderView.Stretch); t.setAlternatingRowColors(True)
+        t.cellClicked.connect(lambda rr,cc:self.open_row_dict(rows[rr][1].to_dict())); l.addWidget(t); dlg.exec()
     def export_pdf(self):
         p=get_save_file(self,"Exportar PDF","MixModaInsights.pdf","PDF (*.pdf)","pdf")
         if p: export_dashboard_pdf(p,self.current_df(),self.period,self.store.currentText(),self.audit); show_message(self, "information", "PDF","Dashboard exportado com sucesso.")

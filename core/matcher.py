@@ -248,7 +248,8 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
 
     def status(r):
         q, v = r.quantidade_estoque, r.quantidade_vendida
-        if q <= 0 and v > 0: return "SEM ESTOQUE"
+        if q < 0: return "NEGATIVO"          # venda sem entrada no sistema
+        if q == 0: return "SEM ESTOQUE"
         if q <= config.estoque_critico: return "CRÍTICO"
         if q <= config.estoque_baixo: return "BAIXO"
         if v <= 0: return "SEM VENDA"

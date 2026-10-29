@@ -85,3 +85,16 @@ def test_old_sales_layout_with_three_columns_still_works():
     stock = stock_frame([("7896717230006", "CHINELO ADULTO FEM DE 25", 2, 12.5, 0)])
     row = analyze(stock, sales).loc["CHINELO ADULTO FEM DE 25"]
     assert (row.preco_compra, row.preco_venda, row.valor_vendido) == pytest.approx((12.5, 25.0, 100.0))
+
+
+def test_stock_status_zero_and_negative():
+    sales = sales_frame([("7896717230006", "CHINELO ADULTO FEM DE 25", 3, 12.5, 24.99, 74.97)])
+    stock = stock_frame([
+        ("7896717230006", "CHINELO ADULTO FEM DE 25", -2, 12.5, 24.99),
+        ("7890000000001", "ZERADO SEM VENDA", 0, 10.0, 0),
+        ("7890000000002", "COM ESTOQUE", 1, 10.0, 0),
+    ])
+    frame = analyze(stock, sales)
+    assert frame.loc["CHINELO ADULTO FEM DE 25"].status_estoque == "NEGATIVO"
+    assert frame.loc["ZERADO SEM VENDA"].status_estoque == "SEM ESTOQUE"
+    assert frame.loc["COM ESTOQUE"].status_estoque == "CRÍTICO"

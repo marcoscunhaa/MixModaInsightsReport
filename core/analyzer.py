@@ -1,7 +1,5 @@
-def filter_analysis(df,loja="Todas",grupo="Todos",subclasse="Todas",busca="",status="Todos",somente_zerados=False):
+def filter_analysis(df,loja="Todas",grupo="Todos",subclasse="Todas",busca="",status="Todos"):
     out=df
-    # Estoque zerado ou negativo (venda sem entrada no sistema da loja).
-    if somente_zerados:out=out[out.quantidade_estoque<=0]
     if loja!="Todas":out=out[out.loja==loja]
     if grupo!="Todos":out=out[out.grupo==grupo]
     if subclasse!="Todas":out=out[out.subclasse==subclasse]
@@ -47,8 +45,8 @@ def rupture(df,n=None):
 
 def critical(df,n=None):
     """Rank replenishment attention by severity, coverage risk, and demand."""
-    x = df[df.status_estoque.isin(["SEM ESTOQUE", "CRÍTICO", "BAIXO"])].copy()
-    status_priority = {"SEM ESTOQUE": 0, "CRÍTICO": 1, "BAIXO": 2}
+    x = df[df.status_estoque.isin(["NEGATIVO", "SEM ESTOQUE", "CRÍTICO", "BAIXO"])].copy()
+    status_priority = {"NEGATIVO": 0, "SEM ESTOQUE": 0, "CRÍTICO": 1, "BAIXO": 2}
     x["_prioridade_status"] = x.status_estoque.map(status_priority)
     x = x.sort_values(
         ["_prioridade_status", "risco_ruptura", "cobertura", "quantidade_vendida", "valor_vendido"],
