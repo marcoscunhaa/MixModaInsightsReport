@@ -1,5 +1,5 @@
 from utils.formatting import brl, br_number
-from PySide6.QtWidgets import QDialog,QVBoxLayout,QGridLayout,QLabel,QPushButton,QFrame,QHBoxLayout,QWidget
+from PySide6.QtWidgets import QApplication,QDialog,QVBoxLayout,QGridLayout,QLabel,QPushButton,QFrame,QHBoxLayout,QWidget,QScrollArea,QSizePolicy
 from PySide6.QtCore import Qt
 from ui.window_chrome import install_mac_window_chrome
 
@@ -7,8 +7,9 @@ class ProductModal(QDialog):
     def __init__(self,row,parent=None):
         super().__init__(parent)
         self.setWindowTitle("Detalhes do Produto")
-        self.resize(920,720)
-        self.setMinimumSize(860,680)
+        price_tiers=[t for t in (row.get("precos_venda") or []) if isinstance(t,dict)]
+        many_prices=len(price_tiers)>1
+        self._fit_to_screen(760 if many_prices else 720)
         self.setStyleSheet("""
             QDialog{background:#EEF2FF;}
             QLabel{color:#24324A;background:transparent;}
@@ -25,6 +26,8 @@ class ProductModal(QDialog):
             QLabel#insight{background:#F1ECFF;border-left:5px solid #8B5CF6;border-radius:10px;color:#394862;font-size:12px;padding:12px;}
             QPushButton#close{background:#24324A;color:#FFFFFF;border:none;border-radius:11px;padding:11px 26px;font-weight:750;}
             QPushButton#close:hover{background:#3A4B68;}
+            QScrollArea#productScroll{background:transparent;border:none;}
+            QWidget#productViewport{background:transparent;}
         """)
         root=QVBoxLayout(self); root.setContentsMargins(12,8,12,12); root.setSpacing(14); install_mac_window_chrome(self,root)
 
@@ -40,12 +43,12 @@ class ProductModal(QDialog):
         meta=QLabel(f"{row.get('grupo','—')}   •   {row.get('subclasse','—')}   •   {row.get('loja','—')}"); meta.setObjectName("meta"); meta.setWordWrap(True); hl.addWidget(meta)
         root.addWidget(hero)
 
+        # O corpo rola quando a tela é baixa, em vez de espremer os cards.
+        scroll=QScrollArea(); scroll.setObjectName("productScroll"); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); scroll.viewport().setObjectName("productViewport")
         body=QWidget(); body.setObjectName("productBody"); body.setStyleSheet("QWidget#productBody{background:#F3F0FF;border:1px solid #DDD5FA;border-radius:22px;}"); bl=QVBoxLayout(body); bl.setContentsMargins(14,14,14,16); bl.setSpacing(14)
 
         metrics=QGridLayout(); metrics.setHorizontalSpacing(12); metrics.setVerticalSpacing(12)
-        price_tiers=[t for t in (row.get("precos_venda") or []) if isinstance(t,dict)]
-        many_prices=len(price_tiers)>1
-        if many_prices: self.resize(920,820)
         fields=[
             ("ESTOQUE ATUAL",br_number(row.get("quantidade_estoque",0),0),"#7C3AED"),
             ("VENDAS NO PERÍODO",br_number(row.get("quantidade_vendida",0),0),"#E85D8A"),
@@ -60,13 +63,12 @@ class ProductModal(QDialog):
         ]
         for i,(k,v,c) in enumerate(fields):
             box=QFrame(); box.setObjectName("metric"); box.setStyleSheet(f"QFrame#metric{{background:#FFFFFF;border:1px solid #E6EAF2;border-radius:16px;border-top:4px solid {c};}} QFrame#metric:hover{{background:#FCFAFF;border:1px solid #D8CFF0;border-top:4px solid {c};}}")
+            box.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Fixed)  # altura nunca encolhe
             q=QVBoxLayout(box); q.setContentsMargins(14,11,14,12); q.setSpacing(4)
             a=QLabel(k); a.setObjectName("metricLabel"); q.addWidget(a)
             z=QLabel(v); z.setObjectName("metricValue"); q.addWidget(z)
             metrics.addWidget(box,i//3,i%3)
         bl.addLayout(metrics)
-        if many_prices:
-            bl.addWidget(self._price_tiers(price_tiers))
 
         section=QFrame(); section.setObjectName("section"); sl=QVBoxLayout(section); sl.setContentsMargins(16,15,16,16); sl.setSpacing(8)
         st=QLabel("LEITURA DOS INDICADORES"); st.setObjectName("sectionTitle"); sl.addWidget(st)
@@ -75,17 +77,31 @@ class ProductModal(QDialog):
              "Produto possui estoque, mas não apresentou vendas no período." if q>0 and v==0 else
              "Os indicadores não apontam um alerta específico pelas regras configuradas.")
         ins=QLabel(msg); ins.setObjectName("insight"); ins.setWordWrap(True); sl.addWidget(ins)
-        bl.addWidget(section)
+        if many_prices:
+            # Lado a lado para caber sem aumentar a altura do card.
+            details=QHBoxLayout(); details.setSpacing(14)
+            details.addWidget(self._price_tiers(price_tiers),3); details.addWidget(section,2)
+            bl.addLayout(details)
+        else:
+            bl.addWidget(section)
         bl.addStretch(1)
-        root.addWidget(body,1)
+        scroll.setWidget(body)
+        root.addWidget(scroll,1)
 
         bottom=QHBoxLayout(); bottom.addStretch(1); b=QPushButton("Fechar"); b.setObjectName("close"); b.clicked.connect(self.accept); bottom.addWidget(b); root.addLayout(bottom)
+
+    def _fit_to_screen(self,height):
+        screen=self.screen() or QApplication.primaryScreen()
+        area=screen.availableGeometry() if screen else None
+        width=min(920,area.width()-40) if area else 920
+        height=min(height,area.height()-60) if area else height
+        self.resize(width,height); self.setMinimumSize(min(760,width),min(520,height))
 
     def _price_tiers(self,tiers):
         """Vendas do período separadas por preço de venda, com o total no fim."""
         section=QFrame(); section.setObjectName("section"); sl=QVBoxLayout(section); sl.setContentsMargins(16,14,16,14); sl.setSpacing(6)
         st=QLabel("VALORES DE VENDA NO PERÍODO"); st.setObjectName("sectionTitle"); sl.addWidget(st)
-        hint=QLabel("O produto foi vendido por mais de um preço. O faturamento é a soma de cada preço × quantidade.")
+        hint=QLabel("Vendido por mais de um preço: o faturamento soma cada preço × quantidade.")
         hint.setStyleSheet("color:#7A8498;font-size:11px;"); hint.setWordWrap(True); sl.addWidget(hint)
         grid=QGridLayout(); grid.setHorizontalSpacing(18); grid.setVerticalSpacing(6)
         for col,(text,align) in enumerate((("PREÇO",Qt.AlignmentFlag.AlignLeft),("QUANTIDADE",Qt.AlignmentFlag.AlignRight),("FATURAMENTO",Qt.AlignmentFlag.AlignRight))):
