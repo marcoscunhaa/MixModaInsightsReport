@@ -254,7 +254,10 @@ class DashboardPage(QWidget):
         t.cellDoubleClicked.connect(lambda rr,cc,rs=rows:self.open_row(rs,rr)); self.body.addWidget(t)
     def open_row(self,rows,r):
         if 0<=r<len(rows): self.open_row_dict(rows[r][1].to_dict())
-    def open_row_dict(self,row): ProductModal(row,self).exec()
+    def open_row_dict(self,row,parent=None):
+        # A dona do card é a janela onde o clique aconteceu; se for o dashboard
+        # com uma lista aberta por cima, o card abriria atrás da lista.
+        ProductModal(row,parent or self).exec()
     def detail(self,name,d):
         # Toda lista de KPI abre no formato produto × loja.
         view=store_list_view(name,d,self.status.currentText())
@@ -312,7 +315,7 @@ class DashboardPage(QWidget):
             if r>=len(table) or not (3<=c<3+len(stores)): return
             store=stores[c-3]; code=table.iloc[r].codigo_barras
             found=rows[(rows.codigo_barras==code)&(rows.loja==store)]
-            if len(found): self.open_row_dict(found.iloc[0].to_dict())
+            if len(found): self.open_row_dict(found.iloc[0].to_dict(),dlg)
         t.cellClicked.connect(open_cell); l.addWidget(t,1); dlg.exec()
     def show_product_list(self,title,d):
         dlg=QDialog(self); dlg.setWindowTitle(title); dlg.resize(1180,700); l=QVBoxLayout(dlg); l.setContentsMargins(12,8,12,12); install_mac_window_chrome(dlg,l)
@@ -336,7 +339,7 @@ class DashboardPage(QWidget):
                     bg,fg=status_colors.get(str(v).upper(),("#F1F4F8","#5F6D82")); item.setBackground(QColor(bg)); item.setForeground(QColor(fg)); item.setFont(QFont("Segoe UI",9,QFont.Weight.Bold))
                 t.setItem(i,j,item)
         t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.horizontalHeader().setSectionResizeMode(1,QHeaderView.Stretch); t.setAlternatingRowColors(True)
-        t.cellClicked.connect(lambda rr,cc:self.open_row_dict(rows[rr][1].to_dict())); l.addWidget(t); dlg.exec()
+        t.cellClicked.connect(lambda rr,cc:self.open_row_dict(rows[rr][1].to_dict(),dlg)); l.addWidget(t); dlg.exec()
     def export_pdf(self):
         p=get_save_file(self,"Exportar PDF","MixModaInsights.pdf","PDF (*.pdf)","pdf")
         if not p: return

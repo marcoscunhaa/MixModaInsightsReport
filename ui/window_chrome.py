@@ -1,5 +1,5 @@
 """Custom macOS-inspired title bar for application windows."""
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QApplication, QBoxLayout, QGridLayout, QDialog
 
 
@@ -84,6 +84,25 @@ class _MacTitleBar(QFrame):
         super().mouseDoubleClickEvent(event)
 
 
+class _BringToFrontOnShow(QObject):
+    """Janelas sem moldura nem sempre vêm para a frente no Linux; ao abrir, sobe e pega o foco."""
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.Show:
+            # Depois do evento, para o gerenciador de janelas já ter mapeado a janela.
+            QTimer.singleShot(0, lambda w=watched: (w.raise_(), w.activateWindow()))
+        return False
+
+
+def _owner_window(window):
+    """Janela visível mais à frente para ser dona de um diálogo sem dono definido."""
+    parent = window.parentWidget()
+    if parent is not None:
+        return parent
+    active = QApplication.activeModalWidget() or QApplication.activeWindow()
+    return active if active is not window else None
+
+
 def install_mac_window_chrome(window, content_layout):
     """Replace native title-bar controls with draggable red/yellow/green controls."""
     if getattr(window, "_mac_title_bar", None):
@@ -98,7 +117,14 @@ def install_mac_window_chrome(window, content_layout):
         minimum = window.minimumSize()
         window.setMinimumSize(min(minimum.width(), width), min(minimum.height(), height))
 
+    if isinstance(window, QDialog) and window.parentWidget() is None:
+        # Diálogo sem dono (ex.: mensagem aberta com parent=None) fica sobre a janela ativa.
+        owner = _owner_window(window)
+        if owner is not None:
+            window.setParent(owner, window.windowFlags())
     window.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+    window._bring_to_front = _BringToFrontOnShow(window)
+    window.installEventFilter(window._bring_to_front)
     title_bar = _MacTitleBar(window)
     if isinstance(content_layout, QBoxLayout):
         content_layout.insertWidget(0, title_bar)
