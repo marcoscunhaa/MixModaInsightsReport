@@ -52,3 +52,21 @@ def test_single_product_labels():
     assert (labels["Em ruptura"], labels["Sem vendas"]) == ("ESTOQUE NEGATIVO", "SEM VENDAS")
     assert single_product_labels(one(8, 3, "NORMAL"))["Em ruptura"] == "COM ESTOQUE"
     assert single_product_labels(pd.concat([one(1, 1, "X"), one(2, 2, "Y")])) == {}
+
+
+def test_stock_by_store_pivots_units_per_store():
+    from core.analyzer import stock_by_store
+    df = pd.DataFrame({
+        "codigo_barras": ["1", "1", "1", "2", "2"],
+        "descricao": ["CAMISA BRANCA G", "CAMISA BRANCA G", "CAMISA BCA G", "CAMISA BRANCA M", "CAMISA BRANCA M"],
+        "grupo": ["PRESIDIO"] * 5, "subclasse": ["CAMISA BRANCA"] * 5,
+        "loja": ["Sapiranga", "Pedras", "Palmeiras", "Sapiranga", "Pedras"],
+        "quantidade_estoque": [5, 0, 3, -1, 4],
+    })
+    table, stores, totals = stock_by_store(df)
+    assert stores == ["Palmeiras", "Pedras", "Sapiranga"]
+    first = table.iloc[0]
+    assert (first.descricao, first.Palmeiras, first.Pedras, first.Sapiranga, first.total) == ("CAMISA BRANCA G", 3, 0, 5, 8)
+    second = table.iloc[1]
+    assert pd.isna(second.Palmeiras) and second.total == 3          # não existe em Palmeiras ≠ zero
+    assert totals == {"Palmeiras": 3, "Pedras": 4, "Sapiranga": 4}

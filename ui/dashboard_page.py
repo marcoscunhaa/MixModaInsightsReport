@@ -8,7 +8,7 @@ from ui.widgets import Card, KpiCard, RankCard, StatusFilterBar
 from core.kpi_view import STATUS_OPTIONS, kpi_cards, status_counts
 from ui.product_modal import ProductModal
 from charts.dashboard_charts import make_chart
-from core.analyzer import filter_analysis,kpis,single_product_labels,top_sold,stagnant,critical,rupture
+from core.analyzer import filter_analysis,kpis,single_product_labels,stock_by_store,top_sold,stagnant,critical,rupture
 from core.insights import generate_insights
 from utils.normalization import normalize_barcode, normalize_text
 from exports.pdf_export import export_dashboard_pdf
@@ -256,6 +256,8 @@ class DashboardPage(QWidget):
         if 0<=r<len(rows): self.open_row_dict(rows[r][1].to_dict())
     def open_row_dict(self,row): ProductModal(row,self).exec()
     def detail(self,name,d):
+        if name=="Unidades em estoque":
+            self.show_store_stock(d); return
         # KPIs financeiros/quantitativos abrem o mesmo conjunto de dados que compõe o número.
         sem_vendas = d[d.produto_sem_venda].sort_values(
             ["valor_estoque", "quantidade_estoque"], ascending=[False, False], kind="stable"
@@ -290,6 +292,55 @@ class DashboardPage(QWidget):
             "Sem vendas": sem_vendas,
         }
         if name in mapping:self.show_product_list(name,mapping[name])
+    def show_store_stock(self,d):
+        """Quantas unidades de cada produto cada loja tem (uma coluna por loja)."""
+        table,stores,totals=stock_by_store(d)
+        dlg=QDialog(self); dlg.setWindowTitle("Estoque por loja"); dlg.resize(1180,700)
+        dlg.setStyleSheet("QDialog{background:#F4F7FC;} QLabel{background:transparent;}")
+        l=QVBoxLayout(dlg); l.setContentsMargins(12,8,12,12); l.setSpacing(10); install_mac_window_chrome(dlg,l)
+        filters=[x for x in (self.group.currentText(),self.sub.currentText()) if x not in ("Todos os grupos","Todas as subclasses")]
+        head=QLabel(f"📦  Estoque por loja{' • ' + ' › '.join(filters) if filters else ''} • {br_number(len(table),0)} produtos")
+        head.setStyleSheet("font-size:18px;font-weight:900;color:#12213D;padding:4px;"); l.addWidget(head)
+        chips=QHBoxLayout(); chips.setSpacing(8)
+        for store in stores:
+            value=totals[store]
+            chip=QLabel(f"🏬  {store}   {br_number(value,0)} un.")
+            chip.setStyleSheet("background:#FFFFFF;border:1px solid #DCE6F3;border-radius:12px;padding:7px 12px;"
+                               f"color:{'#B91C3A' if value<0 else '#17326F'};font-size:12px;font-weight:900;")
+            chips.addWidget(chip)
+        chips.addStretch(); l.addLayout(chips)
+        hint=QLabel("Clique na quantidade de uma loja para abrir o card do produto naquela loja.  "
+                    "“—” = o produto não está na planilha de estoque da loja.")
+        hint.setStyleSheet("color:#7A879D;font-size:11px;padding:0 4px;"); l.addWidget(hint)
+        headers=["Produto","Código","Subclasse",*stores,"Total"]
+        t=QTableWidget(len(table)+(1 if len(table) else 0),len(headers)); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        t.setHorizontalHeaderLabels(headers); t.verticalHeader().setVisible(False); t.setAlternatingRowColors(True)
+        bold=QFont("Segoe UI",9,QFont.Weight.Bold)
+        def qty_item(value):
+            if value!=value:  # NaN: produto ausente na planilha da loja
+                item=QTableWidgetItem("—"); item.setForeground(QColor("#A3AEC0"))
+            else:
+                item=QTableWidgetItem(br_number(value,0)); item.setFont(bold)
+                if value<0: item.setForeground(QColor("#B91C3A")); item.setBackground(QColor("#FFF0F2"))
+                elif value==0: item.setForeground(QColor("#B77900")); item.setBackground(QColor("#FFF8E6"))
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter); return item
+        for i,row in table.iterrows():
+            for j,v in enumerate((row.descricao,row.codigo_barras,row.subclasse)): t.setItem(i,j,QTableWidgetItem(str(v)))
+            for k,store in enumerate(stores): t.setItem(i,3+k,qty_item(row[store]))
+            total=qty_item(row.total); total.setBackground(QColor("#EEF3FF")); t.setItem(i,len(headers)-1,total)
+        if len(table):
+            last=len(table); label=QTableWidgetItem("TOTAL POR LOJA"); label.setFont(bold); t.setItem(last,0,label)
+            for k,store in enumerate(stores): t.setItem(last,3+k,qty_item(totals[store]))
+            grand=qty_item(sum(totals.values())); grand.setBackground(QColor("#DCE6FF")); t.setItem(last,len(headers)-1,grand)
+            for j in range(len(headers)):
+                if t.item(last,j): t.item(last,j).setBackground(QColor("#DCE6FF"))
+        header=t.horizontalHeader(); header.setSectionResizeMode(QHeaderView.ResizeToContents); header.setSectionResizeMode(0,QHeaderView.Stretch)
+        def open_cell(r,c):
+            if r>=len(table) or not (3<=c<3+len(stores)): return
+            store=stores[c-3]; code=table.iloc[r].codigo_barras
+            rows=d[(d.codigo_barras==code)&(d.loja==store)]
+            if len(rows): self.open_row_dict(rows.iloc[0].to_dict())
+        t.cellClicked.connect(open_cell); l.addWidget(t,1); dlg.exec()
     def show_product_list(self,title,d):
         dlg=QDialog(self); dlg.setWindowTitle(title); dlg.resize(1180,700); l=QVBoxLayout(dlg); l.setContentsMargins(12,8,12,12); install_mac_window_chrome(dlg,l)
         head=QLabel(f"{title} • {br_number(len(d),0)} registros")

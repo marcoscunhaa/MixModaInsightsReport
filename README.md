@@ -65,6 +65,10 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 - Cada KPI mostra emoji, nome, valor e uma frase que explica o número (ex.: "59% dos produtos não venderam"). Em ruptura, Estoque crítico e Sem vendas ficam vermelhos/âmbar quando há casos e verdes com ✓ quando não há. Cards com "Ver lista ›" abrem os produtos.
 - O status do estoque é escolhido em pílulas com a contagem de cada status (Negativo, Sem estoque, Crítico, Baixo, Sem venda, Excesso, Normal); passar o mouse mostra a regra de cada um. As contagens seguem os demais filtros.
 
+## Dashboard: estoque por loja
+
+- Em análises com várias lojas, o KPI **Unidades em estoque** mostra a divisão por loja (ex.: "Pedras 33 · Sapiranga 43"). Ao clicar, abre a lista **Estoque por loja**: uma linha por produto, uma coluna por loja, o total do produto e o total de cada loja. Zerado fica em âmbar, negativo em vermelho e "—" indica que o produto não está na planilha daquela loja. Clicar numa quantidade abre o card do produto naquela loja.
+
 ## Dashboard: produto isolado
 
 - Quando os filtros deixam um único produto, os KPIs de contagem mostram texto em vez de 0 ou 1: **Em ruptura** → SEM ESTOQUE / ESTOQUE NEGATIVO / COM ESTOQUE; **Sem vendas** → SEM VENDAS / COM VENDAS; **Críticos** → o status do produto; **Produtos ativos** → 1 PRODUTO.

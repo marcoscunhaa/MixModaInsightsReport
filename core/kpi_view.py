@@ -41,6 +41,14 @@ def kpi_cards(d):
     total = len(d)
     in_stock = int((d.quantidade_estoque > 0).sum()) if total else 0
     sold = int((d.quantidade_vendida > 0).sum()) if total else 0
+    stores = d.loja.dropna().unique() if total and "loja" in d else []
+    if len(stores) > 1:
+        units_hint = " · ".join(
+            f"{store} {br_number(d.loc[d.loja == store, 'quantidade_estoque'].sum(), 0)}"
+            for store in sorted(stores, key=str)
+        )
+    else:
+        units_hint = f"em {br_number(in_stock, 0)} produtos com estoque"
     unsold = int(kp["Produtos sem vendas"])
     rupture = int(kp["Produtos em ruptura"])
     critical = int(kp["Produtos críticos"])
@@ -58,7 +66,7 @@ def kpi_cards(d):
         card("Margem potencial", "Margem potencial", "📈", "#0F9D8A", brl(kp["Margem potencial"]),
              "lucro se o estoque atual for vendido"),
         card("Unidades em estoque", "Unidades em estoque", "📦", "#16B8C8", br_number(kp["Unidades em estoque"], 0),
-             f"em {br_number(in_stock, 0)} produtos com estoque"),
+             units_hint, clickable=True),
         card("Unidades vendidas", "Unidades vendidas", "🛒", "#16B8C8", br_number(kp["Unidades vendidas"], 0),
              f"{br_number(sold, 0)} produtos venderam no período", clickable=True),
         # Linha 2: saúde do estoque

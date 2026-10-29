@@ -1,3 +1,5 @@
+import pandas as pd
+
 def filter_analysis(df,loja="Todas",grupo="Todos",subclasse="Todas",busca="",status="Todos"):
     out=df
     if loja!="Todas":out=out[out.loja==loja]
@@ -20,6 +22,29 @@ def kpis(df):
     "Produtos sem vendas":int(df.produto_sem_venda.sum()),"Produtos em ruptura":int(df.ruptura.sum()),
     "Produtos críticos":int((df.status_estoque=="CRÍTICO").sum()),"Giro médio":df.giro.mean() if len(df) else 0,
     "Margem potencial":(df.margem_unitaria*df.quantidade_estoque).sum(),"Faturamento estimado":df.valor_vendido.sum()}
+
+def stock_by_store(df):
+    """Unidades em estoque de cada produto por loja (uma coluna por loja).
+
+    O produto é identificado pelo código de barras, porque a descrição pode
+    variar entre lojas; o nome exibido é o mais frequente. Loja onde o produto
+    não aparece na planilha fica vazia (NaN), diferente de estoque zero.
+    Retorna (tabela, lojas, totais por loja).
+    """
+    if df.empty:
+        return df.iloc[0:0], [], {}
+    stores = sorted(df.loja.dropna().unique(), key=str)
+    names = (df.groupby("codigo_barras").descricao
+             .agg(lambda s: s.value_counts().index[0]).rename("descricao"))
+    groups = df.groupby("codigo_barras")[["grupo", "subclasse"]].first()
+    pivot = df.pivot_table(index="codigo_barras", columns="loja", values="quantidade_estoque",
+                           aggfunc="sum").reindex(columns=stores)
+    table = pd.concat([names, groups, pivot], axis=1).reset_index()
+    table["total"] = table[stores].sum(axis=1, min_count=1).fillna(0)
+    table = table.sort_values(["total", "descricao"], ascending=[False, True], kind="stable").reset_index(drop=True)
+    totals = {store: float(df.loc[df.loja == store, "quantidade_estoque"].sum()) for store in stores}
+    return table, stores, totals
+
 
 def single_product_labels(df):
     """Com um único produto na análise, KPIs de contagem viram texto legível.
