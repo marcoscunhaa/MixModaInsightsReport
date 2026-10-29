@@ -8,7 +8,7 @@ python -m pip install -r requirements.txt
 if errorlevel 1 (
     echo.
     echo ERRO ao instalar dependencias.
-    pause
+    if not defined CI pause
     exit /b 1
 )
 rem xlrd/openpyxl/lxml sao carregados pelo pandas so na hora de ler a planilha;
@@ -19,7 +19,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed --collect-all rap
 if errorlevel 1 (
     echo.
     echo ERRO ao gerar o executavel.
-    pause
+    if not defined CI pause
     exit /b 1
 )
 echo.
@@ -27,4 +27,4 @@ echo ==========================================
 echo EXECUTAVEL GERADO EM:
 echo dist\MixModaInsights.exe
 echo ==========================================
-pause
+if not defined CI pause

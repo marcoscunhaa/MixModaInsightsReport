@@ -25,7 +25,9 @@ As extrações trazem números com formato de hora (`h:mm AM/PM`); a leitura con
 Testes do catálogo: `python -m pip install pytest` e `python -m pytest tests`.
 
 ## EXE
-Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
+No Windows, execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
+
+Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflow `.github/workflows/build-windows.yml`). Ele roda os testes, executa o `build.bat` num servidor Windows e deixa o arquivo em **Actions → execução → Artifacts → MixModaInsights-exe** (por 30 dias). Ao criar uma tag `v*` (ex.: `v1.0`), o `.exe` também é publicado em **Releases**. Dá para disparar à mão em **Actions → Build Windows .exe → Run workflow**.
 
 ## Regras comerciais e classificação atualizadas
 - Produtos vendidos no período usam os preços da planilha de vendas: **preço de compra = coluna D**, **preço de venda = coluna F** e **faturamento = soma da coluna G**. Quando o mesmo produto aparece em várias linhas com preços diferentes, o faturamento é somado e o preço vira a média ponderada pela quantidade.
