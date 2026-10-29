@@ -105,9 +105,26 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
         _faturamento=("_faturamento", "sum"),
         _custo_vendas=("_custo_vendas", "sum"),
     ).rename(columns={"_descricao_match": "descricao_norm"})
+    # Cada preço de venda (coluna F) com a quantidade e o faturamento daquele
+    # preço, do maior para o menor, para o card mostrar de onde vem o total.
+    priced = vendas[(vendas.quantidade_vendida > 0) & (vendas.preco_venda > 0)].copy()
+    priced["preco"] = priced.preco_venda.round(2)
+    tiers = priced.groupby(["codigo_barras", "_descricao_match", "preco"], as_index=False).agg(
+        quantidade=("quantidade_vendida", "sum"), faturamento=("_faturamento", "sum"),
+    ).sort_values("preco", ascending=False, kind="stable")
+    price_lists = {
+        key: [
+            {"preco_venda": float(r.preco), "quantidade": float(r.quantidade), "faturamento": float(r.faturamento)}
+            for r in group.itertuples(index=False)
+        ]
+        for key, group in tiers.groupby(["codigo_barras", "_descricao_match"], sort=False)
+    }
+    vs["precos_venda"] = [price_lists.get(key, []) for key in zip(vs.codigo_barras, vs.descricao_norm)]
+
     merged = estoque.merge(vs, on=["codigo_barras", "descricao_norm"], how="left")
     for column in ("quantidade_vendida", "_faturamento", "_custo_vendas"):
         merged[column] = merged[column].fillna(0)
+    merged["precos_venda"] = [v if isinstance(v, list) else [] for v in merged["precos_venda"]]
     merged["loja"] = loja
 
     # Classificação específica da loja tem prioridade quando existir.

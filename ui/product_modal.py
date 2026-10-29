@@ -43,13 +43,16 @@ class ProductModal(QDialog):
         body=QWidget(); body.setObjectName("productBody"); body.setStyleSheet("QWidget#productBody{background:#F3F0FF;border:1px solid #DDD5FA;border-radius:22px;}"); bl=QVBoxLayout(body); bl.setContentsMargins(14,14,14,16); bl.setSpacing(14)
 
         metrics=QGridLayout(); metrics.setHorizontalSpacing(12); metrics.setVerticalSpacing(12)
+        price_tiers=[t for t in (row.get("precos_venda") or []) if isinstance(t,dict)]
+        many_prices=len(price_tiers)>1
+        if many_prices: self.resize(920,820)
         fields=[
             ("ESTOQUE ATUAL",br_number(row.get("quantidade_estoque",0),0),"#7C3AED"),
             ("VENDAS NO PERÍODO",br_number(row.get("quantidade_vendida",0),0),"#E85D8A"),
             ("FATURAMENTO",brl(row.get('valor_vendido',0)),"#E85D8A"),
             ("VALOR EM ESTOQUE",brl(row.get('valor_estoque',0)),"#F3B63F"),
             ("PREÇO DE COMPRA",brl(row.get('preco_compra',0)),"#36A269"),
-            ("PREÇO DE VENDA",brl(row.get('preco_venda',0)),"#2C9FD6"),
+            ("PREÇO DE VENDA MÉDIO" if many_prices else "PREÇO DE VENDA",brl(row.get('preco_venda',0)),"#2C9FD6"),
             ("MARGEM UNITÁRIA",brl(row.get('margem_unitaria',0)),"#36A269"),
             ("MARGEM %",f"{row.get('margem_percentual',0):.1f}%","#7C3AED"),
             ("GIRO DO PERÍODO",f"{row.get('giro',0):.1f}%","#2C9FD6"),
@@ -62,6 +65,8 @@ class ProductModal(QDialog):
             z=QLabel(v); z.setObjectName("metricValue"); q.addWidget(z)
             metrics.addWidget(box,i//3,i%3)
         bl.addLayout(metrics)
+        if many_prices:
+            bl.addWidget(self._price_tiers(price_tiers))
 
         section=QFrame(); section.setObjectName("section"); sl=QVBoxLayout(section); sl.setContentsMargins(16,15,16,16); sl.setSpacing(8)
         st=QLabel("LEITURA DOS INDICADORES"); st.setObjectName("sectionTitle"); sl.addWidget(st)
@@ -76,3 +81,24 @@ class ProductModal(QDialog):
 
         bottom=QHBoxLayout(); bottom.addStretch(1); b=QPushButton("Fechar"); b.setObjectName("close"); b.clicked.connect(self.accept); bottom.addWidget(b); root.addLayout(bottom)
 
+    def _price_tiers(self,tiers):
+        """Vendas do período separadas por preço de venda, com o total no fim."""
+        section=QFrame(); section.setObjectName("section"); sl=QVBoxLayout(section); sl.setContentsMargins(16,14,16,14); sl.setSpacing(6)
+        st=QLabel("VALORES DE VENDA NO PERÍODO"); st.setObjectName("sectionTitle"); sl.addWidget(st)
+        hint=QLabel("O produto foi vendido por mais de um preço. O faturamento é a soma de cada preço × quantidade.")
+        hint.setStyleSheet("color:#7A8498;font-size:11px;"); hint.setWordWrap(True); sl.addWidget(hint)
+        grid=QGridLayout(); grid.setHorizontalSpacing(18); grid.setVerticalSpacing(6)
+        for col,(text,align) in enumerate((("PREÇO",Qt.AlignmentFlag.AlignLeft),("QUANTIDADE",Qt.AlignmentFlag.AlignRight),("FATURAMENTO",Qt.AlignmentFlag.AlignRight))):
+            h=QLabel(text); h.setObjectName("metricLabel"); grid.addWidget(h,0,col,align)
+        total_qty=0; total_revenue=0
+        for i,t in enumerate(tiers,1):
+            qty=float(t.get("quantidade",0)); revenue=float(t.get("faturamento",0)); total_qty+=qty; total_revenue+=revenue
+            price=QLabel(brl(t.get("preco_venda",0))); price.setStyleSheet("color:#2C9FD6;font-size:14px;font-weight:850;")
+            amount=QLabel(f"{br_number(qty,0)} un."); amount.setStyleSheet("color:#24324A;font-size:13px;font-weight:700;")
+            value=QLabel(brl(revenue)); value.setStyleSheet("color:#24324A;font-size:13px;font-weight:800;")
+            grid.addWidget(price,i,0,Qt.AlignmentFlag.AlignLeft); grid.addWidget(amount,i,1,Qt.AlignmentFlag.AlignRight); grid.addWidget(value,i,2,Qt.AlignmentFlag.AlignRight)
+        line=QFrame(); line.setFixedHeight(1); line.setStyleSheet("background:#DCD6F7;"); grid.addWidget(line,len(tiers)+1,0,1,3)
+        for col,(text,align) in enumerate((("TOTAL",Qt.AlignmentFlag.AlignLeft),(f"{br_number(total_qty,0)} un.",Qt.AlignmentFlag.AlignRight),(brl(total_revenue),Qt.AlignmentFlag.AlignRight))):
+            x=QLabel(text); x.setStyleSheet("color:#E85D8A;font-size:13px;font-weight:900;"); grid.addWidget(x,len(tiers)+2,col,align)
+        grid.setColumnStretch(0,1); sl.addLayout(grid)
+        return section

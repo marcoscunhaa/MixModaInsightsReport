@@ -62,12 +62,19 @@ def test_prices_and_revenue_come_from_sales_sheet():
     assert squishy.valor_estoque == pytest.approx(5 * 14.0)                 # custo do estoque
     assert squishy.margem_unitaria == pytest.approx(squishy.preco_venda - 15.0)
 
+    assert squishy.precos_venda == [
+        {"preco_venda": 29.99, "quantidade": 12.0, "faturamento": pytest.approx(359.88)},
+        {"preco_venda": 24.99, "quantidade": 34.0, "faturamento": pytest.approx(849.66)},
+    ]
+
     chinelo = frame.loc["CHINELO ADULTO FEM DE 25"]
+    assert len(chinelo.precos_venda) == 1
     assert (chinelo.preco_compra, chinelo.preco_venda, chinelo.valor_vendido) == pytest.approx((12.5, 24.99, 324.87))
 
     unsold = frame.loc["PRODUTO SEM VENDA"]
     assert (unsold.quantidade_vendida, unsold.valor_vendido) == (0, 0)
     assert (unsold.preco_compra, unsold.preco_venda) == pytest.approx((10.0, 20.0))  # regra 2x
+    assert unsold.precos_venda == []
 
 
 def test_old_sales_layout_with_three_columns_still_works():
