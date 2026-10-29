@@ -10,6 +10,9 @@ Aplicativo desktop em Python/PySide6 para cruzar estoque e vendas da Mix Moda.
 - As planilhas originais nunca são alteradas. O catálogo JSON só muda pela tela **Explorar estoque**.
 
 ## Colunas
+
+Ao gerar a análise, o app confere a coluna C: no estoque ela é a unidade (ex.: UN) e nas vendas é a quantidade. Se os arquivos estiverem trocados, a análise é interrompida com um aviso.
+
 Estoque: A código, B descrição, D quantidade, E compra, F venda (preço atual).
 Vendas: A código, B descrição, C quantidade vendida, D preço de compra, E custo total, F preço de venda, G faturamento (C × F), H lucro.
 
@@ -38,6 +41,7 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 - Pesquise produtos pelo nome ou código de barras; a lista sugere resultados aproximados do catálogo oficial.
 - Cada regra define um limite mínimo de unidades (o alerta aparece nesse número ou abaixo). As lojas são marcadas em caixas de seleção: **Todas as lojas** ou uma ou mais lojas específicas (cada loja marcada vira uma regra). Ao editar uma regra e desmarcar a loja dela, a regra antiga é removida.
 - As regras ficam salvas em `data/stock_alert_rules.json`; a última análise fica em `data/stock_alert_snapshot.json`.
+- O produto da regra é encontrado pelo código de barras; a descrição só desempata quando o mesmo código aparece com mais de uma descrição na loja. Assim a regra continua valendo se a planilha da loja usa outra descrição que o catálogo.
 - Na dashboard, o ícone de alertas destaca quantos produtos atingiram as regras e abre a relação com código, loja, quantidade e preço de venda.
 
 ## Explorar estoque (cadastro, edição e exclusão)

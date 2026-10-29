@@ -168,15 +168,15 @@ class StockAlertStore:
         snapshot = self.load_snapshot() if rows is None else {"rows": rows}
         stock_rows = snapshot.get("rows", [])
 
+        # Regra de loja específica tem prioridade sobre a de "todas as lojas".
         specific = {
-            (
-                normalize_barcode(rule.get("codigo_barras")),
-                normalize_text(rule.get("descricao")),
-                normalize_text(rule.get("loja")),
-            )
+            (normalize_barcode(rule.get("codigo_barras")), normalize_text(rule.get("loja")))
             for rule in rules
             if str(rule.get("loja", "*")) != "*"
         }
+        rows_by_code = {}
+        for stock in stock_rows:
+            rows_by_code.setdefault(normalize_barcode(stock.get("codigo_barras")), []).append(stock)
         alerts = []
         for rule in rules:
             rule_code = normalize_barcode(rule.get("codigo_barras"))
@@ -187,20 +187,24 @@ class StockAlertStore:
             except (TypeError, ValueError):
                 continue
 
-            for stock in stock_rows:
-                if (
-                    normalize_barcode(stock.get("codigo_barras")) != rule_code
-                    or normalize_text(stock.get("descricao")) != rule_description
-                ):
-                    continue
+            # O produto é encontrado pelo código. A descrição só desempata quando,
+            # na mesma loja, o código aparece com mais de uma descrição; assim a
+            # regra continua valendo se a loja usa outra descrição que o catálogo.
+            candidates = {}
+            for stock in rows_by_code.get(rule_code, []):
+                candidates.setdefault(normalize_text(stock.get("loja", "")), []).append(stock)
+            matched = []
+            for store_rows in candidates.values():
+                same_description = [
+                    row for row in store_rows if normalize_text(row.get("descricao")) == rule_description
+                ]
+                matched.extend(same_description or store_rows)
+
+            for stock in matched:
                 stock_store = str(stock.get("loja", ""))
                 if rule_store != "*" and normalize_text(stock_store) != normalize_text(rule_store):
                     continue
-                if rule_store == "*" and (
-                    rule_code,
-                    rule_description,
-                    normalize_text(stock_store),
-                ) in specific:
+                if rule_store == "*" and (rule_code, normalize_text(stock_store)) in specific:
                     continue
                 try:
                     quantity = float(stock.get("quantidade_estoque", 0))

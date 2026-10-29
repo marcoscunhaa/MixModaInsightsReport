@@ -303,7 +303,7 @@ def _store_table(df, styles, width):
         capital=("valor_estoque", "sum"),
     ).sort_values("receita", ascending=False)
     total_revenue = max(float(grouped["receita"].sum()), 1)
-    headers = ["Loja", "Unidades vendidas", "Receita estimada", "Participação", "Estoque atual", "Capital em estoque"]
+    headers = ["Loja", "Unidades vendidas", "Faturamento", "Participação", "Estoque atual", "Capital em estoque"]
     data = [[_paragraph(h, styles["table_head"]) for h in headers]]
     for _, row in grouped.iterrows():
         share = float(row.receita) / total_revenue * 100
@@ -468,7 +468,7 @@ def export_dashboard_pdf(path, df, period, loja, audit):
     stock_value = _safe_float(df["valor_estoque"].sum()) if not df.empty else 0
     rupture_count = int(df["ruptura"].sum()) if not df.empty else 0
     kpi_specs = [
-        ("Receita estimada", brl(total_sales), BLUE),
+        ("Faturamento", brl(total_sales), BLUE),
         ("Unidades vendidas", br_number(total_units, 0), TEAL),
         ("Estoque atual", br_number(stock_units, 0), CYAN),
         ("Capital em estoque", brl(stock_value), GOLD),
@@ -517,12 +517,12 @@ def export_dashboard_pdf(path, df, period, loja, audit):
 
     # Page 2 - store performance and the products that drove the period.
     story.extend([PageBreak(), _section_heading("Desempenho comercial", styles,
-                                                "Receita estimada pela regra de preço configurada no aplicativo."),
+                                                "Faturamento da planilha de vendas (coluna G)."),
                   _store_table(df, styles, content_width), Spacer(1, 16)])
     story.extend([PageBreak(), _section_heading("Produtos líderes", styles,
-                                  "Top 20 ordenados por unidades vendidas e faturamento estimado.")])
+                                  "Top 20 ordenados por unidades vendidas e faturamento.")])
     top = top_sold(df, 20) if not df.empty else df
-    headers = ["#", "Produto", "Loja", "Grupo", "Unidades", "Receita estimada", "Estoque"]
+    headers = ["#", "Produto", "Loja", "Grupo", "Unidades", "Faturamento", "Estoque"]
     data = [[_paragraph(h, styles["table_head"]) for h in headers]]
     for rank, (_, row) in enumerate(top.iterrows(), 1):
         data.append([

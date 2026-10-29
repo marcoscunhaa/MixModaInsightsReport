@@ -315,4 +315,14 @@ class DashboardPage(QWidget):
         t.cellClicked.connect(lambda rr,cc:self.open_row_dict(rows[rr][1].to_dict())); l.addWidget(t); dlg.exec()
     def export_pdf(self):
         p=get_save_file(self,"Exportar PDF","MixModaInsights.pdf","PDF (*.pdf)","pdf")
-        if p: export_dashboard_pdf(p,self.current_df(),self.period,self.store.currentText(),self.audit); show_message(self, "information", "PDF","Dashboard exportado com sucesso.")
+        if not p: return
+        try:
+            export_dashboard_pdf(p,self.current_df(),self.period,self.store.currentText(),self.audit)
+        except PermissionError:
+            show_message(self, "critical", "Não foi possível salvar o PDF",
+                         "O arquivo está aberto em outro programa (ex.: leitor de PDF). Feche-o ou escolha outro nome e tente de novo.")
+            return
+        except Exception as error:
+            show_message(self, "critical", "Não foi possível gerar o PDF", f"{type(error).__name__}: {error}")
+            return
+        show_message(self, "information", "PDF","Dashboard exportado com sucesso.")

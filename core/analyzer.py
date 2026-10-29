@@ -7,6 +7,10 @@ def filter_analysis(df,loja="Todas",grupo="Todos",subclasse="Todas",busca="",sta
     if busca.strip():
         q=busca.strip().upper()
         m=(out.descricao.str.upper().str.contains(q,na=False,regex=False)|out.codigo_barras.str.contains(q,na=False,regex=False)|out.grupo.str.upper().str.contains(q,na=False,regex=False)|out.subclasse.str.upper().str.contains(q,na=False,regex=False))
+        # Leitor de código de barras entrega o EAN com zeros à esquerda; o código
+        # da análise é guardado sem eles.
+        if q.isdigit() and q.lstrip("0"):
+            m=m|out.codigo_barras.str.contains(q.lstrip("0"),na=False,regex=False)
         out=out[m]
     return out
 

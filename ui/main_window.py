@@ -59,6 +59,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.home)
         self.stack.addWidget(self.analysis)
         self.stock_explorer = None
+        self.dashboard = None
 
 
     def home_page(self):
@@ -237,6 +238,12 @@ class MainWindow(QMainWindow):
                 on_home=self.open_home,
                 alert_store=self.alert_store,
             )
+            # Descarta o dashboard anterior: cada um carrega vários gráficos e,
+            # sem isso, a memória cresce a cada análise gerada.
+            if self.dashboard is not None:
+                self.stack.removeWidget(self.dashboard)
+                self.dashboard.deleteLater()
+            self.dashboard = page
             self.stack.addWidget(page)
             self.stack.setCurrentWidget(page)
         except Exception as error:

@@ -79,9 +79,34 @@ def _standardize(raw, mapping, required=None):
     return df.reset_index(drop=True)
 
 
+def _column_c_text_share(raw):
+    """Fração de textos na coluna C: "UN" no estoque, quantidade nas vendas."""
+    if raw.shape[1] < 3:
+        return None
+    values = raw.iloc[:, 2].dropna()
+    values = values[values.map(lambda v: str(v).strip() != "")]
+    if len(values) < 5:
+        return None
+    return values.map(lambda v: isinstance(v, str) and not str(v).strip().replace(",", ".").replace(".", "", 1).isdigit()).mean()
+
+
 def load_stock(path):
-    return _standardize(read_raw(path), STOCK_MAP)
+    raw = read_raw(path)
+    share = _column_c_text_share(raw)
+    if share is not None and share < 0.5:
+        raise ValueError(
+            f"O arquivo {Path(path).name} parece ser uma planilha de VENDAS (coluna C com quantidades). "
+            "Confira se os arquivos de estoque e de vendas não foram trocados."
+        )
+    return _standardize(raw, STOCK_MAP)
 
 
 def load_sales(path):
-    return _standardize(read_raw(path), SALES_MAP, SALES_REQUIRED)
+    raw = read_raw(path)
+    share = _column_c_text_share(raw)
+    if share is not None and share > 0.5:
+        raise ValueError(
+            f"O arquivo {Path(path).name} parece ser uma planilha de ESTOQUE (coluna C com a unidade, ex.: UN). "
+            "Confira se os arquivos de estoque e de vendas não foram trocados."
+        )
+    return _standardize(raw, SALES_MAP, SALES_REQUIRED)
