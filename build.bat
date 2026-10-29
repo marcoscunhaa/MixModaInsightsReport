@@ -11,7 +11,17 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-pyinstaller --noconfirm --clean --onefile --windowed --collect-all rapidfuzz --name MixModaInsights --add-data "data\catalogo_produtos_estoque_geral.json;data" app.py
+rem xlrd/openpyxl/lxml sao carregados pelo pandas so na hora de ler a planilha;
+rem sem os --hidden-import o .exe nao abre arquivos .xls/.xlsx.
+python -m PyInstaller --noconfirm --clean --onefile --windowed --collect-all rapidfuzz ^
+  --hidden-import xlrd --hidden-import openpyxl --hidden-import lxml.etree ^
+  --name MixModaInsights --add-data "data\catalogo_produtos_estoque_geral.json;data" app.py
+if errorlevel 1 (
+    echo.
+    echo ERRO ao gerar o executavel.
+    pause
+    exit /b 1
+)
 echo.
 echo ==========================================
 echo EXECUTAVEL GERADO EM:
