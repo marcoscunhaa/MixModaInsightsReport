@@ -11,7 +11,7 @@ from rapidfuzz import fuzz
 
 from core.stock_alerts import StockAlertStore
 from exports.stock_alerts_export import export_stock_alerts_xlsx
-from ui.analysis_page import STORES
+from core.stores import STORES
 from utils.formatting import brl, br_number
 from utils.normalization import normalize_barcode, normalize_text
 from ui.window_chrome import confirm_action, get_save_file, install_mac_window_chrome, show_message

@@ -89,11 +89,25 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     vendas.loc[unique_code_mask, "_descricao_match"] = (
         vendas.loc[unique_code_mask, "codigo_barras"].map(current_description)
     )
-    vs = vendas.groupby(
-        ["codigo_barras", "_descricao_match"], as_index=False
-    )["quantidade_vendida"].sum().rename(columns={"_descricao_match": "descricao_norm"})
+    # Planilha de vendas: C quantidade, D preço de compra, F preço de venda,
+    # G faturamento. O mesmo produto pode vir em várias linhas com preços
+    # diferentes; somamos faturamento e custo e o preço vira a média ponderada.
+    for column in ("preco_compra", "preco_venda", "faturamento"):
+        if column not in vendas:
+            vendas[column] = 0.0
+        vendas[column] = pd.to_numeric(vendas[column], errors="coerce").fillna(0)
+    vendas["_faturamento"] = vendas["faturamento"].where(
+        vendas["faturamento"] > 0, vendas["quantidade_vendida"] * vendas["preco_venda"]
+    )
+    vendas["_custo_vendas"] = vendas["quantidade_vendida"] * vendas["preco_compra"]
+    vs = vendas.groupby(["codigo_barras", "_descricao_match"], as_index=False).agg(
+        quantidade_vendida=("quantidade_vendida", "sum"),
+        _faturamento=("_faturamento", "sum"),
+        _custo_vendas=("_custo_vendas", "sum"),
+    ).rename(columns={"_descricao_match": "descricao_norm"})
     merged = estoque.merge(vs, on=["codigo_barras", "descricao_norm"], how="left")
-    merged["quantidade_vendida"] = merged["quantidade_vendida"].fillna(0)
+    for column in ("quantidade_vendida", "_faturamento", "_custo_vendas"):
+        merged[column] = merged[column].fillna(0)
     merged["loja"] = loja
 
     # Classificação específica da loja tem prioridade quando existir.
@@ -169,11 +183,26 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
         for row in unmatched_products.itertuples(index=False)
     ]
 
-    # Regra comercial da Mix Moda: preço de venda = 2x preço de compra.
-    merged["preco_compra"] = pd.to_numeric(merged["preco_compra"], errors="coerce").fillna(0)
-    merged["preco_venda"] = merged["preco_compra"] * 2
-    merged["valor_estoque"] = merged.quantidade_estoque * merged.preco_compra
-    merged["valor_vendido"] = merged.quantidade_vendida * merged.preco_venda
+    # Preços e faturamento vêm da planilha de vendas (D compra, F venda,
+    # G faturamento). Sem venda no período, vale a regra comercial: preço de
+    # venda = 2x o preço de compra do estoque.
+    merged["preco_compra_estoque"] = pd.to_numeric(merged["preco_compra"], errors="coerce").fillna(0)
+    sold = merged.quantidade_vendida > 0
+    sold_qty = merged.quantidade_vendida.where(sold, 1)
+    has_sales_cost = sold & (merged._custo_vendas > 0)
+    has_sales_revenue = sold & (merged._faturamento > 0)
+    merged["preco_compra"] = (merged._custo_vendas / sold_qty).where(
+        has_sales_cost, merged.preco_compra_estoque
+    )
+    merged["preco_venda"] = (merged._faturamento / sold_qty).where(
+        has_sales_revenue, merged.preco_compra * 2
+    )
+    # O valor do estoque continua usando o custo da planilha de estoque.
+    merged["valor_estoque"] = merged.quantidade_estoque * merged.preco_compra_estoque
+    merged["valor_vendido"] = merged._faturamento.where(
+        has_sales_revenue, merged.quantidade_vendida * merged.preco_venda
+    )
+    merged.drop(columns=["_faturamento", "_custo_vendas"], inplace=True)
     merged["margem_unitaria"] = merged.preco_venda - merged.preco_compra
     merged["margem_percentual"] = merged.apply(lambda r: r.margem_unitaria / r.preco_venda * 100 if r.preco_venda else 0, axis=1)
     # Com os arquivos disponíveis temos vendas do período + estoque final, mas não

@@ -3,7 +3,7 @@ from PySide6.QtCore import Signal,QDate
 from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QComboBox,QDateEdit,QPushButton,QLabel,QFrame,QScrollArea
 from ui.window_chrome import get_open_file, show_message
 
-STORES = ("Sitio São João", "Palmeiras", "Sapiranga", "Pedras")
+from core.stores import STORES
 
 class StoreRow(QFrame):
     remove=Signal(object)
@@ -41,7 +41,7 @@ class AnalysisPage(QWidget):
     def __init__(self,parent=None,on_home=None):
         super().__init__(parent); self.rows=[]; root=QVBoxLayout(self); root.setContentsMargins(34,26,34,26); root.setSpacing(16)
         heading=QHBoxLayout(); back=QPushButton("← TELA INICIAL"); back.setObjectName("Ghost"); back.clicked.connect(on_home or (lambda: None)); heading.addWidget(back); heading.addStretch()
-        title=QLabel("Nova análise multi-lojas"); title.setObjectName("Title"); heading.addWidget(title); heading.addStretch(); root.addLayout(heading); root.addWidget(QLabel("Selecione até 4 lojas, cada uma uma vez. O dashboard consolida os dados e permite filtrar por unidade."))
+        title=QLabel("Nova análise multi-lojas"); title.setObjectName("Title"); heading.addWidget(title); heading.addStretch(); root.addLayout(heading); root.addWidget(QLabel(f"Selecione até {len(STORES)} lojas, cada uma uma vez. O dashboard consolida os dados e permite filtrar por unidade."))
         top=QFrame(); top.setObjectName("Panel"); f=QFormLayout(top); f.setContentsMargins(20,18,20,18)
         self.ini=QDateEdit(QDate.currentDate().addMonths(-1)); self.ini.setCalendarPopup(True); self.fim=QDateEdit(QDate.currentDate()); self.fim.setCalendarPopup(True)
         f.addRow("Período inicial",self.ini); f.addRow("Período final",self.fim); root.addWidget(top)

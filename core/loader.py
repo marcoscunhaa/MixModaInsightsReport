@@ -4,7 +4,15 @@ from utils.normalization import normalize_barcode, normalize_text, to_number
 
 # Layout real das extrações Mix Moda.
 STOCK_MAP = {"codigo_barras": 0, "descricao": 1, "quantidade_estoque": 3, "preco_compra": 4, "preco_venda": 6}
-SALES_MAP = {"codigo_barras": 0, "descricao": 1, "quantidade_vendida": 2}
+# Vendas: A código, B descrição, C quantidade vendida, D preço de compra,
+# E custo total, F preço de venda, G faturamento (C × F), H lucro.
+SALES_MAP = {
+    "codigo_barras": 0, "descricao": 1, "quantidade_vendida": 2,
+    "preco_compra": 3, "preco_venda": 5, "faturamento": 6,
+}
+# Extrações antigas de vendas têm só A–C; os preços ausentes viram 0 e o
+# cruzamento usa a regra de 2x o preço de compra do estoque.
+SALES_REQUIRED = ("codigo_barras", "descricao", "quantidade_vendida")
 
 
 def _looks_like_html(path):
@@ -49,13 +57,14 @@ def read_raw(path):
     raise ValueError(msg)
 
 
-def _standardize(raw, mapping):
-    required_columns = max(mapping.values()) + 1
+def _standardize(raw, mapping, required=None):
+    required = set(required or mapping)
+    required_columns = max(i for k, i in mapping.items() if k in required) + 1
     if raw.shape[1] < required_columns:
         raise ValueError(
             f"Planilha com {raw.shape[1]} colunas; o layout esperado precisa de pelo menos {required_columns}."
         )
-    out = {k: (raw.iloc[:, i] if i < raw.shape[1] else pd.Series(index=raw.index)) for k, i in mapping.items()}
+    out = {k: (raw.iloc[:, i] if i < raw.shape[1] else pd.Series(index=raw.index, dtype=float)) for k, i in mapping.items()}
     df = pd.DataFrame(out).dropna(how="all").copy()
     if len(df):
         desc0 = normalize_text(df.iloc[0].get("descricao", ""))
@@ -74,4 +83,4 @@ def load_stock(path):
 
 
 def load_sales(path):
-    return _standardize(read_raw(path), SALES_MAP)
+    return _standardize(read_raw(path), SALES_MAP, SALES_REQUIRED)

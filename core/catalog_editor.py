@@ -14,6 +14,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from core.stores import STORES
 from utils.normalization import normalize_barcode, normalize_text
 
 SITUACOES = ("ATIVO", "DESATIVADO")
@@ -49,15 +50,22 @@ def product_stock(product):
 
 
 def store_names(catalog):
-    """Lojas conhecidas: as do meta, depois qualquer outra que apareça nos produtos."""
-    names = list(catalog.get("meta", {}).get("lojas", []))
-    seen = {normalize_text(n) for n in names}
+    """Lojas da rede (core.stores), com a grafia já usada no catálogo.
+
+    O catálogo grava "pedras" em minúsculo; reaproveitar a grafia existente evita
+    duas versões da mesma loja no JSON. Lojas que só existem no catálogo vêm no fim.
+    """
+    in_catalog = list(catalog.get("meta", {}).get("lojas", []))
     for product in catalog.get("produtos", []):
         for entry in product.get("lojas", []):
-            name = entry.get("loja", "")
-            if name and normalize_text(name) not in seen:
-                seen.add(normalize_text(name))
-                names.append(name)
+            in_catalog.append(entry.get("loja", ""))
+    spelling = {}
+    for name in in_catalog:
+        if name:
+            spelling.setdefault(normalize_text(name), name)
+    names = [spelling.get(normalize_text(store), store) for store in STORES]
+    official = {normalize_text(store) for store in STORES}
+    names += [name for key, name in spelling.items() if key not in official]
     return names
 
 
@@ -139,7 +147,7 @@ def _validate(catalog, data, original_code=None):
             "valor": valor,
         })
     if not lojas:
-        raise CatalogValidationError("Adicione o produto a pelo menos uma loja.")
+        raise CatalogValidationError("Marque pelo menos uma loja.")
     return {
         "codigo_barras": code,
         "descricao": descricao,

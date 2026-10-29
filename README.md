@@ -11,7 +11,9 @@ Aplicativo desktop em Python/PySide6 para cruzar estoque e vendas da Mix Moda.
 
 ## Colunas
 Estoque: A código, B descrição, D quantidade, E compra, G venda.
-Vendas: A código, B descrição, C quantidade vendida.
+Vendas: A código, B descrição, C quantidade vendida, D preço de compra, E custo total, F preço de venda, G faturamento (C × F), H lucro.
+
+As extrações trazem números com formato de hora (`h:mm AM/PM`); a leitura converte esses valores de volta para número.
 
 ## Executar
 `python -m pip install -r requirements.txt`
@@ -23,10 +25,11 @@ Testes do catálogo: `python -m pip install pytest` e `python -m pytest tests`.
 Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 
 ## Regras comerciais e classificação atualizadas
-- Preço de venda calculado como **2x o preço de compra** para todos os produtos.
-- Faturamento do período = preço de venda × quantidade vendida.
+- Produtos vendidos no período usam os preços da planilha de vendas: **preço de compra = coluna D**, **preço de venda = coluna F** e **faturamento = soma da coluna G**. Quando o mesmo produto aparece em várias linhas com preços diferentes, o faturamento é somado e o preço vira a média ponderada pela quantidade.
+- Produtos sem venda no período mantêm a regra: preço de venda = **2x o preço de compra** do estoque.
+- O valor em estoque continua sendo quantidade em estoque × preço de compra da planilha de estoque.
 - A classificação oficial por loja + código + descrição está incorporada em `data/catalogo_produtos_estoque_geral.json`.
-- A análise permite selecionar até quatro lojas, uma vez cada: Sitio São João, Palmeiras, Sapiranga e Pedras.
+- A análise permite selecionar até cinco lojas, uma vez cada: Sitio São João, Palmeiras, Sapiranga, Pedras e Mix Cosméticos. A lista fica em `core/stores.py` e é usada em todos os seletores de loja.
 - Explorador hierárquico: **Grupo → Subclasse → Produto → Detalhes**.
 
 ## Alertas de estoque crítico
@@ -40,7 +43,7 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 
 - No menu inicial, **EXPLORAR ESTOQUE** abre os produtos do catálogo em cards: **Grupo → Subclasse → Produto**, com busca por descrição ou código.
 - **＋ NOVO PRODUTO** cadastra um produto; dentro de um grupo/subclasse eles já vêm preenchidos.
-- Clicar num produto abre o formulário para editar código, descrição, grupo, subclasse, situação e o estoque por loja (quantidade, valor e descrição usada naquela loja), ou excluir o produto.
+- Clicar num produto abre o formulário para editar código, descrição, grupo, subclasse, situação e em quais lojas ele existe, ou excluir o produto. Quantidades e preços não são editados aqui: vêm das planilhas importadas na análise.
 - Cada alteração é gravada na hora em `data/catalogo_produtos_estoque_geral.json`; a versão anterior fica em `catalogo_produtos_estoque_geral.json.bak`. Os totais do `meta` são recalculados.
 - A descrição de cada loja é preservada quando difere da descrição geral, porque o cruzamento com as vendas usa loja + código + descrição. Ao trocar a descrição geral, só as lojas que usavam a mesma descrição acompanham.
 - Códigos que viram o mesmo número sem os zeros à esquerda são bloqueados em produtos novos.

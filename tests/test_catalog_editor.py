@@ -175,3 +175,15 @@ def test_editable_catalog_path(tmp_path):
     assert target == tmp_path / "user" / "catalogo.json" and target.read_text() == "{}"
     target.write_text('{"x": 1}')
     assert ce.editable_catalog_path(bundled, tmp_path / "user").read_text() == '{"x": 1}'
+
+
+def test_store_names_has_all_five_stores_with_catalog_spelling(catalog):
+    assert ce.store_names(catalog) == ["Sitio São João", "Palmeiras", "Sapiranga", "pedras", "Mix Cosméticos"]
+
+
+def test_product_can_be_added_to_mix_cosmeticos(catalog):
+    data = form_data(catalog["produtos"][0])
+    data["lojas"].append({"loja": "Mix Cosméticos", "descricao": "", "quantidade_catalogo": 0, "valor": 0})
+    product = ce.update_product(catalog, data["codigo_barras"], data)
+    assert product["lojas"][-1]["loja"] == "Mix Cosméticos"
+    assert "Mix Cosméticos" in catalog["meta"]["lojas"]

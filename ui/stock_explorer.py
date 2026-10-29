@@ -9,15 +9,15 @@ import copy
 from PySide6.QtCore import QRegularExpression, QSize, Qt
 from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QDialog, QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QSpinBox,
-    QTableWidget, QVBoxLayout, QWidget,
+    QAbstractItemView, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
+    QCheckBox, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QVBoxLayout, QWidget,
 )
 
 from core import catalog_editor as ce
+from core.stores import STORES
 from ui.dashboard_page import ExplorerCard, _stable_color
 from ui.window_chrome import confirm_action, install_mac_window_chrome, show_message
-from utils.formatting import brl, br_number
+from utils.formatting import br_number
 from utils.normalization import normalize_barcode, normalize_text
 
 SEARCH_LIMIT = 300
@@ -29,15 +29,10 @@ QLabel#title { color:#14284B; font-size:22px; font-weight:900; }
 QLabel#section { color:#192D50; font-size:13px; font-weight:900; }
 QLabel#muted { color:#74829A; font-size:11px; }
 QFrame#panel { background:#FFFFFF; border:1px solid #E0E7F1; border-radius:16px; }
-QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { background:#F8FAFD; border:1px solid #DCE4F0;
+QLineEdit, QComboBox { background:#F8FAFD; border:1px solid #DCE4F0;
     border-radius:9px; padding:7px 9px; color:#233451; }
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border:1px solid #5675E8; background:#FFFFFF; }
-QTableWidget { background:#FFFFFF; border:1px solid #E2E8F1; border-radius:10px; }
-QTableWidget QLineEdit, QTableWidget QComboBox, QTableWidget QSpinBox, QTableWidget QDoubleSpinBox {
-    border-radius:6px; padding:4px 6px; }
-QPushButton#removeStore { background:#FFF0F2; color:#D9284B; border:1px solid #FFD0D9; border-radius:8px;
-    padding:4px 10px; font-weight:900; }
-QPushButton#removeStore:hover { background:#FFE1E6; }
+QLineEdit:focus, QComboBox:focus { border:1px solid #5675E8; background:#FFFFFF; }
+QCheckBox { color:#233451; font-size:12px; font-weight:700; spacing:7px; }
 """
 
 
@@ -147,9 +142,13 @@ class StockExplorerPage(QWidget):
         self.list.addItem(item)
         self.list.setItemWidget(item, ExplorerCard("", title, subtitle, value, accent, flat=True))
 
-    def _summary(self, items):
-        stock = sum(ce.product_stock(p) for p in items)
-        return f"{br_number(len(items), 0)} produtos", f"{br_number(stock, 0)} un. em estoque"
+    def _summary(self, items, second):
+        # Sem quantidades: o estoque real vem da planilha importada na análise.
+        inactive = sum(1 for p in items if p.get("situacao") != "ATIVO")
+        subtitle = f"{br_number(len(items), 0)} produtos"
+        if inactive:
+            subtitle += f"  •  {br_number(inactive, 0)} desativados"
+        return subtitle, second
 
     def render_groups(self):
         self.title.setText("Estoque • Grupos")
@@ -159,7 +158,8 @@ class StockExplorerPage(QWidget):
         for product in self.products():
             groups.setdefault(product.get("grupo", ""), []).append(product)
         for name in sorted(groups, key=normalize_text):
-            subtitle, value = self._summary(groups[name])
+            subs = len({p.get("subclasse") for p in groups[name]})
+            subtitle, value = self._summary(groups[name], f"{br_number(subs, 0)} subclasses")
             self._add_card(name or "SEM GRUPO", subtitle, value, "group", name, _stable_color(name))
         self.empty.setText("Nenhum produto cadastrado.")
 
@@ -172,17 +172,16 @@ class StockExplorerPage(QWidget):
             if product.get("grupo") == group:
                 subs.setdefault(product.get("subclasse", ""), []).append(product)
         for name in sorted(subs, key=normalize_text):
-            subtitle, value = self._summary(subs[name])
+            stores = len({normalize_text(l.get("loja")) for p in subs[name] for l in p.get("lojas", [])})
+            subtitle, value = self._summary(subs[name], f"em {br_number(stores, 0)} loja{'s' if stores != 1 else ''}")
             self._add_card(name or "SEM SUBCLASSE", subtitle, value, "sub", name, _stable_color(name))
         self.empty.setText("Nenhuma subclasse neste grupo.")
 
     def _add_product_card(self, product):
-        stores = product.get("lojas", [])
-        subtitle = f"{product.get('codigo_barras', '')}  •  {len(stores)} loja{'s' if len(stores) != 1 else ''}"
+        subtitle = str(product.get("codigo_barras", ""))
         if product.get("situacao") != "ATIVO":
             subtitle += f"  •  {product.get('situacao', '')}"
-        prices = [ce.parse_number(s.get("valor")) for s in stores]
-        value = f"{br_number(ce.product_stock(product), 0)} un.  •  {brl(max(prices) if prices else 0)}"
+        value = ", ".join(l.get("loja", "") for l in product.get("lojas", [])) or "Sem loja"
         self._add_card(product.get("descricao", ""), subtitle, value, "product",
                        product.get("codigo_barras"), _stable_color(product.get("descricao", "")))
 
@@ -288,12 +287,12 @@ class ProductEditorDialog(QDialog):
             "codigo_barras": "", "descricao": "", "situacao": "ATIVO",
             "grupo": "", "subclasse": "", "lojas": [], **(defaults or {}),
         }
-        self._last_description = data.get("descricao", "")
+        self.existing_stores = {normalize_text(l["loja"]): l for l in data.get("lojas", [])}
 
         self.setWindowTitle("Editar produto" if product else "Novo produto")
         self.setModal(True)
-        self.resize(900, 680)
-        self.setMinimumSize(760, 560)
+        self.resize(760, 520)
+        self.setMinimumSize(640, 460)
         self.setStyleSheet(EDITOR_QSS)
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 8, 12, 12)
@@ -309,7 +308,8 @@ class ProductEditorDialog(QDialog):
         root.addWidget(title)
 
         root.addWidget(self._general_panel(data))
-        root.addWidget(self._stores_panel(data), 1)
+        root.addWidget(self._stores_panel())
+        root.addStretch(1)
         root.addLayout(self._footer())
 
     # ---------- montagem ----------
@@ -329,7 +329,6 @@ class ProductEditorDialog(QDialog):
         self.description = QLineEdit(data.get("descricao", ""))
         self.description.setPlaceholderText("Ex.: BLUSA BABY LOOK ESTAMPADA")
         _uppercase_as_typed(self.description)
-        self.description.textEdited.connect(self._sync_store_descriptions)
         form.addRow("Descrição", self.description)
 
         self.group = self._editable_combo(list(self.tree), data.get("grupo", ""))
@@ -365,42 +364,28 @@ class ProductEditorDialog(QDialog):
         self.subclass.setEditText(current)
         self.subclass.blockSignals(False)
 
-    def _stores_panel(self, data):
+    def _stores_panel(self):
+        """Em quais lojas o produto existe. Quantidade e valor ficam nas planilhas."""
         panel = QFrame()
         panel.setObjectName("panel")
         box = QVBoxLayout(panel)
         box.setContentsMargins(18, 14, 18, 16)
-        box.setSpacing(8)
-        head = QHBoxLayout()
-        title = QLabel("ESTOQUE POR LOJA")
+        box.setSpacing(10)
+        title = QLabel("LOJAS")
         title.setObjectName("section")
-        head.addWidget(title)
-        head.addStretch()
-        add = QPushButton("＋  Adicionar loja")
-        add.setObjectName("Secondary")
-        add.clicked.connect(lambda checked=False: self.add_store_row())
-        head.addWidget(add)
-        box.addLayout(head)
-        hint = QLabel("A descrição da loja é a usada no cruzamento com as vendas daquela loja.")
-        hint.setObjectName("muted")
-        box.addWidget(hint)
-
-        self.stores = QTableWidget(0, 5)
-        self.stores.setHorizontalHeaderLabels(["Loja", "Descrição na loja", "Quantidade", "Valor", ""])
-        self.stores.verticalHeader().setVisible(False)
-        self.stores.verticalHeader().setDefaultSectionSize(46)
-        self.stores.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        self.stores.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        header = self.stores.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        for column in (2, 3, 4):
-            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
-        box.addWidget(self.stores, 1)
-        for entry in data.get("lojas", []):
-            self.add_store_row(entry)
-        if not data.get("lojas"):
-            self.add_store_row()
+        box.addWidget(title)
+        row = QHBoxLayout()
+        row.setSpacing(18)
+        self.store_checks = []
+        official = {normalize_text(s): s for s in STORES}
+        for name in self.store_options:
+            # Mostra o nome oficial ("Pedras"); grava a grafia do catálogo ("pedras").
+            check = QCheckBox(official.get(normalize_text(name), name))
+            check.setChecked(normalize_text(name) in self.existing_stores)
+            self.store_checks.append((check, name))
+            row.addWidget(check)
+        row.addStretch()
+        box.addLayout(row)
         return panel
 
     def _footer(self):
@@ -420,73 +405,23 @@ class ProductEditorDialog(QDialog):
         actions.addWidget(save)
         return actions
 
-    # ---------- linhas de loja ----------
-    def _used_stores(self):
-        return {
-            normalize_text(self.stores.cellWidget(r, 0).currentText())
-            for r in range(self.stores.rowCount())
-        }
-
-    def add_store_row(self, entry=None):
-        if entry is None:
-            used = self._used_stores()
-            free = [s for s in self.store_options if normalize_text(s) not in used]
-            if not free:
-                show_message(self, "information", "Todas as lojas adicionadas",
-                             "Este produto já está em todas as lojas cadastradas.")
-                return
-            prices = [self.stores.cellWidget(r, 3).value() for r in range(self.stores.rowCount())]
-            entry = {"loja": free[0], "descricao": self.description.text(),
-                     "quantidade_catalogo": 0, "valor": prices[0] if prices else 0}
-
-        row = self.stores.rowCount()
-        self.stores.insertRow(row)
-        store = QComboBox()
-        options = list(self.store_options)
-        if entry["loja"] and normalize_text(entry["loja"]) not in {normalize_text(s) for s in options}:
-            options.append(entry["loja"])
-        store.addItems(options)
-        store.setCurrentText(entry["loja"])
-        self.stores.setCellWidget(row, 0, store)
-
-        description = QLineEdit(entry.get("descricao", ""))
-        _uppercase_as_typed(description)
-        self.stores.setCellWidget(row, 1, description)
-
-        quantity = QSpinBox()
-        quantity.setRange(-999999, 999999)  # o estoque real tem saldos negativos
-        quantity.setValue(int(round(ce.parse_number(entry.get("quantidade_catalogo")))))
-        quantity.setMinimumWidth(96)
-        self.stores.setCellWidget(row, 2, quantity)
-
-        price = QDoubleSpinBox()
-        price.setRange(0, 999999.99)
-        price.setDecimals(2)
-        price.setPrefix("R$ ")
-        price.setValue(ce.parse_number(entry.get("valor")))
-        price.setMinimumWidth(120)
-        self.stores.setCellWidget(row, 3, price)
-
-        remove = QPushButton("✕")
-        remove.setObjectName("removeStore")
-        remove.setToolTip("Remover o produto desta loja")
-        remove.clicked.connect(lambda checked=False, button=remove: self._remove_row(button))
-        self.stores.setCellWidget(row, 4, remove)
-
-    def _remove_row(self, button):
-        for row in range(self.stores.rowCount()):
-            if self.stores.cellWidget(row, 4) is button:
-                self.stores.removeRow(row)
-                return
-
-    def _sync_store_descriptions(self, text):
-        """Lojas que usavam a descrição geral acompanham a nova descrição."""
-        old = normalize_text(self._last_description)
-        for row in range(self.stores.rowCount()):
-            field = self.stores.cellWidget(row, 1)
-            if normalize_text(field.text()) == old:
-                field.setText(text.upper())
-        self._last_description = text.upper()
+    def _selected_stores(self):
+        """Lojas marcadas. As que já existiam mantêm descrição, quantidade e valor."""
+        stores = []
+        for check, name in self.store_checks:
+            if not check.isChecked():
+                continue
+            previous = self.existing_stores.get(normalize_text(name))
+            if previous is not None:
+                stores.append({
+                    "loja": previous["loja"],
+                    "descricao": previous.get("descricao", ""),
+                    "quantidade_catalogo": previous.get("quantidade_catalogo", 0),
+                    "valor": previous.get("valor", 0),
+                })
+            else:
+                stores.append({"loja": name, "descricao": "", "quantidade_catalogo": 0, "valor": 0})
+        return stores
 
     # ---------- ações ----------
     def form_data(self):
@@ -496,15 +431,7 @@ class ProductEditorDialog(QDialog):
             "grupo": self.group.currentText(),
             "subclasse": self.subclass.currentText(),
             "situacao": self.situation.currentText(),
-            "lojas": [
-                {
-                    "loja": self.stores.cellWidget(r, 0).currentText(),
-                    "descricao": self.stores.cellWidget(r, 1).text(),
-                    "quantidade_catalogo": self.stores.cellWidget(r, 2).value(),
-                    "valor": self.stores.cellWidget(r, 3).value(),
-                }
-                for r in range(self.stores.rowCount())
-            ],
+            "lojas": self._selected_stores(),
         }
 
     def save(self):
