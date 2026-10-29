@@ -7,7 +7,7 @@ from PySide6.QtGui import QColor, QFont
 from ui.widgets import Card, RankCard
 from ui.product_modal import ProductModal
 from charts.dashboard_charts import make_chart
-from core.analyzer import filter_analysis,kpis,top_sold,stagnant,critical,rupture
+from core.analyzer import filter_analysis,kpis,single_product_labels,top_sold,stagnant,critical,rupture
 from core.insights import generate_insights
 from utils.normalization import normalize_barcode, normalize_text
 from exports.pdf_export import export_dashboard_pdf
@@ -179,6 +179,8 @@ class DashboardPage(QWidget):
         self.sub.setCurrentText(old_sub if old_sub in [self.sub.itemText(i) for i in range(self.sub.count())] else "Todas as subclasses"); self.sub.blockSignals(False)
         d=self.current_df(); self.refresh_alert_button(); self.clear_body(); kp=kpis(d); grid=QGridLayout(); grid.setHorizontalSpacing(10); grid.setVerticalSpacing(10)
         specs=[("Valor em estoque",brl(kp['Valor em estoque']),"#2854D9","▣"),("Unidades em estoque",br_number(kp['Unidades em estoque'],0),"#16B8C8","▥"),("Unidades vendidas",br_number(kp['Unidades vendidas'],0),"#0F9D8A","↗"),("Produtos ativos",br_number(kp['Produtos ativos analisados'],0),"#7C6FE6","●"),("Sem vendas",br_number(kp['Produtos sem vendas'],0),"#E85D8A","○"),("Em ruptura",br_number(kp['Produtos em ruptura'],0),"#D9485F","!"),("Críticos",br_number(kp['Produtos críticos'],0),"#F3B63F","◆"),("Giro médio do período",f"{kp['Giro médio']:.1f}%","#2854D9","↻"),("Margem potencial",brl(kp['Margem potencial']),"#0F9D8A","%"),("Faturamento estimado",brl(kp['Faturamento estimado']),"#16B8C8","$")]
+        # Produto isolado: contagens 0/1 confundem, então esses KPIs mostram texto.
+        labels=single_product_labels(d); specs=[(n,labels.get(n,v),a,ic) for n,v,a,ic in specs]
         for i,(n,v,a,ic) in enumerate(specs): c=Card(n,v,a,ic); c.clicked.connect(lambda name=n:self.detail(name,d)); grid.addWidget(c,i//5,i%5)
         self.body.addLayout(grid)
         row1=QHBoxLayout(); row1.setSpacing(12); row1.addWidget(self.panel("TOP 3 MAIS VENDIDOS NA ANÁLISE",self.top3(d)),1); row1.addWidget(self.panel("RANKING POR LOJA",self.store_ranking(d)),1); self.body.addLayout(row1)

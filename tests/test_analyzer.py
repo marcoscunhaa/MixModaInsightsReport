@@ -36,3 +36,19 @@ def test_idle_stock_ranks_unsold_by_quantity():
     })
     assert list(idle_stock(df, 2).descricao) == ["B", "C"]
     assert list(idle_stock(df).descricao) == ["B", "C", "A"]
+
+
+def one(stock, sold, status):
+    return pd.DataFrame({"quantidade_estoque": [stock], "quantidade_vendida": [sold], "status_estoque": [status]})
+
+
+def test_single_product_labels():
+    from core.analyzer import single_product_labels
+    assert single_product_labels(one(0, 46, "SEM ESTOQUE")) == {
+        "Produtos ativos": "1 PRODUTO", "Sem vendas": "COM VENDAS",
+        "Em ruptura": "SEM ESTOQUE", "Críticos": "SEM ESTOQUE",
+    }
+    labels = single_product_labels(one(-2, 0, "NEGATIVO"))
+    assert (labels["Em ruptura"], labels["Sem vendas"]) == ("ESTOQUE NEGATIVO", "SEM VENDAS")
+    assert single_product_labels(one(8, 3, "NORMAL"))["Em ruptura"] == "COM ESTOQUE"
+    assert single_product_labels(pd.concat([one(1, 1, "X"), one(2, 2, "Y")])) == {}

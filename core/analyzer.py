@@ -17,6 +17,23 @@ def kpis(df):
     "Produtos críticos":int((df.status_estoque=="CRÍTICO").sum()),"Giro médio":df.giro.mean() if len(df) else 0,
     "Margem potencial":(df.margem_unitaria*df.quantidade_estoque).sum(),"Faturamento estimado":df.valor_vendido.sum()}
 
+def single_product_labels(df):
+    """Com um único produto na análise, KPIs de contagem viram texto legível.
+
+    Retorna {} quando há mais (ou menos) de um produto: aí os números fazem sentido.
+    """
+    if len(df) != 1:
+        return {}
+    row = df.iloc[0]
+    stock = float(row.quantidade_estoque)
+    return {
+        "Produtos ativos": "1 PRODUTO",
+        "Sem vendas": "SEM VENDAS" if row.quantidade_vendida <= 0 else "COM VENDAS",
+        "Em ruptura": "ESTOQUE NEGATIVO" if stock < 0 else "SEM ESTOQUE" if stock == 0 else "COM ESTOQUE",
+        "Críticos": str(row.status_estoque),
+    }
+
+
 def top_sold(df,n=10):
     return df.sort_values(
         ["quantidade_vendida", "valor_vendido"],
