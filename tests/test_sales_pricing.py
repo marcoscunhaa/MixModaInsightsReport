@@ -48,8 +48,8 @@ def test_prices_and_revenue_come_from_sales_sheet():
         ("7896717230006", "CHINELO ADULTO FEM DE 25", 13, 12.5, 24.99, 324.87),
     ])
     stock = stock_frame([
-        ("7896722660389", "SQUISHY FIDGET", 5, 14.0, 0),
-        ("7896717230006", "CHINELO ADULTO FEM DE 25", 2, 12.5, 0),
+        ("7896722660389", "SQUISHY FIDGET", 5, 14.0, 29.99),
+        ("7896717230006", "CHINELO ADULTO FEM DE 25", 2, 12.5, 26.99),
         ("7890000000001", "PRODUTO SEM VENDA", 3, 10.0, 0),
     ])
     frame = analyze(stock, sales)
@@ -67,8 +67,11 @@ def test_prices_and_revenue_come_from_sales_sheet():
         {"preco_venda": 24.99, "quantidade": 34.0, "faturamento": pytest.approx(849.66)},
     ]
 
+    assert squishy.preco_venda_atual == pytest.approx(29.99)                 # coluna F do estoque
+
     chinelo = frame.loc["CHINELO ADULTO FEM DE 25"]
     assert len(chinelo.precos_venda) == 1
+    assert pd.isna(chinelo.preco_venda_atual)                               # um preço só: nada muda
     assert (chinelo.preco_compra, chinelo.preco_venda, chinelo.valor_vendido) == pytest.approx((12.5, 24.99, 324.87))
 
     unsold = frame.loc["PRODUTO SEM VENDA"]

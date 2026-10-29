@@ -10,7 +10,7 @@ Aplicativo desktop em Python/PySide6 para cruzar estoque e vendas da Mix Moda.
 - As planilhas originais nunca são alteradas. O catálogo JSON só muda pela tela **Explorar estoque**.
 
 ## Colunas
-Estoque: A código, B descrição, D quantidade, E compra, G venda.
+Estoque: A código, B descrição, D quantidade, E compra, F venda (preço atual).
 Vendas: A código, B descrição, C quantidade vendida, D preço de compra, E custo total, F preço de venda, G faturamento (C × F), H lucro.
 
 As extrações trazem números com formato de hora (`h:mm AM/PM`); a leitura converte esses valores de volta para número.
@@ -26,7 +26,7 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 
 ## Regras comerciais e classificação atualizadas
 - Produtos vendidos no período usam os preços da planilha de vendas: **preço de compra = coluna D**, **preço de venda = coluna F** e **faturamento = soma da coluna G**. Quando o mesmo produto aparece em várias linhas com preços diferentes, o faturamento é somado e o preço vira a média ponderada pela quantidade.
-- Nesse caso, o card do produto mostra o quadro **Valores de venda no período**, com cada preço, a quantidade e o faturamento daquele preço, e o total; o preço de venda do topo aparece como **preço de venda médio**.
+- Nesse caso, o card do produto mostra o quadro **Valores de venda no período**, com cada preço, a quantidade e o faturamento daquele preço, e o total; o card mostra o **preço de venda** atual (coluna F da planilha de estoque, cruzada pelo código) e, ao lado, o **preço de venda médio** do período, usado nas margens.
 - Produtos sem venda no período mantêm a regra: preço de venda = **2x o preço de compra** do estoque.
 - O valor em estoque continua sendo quantidade em estoque × preço de compra da planilha de estoque.
 - A classificação oficial por loja + código + descrição está incorporada em `data/catalogo_produtos_estoque_geral.json`.

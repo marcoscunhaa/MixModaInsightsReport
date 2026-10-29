@@ -3,7 +3,8 @@ import pandas as pd
 from utils.normalization import normalize_barcode, normalize_text, to_number
 
 # Layout real das extrações Mix Moda.
-STOCK_MAP = {"codigo_barras": 0, "descricao": 1, "quantidade_estoque": 3, "preco_compra": 4, "preco_venda": 6}
+# Estoque: A código, B descrição, D quantidade, E preço de compra, F preço de venda atual.
+STOCK_MAP = {"codigo_barras": 0, "descricao": 1, "quantidade_estoque": 3, "preco_compra": 4, "preco_venda": 5}
 # Vendas: A código, B descrição, C quantidade vendida, D preço de compra,
 # E custo total, F preço de venda, G faturamento (C × F), H lucro.
 SALES_MAP = {

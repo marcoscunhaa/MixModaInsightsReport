@@ -60,12 +60,16 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     # Consolida linhas duplicadas do mesmo produto no estoque antes do cruzamento.
     # Isso evita multiplicar as vendas quando o mesmo código + descrição aparece
     # mais de uma vez na extração. O preço de compra é média ponderada pela quantidade.
+    if "preco_venda" not in estoque:
+        estoque["preco_venda"] = 0.0
+    estoque["preco_venda"] = pd.to_numeric(estoque["preco_venda"], errors="coerce").fillna(0)
     estoque["_valor_compra_total"] = estoque["quantidade_estoque"] * estoque["preco_compra"]
     stock_group = estoque.groupby(["codigo_barras", "descricao_norm"], as_index=False).agg(
         descricao=("descricao", "first"),
         quantidade_estoque=("quantidade_estoque", "sum"),
         _valor_compra_total=("_valor_compra_total", "sum"),
         preco_compra_fallback=("preco_compra", "mean"),
+        preco_venda_estoque=("preco_venda", "max"),
     )
     stock_group["preco_compra"] = stock_group.apply(
         lambda r: r["_valor_compra_total"] / r["quantidade_estoque"]
@@ -219,7 +223,13 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     merged["valor_vendido"] = merged._faturamento.where(
         has_sales_revenue, merged.quantidade_vendida * merged.preco_venda
     )
-    merged.drop(columns=["_faturamento", "_custo_vendas"], inplace=True)
+    # Vendido por 2 ou mais preços: o preço de venda exibido é o atual, da
+    # planilha de estoque (coluna F). O preço médio segue em preco_venda.
+    many_prices = merged["precos_venda"].map(len) > 1
+    merged["preco_venda_atual"] = merged.preco_venda_estoque.where(
+        many_prices & (merged.preco_venda_estoque > 0)
+    )
+    merged.drop(columns=["_faturamento", "_custo_vendas", "preco_venda_estoque"], inplace=True)
     merged["margem_unitaria"] = merged.preco_venda - merged.preco_compra
     merged["margem_percentual"] = merged.apply(lambda r: r.margem_unitaria / r.preco_venda * 100 if r.preco_venda else 0, axis=1)
     # Com os arquivos disponíveis temos vendas do período + estoque final, mas não

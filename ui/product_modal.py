@@ -55,6 +55,7 @@ class ProductModal(QDialog):
             ("FATURAMENTO",brl(row.get('valor_vendido',0)),"#E85D8A"),
             ("VALOR EM ESTOQUE",brl(row.get('valor_estoque',0)),"#F3B63F"),
             ("PREÇO DE COMPRA",brl(row.get('preco_compra',0)),"#36A269"),
+            *([("PREÇO DE VENDA",self._current_price(row),"#2C9FD6")] if many_prices else []),
             ("PREÇO DE VENDA MÉDIO" if many_prices else "PREÇO DE VENDA",brl(row.get('preco_venda',0)),"#2C9FD6"),
             ("MARGEM UNITÁRIA",brl(row.get('margem_unitaria',0)),"#36A269"),
             ("MARGEM %",f"{row.get('margem_percentual',0):.1f}%","#7C3AED"),
@@ -89,6 +90,15 @@ class ProductModal(QDialog):
         root.addWidget(scroll,1)
 
         bottom=QHBoxLayout(); bottom.addStretch(1); b=QPushButton("Fechar"); b.setObjectName("close"); b.clicked.connect(self.accept); bottom.addWidget(b); root.addLayout(bottom)
+
+    @staticmethod
+    def _current_price(row):
+        """Preço atual (coluna F do estoque) para produtos vendidos por vários preços."""
+        try:
+            value=float(row.get("preco_venda_atual"))
+        except (TypeError,ValueError):
+            return "—"
+        return brl(value) if value==value and value>0 else "—"
 
     def _fit_to_screen(self,height):
         screen=self.screen() or QApplication.primaryScreen()
