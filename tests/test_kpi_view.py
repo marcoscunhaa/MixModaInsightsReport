@@ -55,4 +55,7 @@ def test_store_list_views_pick_rows_and_metric():
     assert len(store_list_view("Em ruptura", df)["rows"]) == 1
     assert store_list_view("Valor em estoque", df)["kind"] == "money"
     assert store_list_view("Valor em estoque", df, "NEGATIVO")["kind"] == "stock"
+    revenue = store_list_view("Faturamento estimado", df)
+    assert (revenue["value"], revenue["kind"], len(revenue["rows"])) == ("valor_vendido", "money", 2)
+    assert by_key(kpi_cards(df))["Faturamento estimado"]["clickable"]
     assert store_list_view("Margem potencial", df) is None

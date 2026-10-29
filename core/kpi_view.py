@@ -62,7 +62,7 @@ def kpi_cards(d):
         card("Valor em estoque", "Valor em estoque", "💰", "#2854D9", brl(kp["Valor em estoque"]),
              f"custo das {br_number(kp['Unidades em estoque'], 0)} un. em estoque", clickable=True),
         card("Faturamento estimado", "Faturamento", "💵", "#0F9D8A", brl(kp["Faturamento estimado"]),
-             "soma das vendas do período"),
+             "soma das vendas do período", clickable=True),
         card("Margem potencial", "Margem potencial", "📈", "#0F9D8A", brl(kp["Margem potencial"]),
              "lucro se o estoque atual for vendido"),
         card("Unidades em estoque", "Unidades em estoque", "📦", "#16B8C8", br_number(kp["Unidades em estoque"], 0),
@@ -125,6 +125,9 @@ def store_list_view(key, d, status="Todos os status"):
                  value="valor_estoque", kind="money", ascending=False,
                  note="Custo do estoque de cada produto em cada loja.")
         ),
+        "Faturamento estimado": dict(
+            title="Faturamento por loja", emoji="💵", rows=d[d.valor_vendido > 0], value="valor_vendido",
+            kind="money", ascending=False, note="Valor vendido de cada produto no período em cada loja (coluna G)."),
         "Unidades em estoque": dict(
             title="Estoque por loja", emoji="📦", rows=d, value="quantidade_estoque", kind="stock",
             ascending=False, note="Unidades em estoque de cada produto em cada loja."),
