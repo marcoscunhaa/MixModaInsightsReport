@@ -20,6 +20,9 @@ from core.stock_alerts import StockAlertStore
 from ui.analysis_page import AnalysisPage
 from ui.dashboard_page import DashboardPage
 from ui.stock_alerts import StockAlertRulesDialog
+from ui.stock_explorer import StockExplorerPage
+from ui.widgets import FeatureCard
+from core.stores import STORES
 from ui.window_chrome import install_mac_window_chrome, show_message
 from ui.styles import APP_QSS
 from utils.formatting import br_number
@@ -32,6 +35,7 @@ class MainWindow(QMainWindow):
         self.resize(1580, 980)
         self.setStyleSheet(APP_QSS)
 
+        self.catalog_path = catalog_path
         self.catalog = load_catalog(catalog_path)
         self.classification = load_classification_from_catalog(self.catalog, load_classification)
 
@@ -54,13 +58,15 @@ class MainWindow(QMainWindow):
         self.analysis.generate.connect(self.generate)
         self.stack.addWidget(self.home)
         self.stack.addWidget(self.analysis)
+        self.stock_explorer = None
+        self.dashboard = None
 
 
     def home_page(self):
         widget = QWidget()
         widget.setObjectName("Shell")
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(90, 80, 90, 70)
+        layout.setContentsMargins(80, 64, 80, 48)
         layout.setSpacing(16)
 
         badge = QLabel("MIX MODA  •  INTELLIGENCE")
@@ -73,32 +79,100 @@ class MainWindow(QMainWindow):
         subtitle.setObjectName("Subtitle")
         layout.addWidget(subtitle)
 
-        actions = QHBoxLayout()
-        analysis_button = QPushButton("CRIAR NOVA ANÁLISE  →")
-        analysis_button.clicked.connect(lambda: self.stack.setCurrentWidget(self.analysis))
-        actions.addWidget(analysis_button)
-        alerts_button = QPushButton("CONFIGURAR ALERTAS")
-        alerts_button.setObjectName("Secondary")
-        alerts_button.clicked.connect(lambda: self.open_stock_alerts())
-        actions.addWidget(alerts_button)
-        actions.addStretch()
-        layout.addLayout(actions)
+        layout.addSpacing(18)
+        prompt = QLabel("O QUE VOCÊ QUER FAZER?")
+        prompt.setStyleSheet("color:#7A879D;font-size:11px;font-weight:900;letter-spacing:1.5px;")
+        layout.addWidget(prompt)
 
+        cards = QHBoxLayout()
+        cards.setSpacing(20)
+        analysis_card = FeatureCard(
+            "📊", "Nova análise",
+            f"Cruze estoque e vendas de até {len(STORES)} lojas e gere o dashboard com faturamento, "
+            "giro, margem e ruptura.",
+            "CRIAR ANÁLISE", "#2F5BEA", primary=True,
+        )
+        analysis_card.clicked.connect(lambda: self.stack.setCurrentWidget(self.analysis))
+        stock_card = FeatureCard(
+            "📦", "Explorar estoque",
+            "Navegue por grupo e subclasse e cadastre, edite ou remova produtos do catálogo.",
+            "ABRIR ESTOQUE", "#08A88F",
+        )
+        stock_card.clicked.connect(lambda: self.open_stock_explorer())
+        self.alerts_card = FeatureCard(
+            "🔔", "Alertas de estoque",
+            "Defina o estoque mínimo por produto e loja e veja o que precisa de reposição.",
+            "CONFIGURAR ALERTAS", "#E85D8A",
+        )
+        self.alerts_card.clicked.connect(lambda: self.open_stock_alerts())
+        for card in (analysis_card, stock_card, self.alerts_card):
+            cards.addWidget(card, 1)
+        layout.addLayout(cards)
+        self.refresh_alerts_tag()
+
+        layout.addSpacing(10)
+        chips = QHBoxLayout()
+        chips.setSpacing(10)
+        self.stat_chips = {}
+        for key in ("codigos", "grupos", "subclasses", "lojas"):
+            chip = QLabel()
+            chip.setStyleSheet(
+                "background:#FFFFFF;border:1px solid #DCE6F3;border-radius:14px;"
+                "padding:8px 14px;color:#40516E;font-size:12px;font-weight:800;"
+            )
+            self.stat_chips[key] = chip
+            chips.addWidget(chip)
+        chips.addStretch()
+        layout.addLayout(chips)
         layout.addStretch()
 
-        meta = self.catalog.get("meta", {})
-        footer = QLabel(
-            f"Catálogo oficial • {br_number(meta.get('total_produtos_unicos_por_codigo', 0), 0)} códigos "
-            f"• {meta.get('total_grupos', 0)} grupos • {meta.get('total_subclasses', 0)} subclasses"
-        )
+        footer = QLabel("Catálogo oficial Mix Moda")
         footer.setObjectName("Muted")
         layout.addWidget(footer)
+        self.refresh_footer()
         return widget
+
+    def refresh_footer(self):
+        meta = self.catalog.get("meta", {})
+        values = {
+            "codigos": f"🏷️  {br_number(meta.get('total_produtos_unicos_por_codigo', 0), 0)} códigos",
+            "grupos": f"🗂️  {br_number(meta.get('total_grupos', 0), 0)} grupos",
+            "subclasses": f"🧩  {br_number(meta.get('total_subclasses', 0), 0)} subclasses",
+            "lojas": f"🏬  {len(STORES)} lojas",
+        }
+        for key, text in values.items():
+            self.stat_chips[key].setText(text)
+
+    def refresh_alerts_tag(self):
+        try:
+            count = len(self.alert_store.load_rules())
+        except (OSError, ValueError):
+            count = 0
+        self.alerts_card.set_tag(f"{count} REGRA{'S' if count != 1 else ''} ATIVA{'S' if count != 1 else ''}" if count else "")
+
+    def open_stock_explorer(self):
+        if self.stock_explorer is None:
+            self.stock_explorer = StockExplorerPage(
+                self.catalog,
+                self.catalog_path,
+                on_home=self.open_home,
+                on_catalog_changed=self.catalog_changed,
+            )
+            self.stack.addWidget(self.stock_explorer)
+        else:
+            self.stock_explorer.reset()
+        self.stack.setCurrentWidget(self.stock_explorer)
+
+    def catalog_changed(self):
+        """O catálogo foi editado: a classificação usada nas próximas análises é refeita."""
+        self.classification = load_classification_from_catalog(self.catalog, load_classification)
+        self.refresh_footer()
 
     def open_stock_alerts(self):
         try:
             dialog = StockAlertRulesDialog(self.catalog, self.alert_store, self)
             dialog.exec()
+            self.refresh_alerts_tag()
         except Exception as error:
             show_message(
                 self,
@@ -164,6 +238,12 @@ class MainWindow(QMainWindow):
                 on_home=self.open_home,
                 alert_store=self.alert_store,
             )
+            # Descarta o dashboard anterior: cada um carrega vários gráficos e,
+            # sem isso, a memória cresce a cada análise gerada.
+            if self.dashboard is not None:
+                self.stack.removeWidget(self.dashboard)
+                self.dashboard.deleteLater()
+            self.dashboard = page
             self.stack.addWidget(page)
             self.stack.setCurrentWidget(page)
         except Exception as error:

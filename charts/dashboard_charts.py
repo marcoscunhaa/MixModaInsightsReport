@@ -116,7 +116,7 @@ def make_chart(kind,df):
         # Saúde do estoque em pizza: distribuição dos produtos por status.
         fig,ax=_base("Saúde do estoque",6.3,3.25)
         x=df.status_estoque.value_counts()
-        colors_map={"NORMAL":TEAL,"CRÍTICO":PINK,"BAIXO":GOLD,"SEM ESTOQUE":"#D9284B","EXCESSO":"#7C6FE6","SEM VENDA":BLUE}
+        colors_map={"NORMAL":TEAL,"CRÍTICO":PINK,"BAIXO":GOLD,"SEM ESTOQUE":"#D9284B","NEGATIVO":"#7F1D1D","EXCESSO":"#7C6FE6","SEM VENDA":BLUE}
         colors=[colors_map.get(str(k).upper(),"#97A2B6") for k in x.index]
         vals=x.values
         wedges,_,autotexts=ax.pie(vals,labels=None,startangle=90,colors=colors,

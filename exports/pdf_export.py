@@ -8,7 +8,7 @@ from reportlab.lib.enums import TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from core.analyzer import critical as ranked_critical, top_sold
+from core.analyzer import critical as ranked_critical, idle_stock, top_sold
 
 from reportlab.platypus import (
     Flowable,
@@ -303,7 +303,7 @@ def _store_table(df, styles, width):
         capital=("valor_estoque", "sum"),
     ).sort_values("receita", ascending=False)
     total_revenue = max(float(grouped["receita"].sum()), 1)
-    headers = ["Loja", "Unidades vendidas", "Receita estimada", "Participação", "Estoque atual", "Capital em estoque"]
+    headers = ["Loja", "Unidades vendidas", "Faturamento", "Participação", "Estoque atual", "Capital em estoque"]
     data = [[_paragraph(h, styles["table_head"]) for h in headers]]
     for _, row in grouped.iterrows():
         share = float(row.receita) / total_revenue * 100
@@ -337,6 +337,40 @@ def _critical_table(df, styles, width, limit=20):
             ("FONTNAME", (5, 1), (5, -1), "Helvetica-Bold"),
         ]))
     return table, len(critical_rows)
+
+
+def _idle_stock_table(df, styles, width, limit=20):
+    rows = idle_stock(df, limit)
+    headers = ["#", "Produto", "Grupo", "Loja", "Estoque", "Custo un.", "Valor parado"]
+    head_right = ParagraphStyle("idle_head_right", parent=styles["table_head"], alignment=TA_RIGHT)
+    data = [[_paragraph(h, head_right if i >= 4 else styles["table_head"]) for i, h in enumerate(headers)]]
+    for position, (_, row) in enumerate(rows.iterrows(), start=1):
+        quantity = _safe_float(row.quantidade_estoque)
+        value = _safe_float(row.valor_estoque)
+        data.append([
+            str(position),
+            _paragraph(str(row.descricao), styles["table"]),
+            _paragraph(str(row.grupo), styles["table"]),
+            _paragraph(str(row.loja), styles["table"]),
+            br_number(quantity, 0),
+            brl(value / quantity if quantity else 0),
+            brl(value),
+        ])
+    widths = [22, width * .33, width * .2, width * .14, width * .08, width * .1, None]
+    widths[-1] = width - sum(widths[:-1])
+    table = _table(data, widths, paddings=5)
+    if len(data) > 1:
+        table.setStyle(TableStyle([
+            ("ALIGN", (4, 1), (-1, -1), "RIGHT"),
+            ("FONTSIZE", (0, 1), (0, -1), 7.2),
+            ("FONTSIZE", (4, 1), (-1, -1), 7.6),
+            ("TEXTCOLOR", (0, 1), (0, -1), MUTED),
+            ("TEXTCOLOR", (4, 1), (5, -1), INK),
+            ("FONTNAME", (4, 1), (4, -1), "Helvetica-Bold"),
+            ("TEXTCOLOR", (6, 1), (6, -1), GOLD),
+            ("FONTNAME", (6, 1), (6, -1), "Helvetica-Bold"),
+        ]))
+    return table, len(rows)
 
 
 def _audit_table(audit, styles, width):
@@ -434,7 +468,7 @@ def export_dashboard_pdf(path, df, period, loja, audit):
     stock_value = _safe_float(df["valor_estoque"].sum()) if not df.empty else 0
     rupture_count = int(df["ruptura"].sum()) if not df.empty else 0
     kpi_specs = [
-        ("Receita estimada", brl(total_sales), BLUE),
+        ("Faturamento", brl(total_sales), BLUE),
         ("Unidades vendidas", br_number(total_units, 0), TEAL),
         ("Estoque atual", br_number(stock_units, 0), CYAN),
         ("Capital em estoque", brl(stock_value), GOLD),
@@ -483,12 +517,12 @@ def export_dashboard_pdf(path, df, period, loja, audit):
 
     # Page 2 - store performance and the products that drove the period.
     story.extend([PageBreak(), _section_heading("Desempenho comercial", styles,
-                                                "Receita estimada pela regra de preço configurada no aplicativo."),
+                                                "Faturamento da planilha de vendas (coluna G)."),
                   _store_table(df, styles, content_width), Spacer(1, 16)])
     story.extend([PageBreak(), _section_heading("Produtos líderes", styles,
-                                  "Top 20 ordenados por unidades vendidas e faturamento estimado.")])
+                                  "Top 20 ordenados por unidades vendidas e faturamento.")])
     top = top_sold(df, 20) if not df.empty else df
-    headers = ["#", "Produto", "Loja", "Grupo", "Unidades", "Receita estimada", "Estoque"]
+    headers = ["#", "Produto", "Loja", "Grupo", "Unidades", "Faturamento", "Estoque"]
     data = [[_paragraph(h, styles["table_head"]) for h in headers]]
     for rank, (_, row) in enumerate(top.iterrows(), 1):
         data.append([
@@ -511,6 +545,19 @@ def export_dashboard_pdf(path, df, period, loja, audit):
     story.extend([critical, Spacer(1, 13)])
     if shown == 0:
         story.append(_paragraph("Nenhum produto está classificado como crítico, baixo ou sem estoque.", styles["body"]))
+
+    # Page 4 - capital parado: sem venda no período e muito estoque.
+    idle_all = df[(df.quantidade_estoque > 0) & (df.quantidade_vendida <= 0)]
+    story.extend([PageBreak(), _section_heading("Estoque parado", styles,
+                                                "Top 20 produtos sem venda no período, pela maior quantidade em estoque."),
+                  _paragraph(
+                      f"{br_number(len(idle_all), 0)} produtos não venderam nada no período e somam "
+                      f"{br_number(idle_all.quantidade_estoque.sum(), 0)} unidades e "
+                      f"{brl(idle_all.valor_estoque.sum())} parados em estoque (custo).", styles["muted"]
+                  ), Spacer(1, 5)])
+    idle_table, idle_shown = _idle_stock_table(df, styles, content_width)
+    story.append(idle_table if idle_shown else _paragraph(
+        "Nenhum produto com estoque ficou sem venda no período.", styles["body"]))
     unmatched_items = (audit or {}).get("vendas_sem_correspondencia_itens", [])
     story.extend([PageBreak(), _section_heading("Vendas sem correspondência no estoque", styles),
                   _paragraph(

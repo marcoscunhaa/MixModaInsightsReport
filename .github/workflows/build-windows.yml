@@ -1,0 +1,60 @@
+# Gera o MixModaInsights.exe num servidor Windows do GitHub.
+#
+# - A cada push: roda os testes, gera o .exe com o build.bat e deixa o arquivo
+#   para download na aba Actions (Artifacts) por 30 dias.
+# - Em tag de versão (ex.: v1.0): também publica o .exe numa Release.
+# - Também pode ser disparado à mão em Actions > Build Windows .exe > Run workflow.
+name: Build Windows .exe
+
+on:
+  push:
+    branches: ["main", "feature/**", "fix/**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # necessário só para publicar a Release nas tags
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      CI: "true"    # o build.bat não pausa esperando tecla
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Testes
+        shell: cmd
+        run: |
+          python -m pip install -r requirements.txt pytest
+          python -m pytest -q tests
+
+      - name: Gerar o executável
+        shell: cmd
+        run: build.bat
+
+      - name: Conferir o executável
+        shell: pwsh
+        run: |
+          $exe = Get-Item dist\MixModaInsights.exe
+          "{0} - {1:N1} MB" -f $exe.Name, ($exe.Length / 1MB)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MixModaInsights-exe
+          path: dist/MixModaInsights.exe
+          retention-days: 30
+
+      - name: Publicar na Release (somente tags v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/MixModaInsights.exe
+          generate_release_notes: true
