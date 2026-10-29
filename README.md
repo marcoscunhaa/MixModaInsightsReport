@@ -52,6 +52,7 @@ Execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 - Cada alteração é gravada na hora em `data/catalogo_produtos_estoque_geral.json`; a versão anterior fica em `catalogo_produtos_estoque_geral.json.bak`. Os totais do `meta` são recalculados.
 - A descrição de cada loja é preservada quando difere da descrição geral, porque o cruzamento com as vendas usa loja + código + descrição. Ao trocar a descrição geral, só as lojas que usavam a mesma descrição acompanham.
 - Códigos que viram o mesmo número sem os zeros à esquerda são bloqueados em produtos novos.
+- Ao abrir, o app valida o catálogo. Se o JSON estiver inválido (ex.: editado à mão), ele avisa o problema e oferece restaurar o `.bak` ou, no executável, o catálogo original embutido. O arquivo com problema é guardado como `catalogo_produtos_estoque_geral.corrompido-<data-hora>.json`.
 - No executável, o catálogo embutido é copiado na primeira execução para a pasta `data` ao lado do `.exe` (ou para a pasta de dados do usuário) e as edições vão para essa cópia. Um `.exe` novo com catálogo atualizado não sobrescreve essa cópia; para recomeçar do catálogo embutido, apague-a.
 
 ## Dashboard: estoque zerado ou negativo

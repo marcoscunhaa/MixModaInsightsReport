@@ -293,3 +293,81 @@ def editable_catalog_path(bundled_path, data_dir):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(bundled, target)
     return target
+
+
+# ---------- catálogo corrompido ----------
+
+class CatalogFileError(ValueError):
+    """O arquivo do catálogo não pode ser usado; a mensagem explica o motivo."""
+
+
+def check_catalog(path):
+    """Lê e valida a estrutura mínima do catálogo. Devolve o catálogo ou levanta CatalogFileError."""
+    path = Path(path)
+    try:
+        with open(path, encoding="utf-8") as f:
+            catalog = json.load(f)
+    except FileNotFoundError:
+        raise CatalogFileError(f"O arquivo {path.name} não foi encontrado.") from None
+    except json.JSONDecodeError as error:
+        raise CatalogFileError(
+            f"O arquivo {path.name} está com o formato JSON inválido "
+            f"(linha {error.lineno}, coluna {error.colno}: {error.msg})."
+        ) from None
+    except (OSError, UnicodeDecodeError) as error:
+        raise CatalogFileError(f"Não foi possível ler {path.name}: {error}") from None
+    if not isinstance(catalog, dict) or not isinstance(catalog.get("produtos"), list):
+        raise CatalogFileError(f"O arquivo {path.name} não tem a lista de produtos do catálogo.")
+    for index, product in enumerate(catalog["produtos"], start=1):
+        if (
+            not isinstance(product, dict)
+            or not str(product.get("codigo_barras", "")).strip()
+            or not isinstance(product.get("lojas"), list)
+        ):
+            raise CatalogFileError(
+                f"O produto nº {index} do arquivo {path.name} está incompleto "
+                "(sem código de barras ou sem a lista de lojas)."
+            )
+    return catalog
+
+
+def recovery_sources(path, bundled_path=None):
+    """Cópias válidas para restaurar, na ordem de preferência: backup e catálogo embutido."""
+    path = Path(path)
+    options = [("backup da última alteração", path.with_name(path.name + ".bak"))]
+    if bundled_path and Path(bundled_path).resolve() != path.resolve():
+        options.append(("catálogo original do aplicativo", Path(bundled_path)))
+    valid = []
+    for label, source in options:
+        try:
+            check_catalog(source)
+        except CatalogFileError:
+            continue
+        valid.append((label, source))
+    return valid
+
+
+def restore_catalog(path, source):
+    """Troca o catálogo inválido pela cópia `source`, guardando o arquivo inválido.
+
+    O arquivo com problema nunca é apagado: vira `<nome>.corrompido-<data-hora>.json`
+    na mesma pasta, para conferência. Devolve o caminho onde ele foi guardado.
+    """
+    from datetime import datetime
+
+    path = Path(path)
+    kept = None
+    if path.exists():
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        kept = path.with_name(f"{path.stem}.corrompido-{stamp}{path.suffix}")
+        shutil.copy2(path, kept)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".catalogo-", suffix=".json")
+    os.close(fd)
+    try:
+        shutil.copy2(source, tmp)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+    return kept
