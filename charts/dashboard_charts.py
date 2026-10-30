@@ -1,10 +1,6 @@
 from utils.formatting import brl, br_number
 from matplotlib.figure import Figure
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.patches import FancyBboxPatch
-from matplotlib import cm
-from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 
 NAVY="#14284B"; BLUE="#2854D9"; CYAN="#16B8C8"; TEAL="#0F9D8A"; GOLD="#F3B63F"; PINK="#E85D8A"; LIGHT="#EAF0FF"

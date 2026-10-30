@@ -27,7 +27,9 @@ Testes do catálogo: `python -m pip install pytest` e `python -m pytest tests`.
 ## EXE
 No Windows, execute `build.bat`. O resultado será `dist\MixModaInsights.exe`.
 
-Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflow `.github/workflows/build-windows.yml`). Ele roda os testes, executa o `build.bat` num servidor Windows e deixa o arquivo em **Actions → execução → Artifacts → MixModaInsights-exe** (por 30 dias). Ao criar uma tag `v*` (ex.: `v1.0`), o `.exe` também é publicado em **Releases**. Dá para disparar à mão em **Actions → Build Windows .exe → Run workflow**.
+Para o app abrir mais rápido, gere a **versão em pasta**: `build.bat pasta` cria `dist\MixModaInsights\` com o `MixModaInsights.exe` dentro. O arquivo único (`build.bat`) precisa extrair ~200 MB para a pasta temporária a cada abertura, o que leva vários segundos (mais em notebooks com HD ou antivírus ativo); a versão em pasta pula essa etapa. Distribua a pasta inteira (o CI gera o `MixModaInsights-pasta.zip`). As duas versões mostram uma tela de abertura enquanto carregam.
+
+Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflow `.github/workflows/build-windows.yml`). Ele roda os testes, executa o `build.bat` num servidor Windows e deixa os arquivos em **Actions → execução → Artifacts**: **MixModaInsights-pasta** (recomendado) e **MixModaInsights-exe** (por 30 dias). Ao criar uma tag `v*` (ex.: `v1.0`), o `.exe` também é publicado em **Releases**. Dá para disparar à mão em **Actions → Build Windows .exe → Run workflow**.
 
 ## Regras comerciais e classificação atualizadas
 - Produtos vendidos no período usam os preços da planilha de vendas: **preço de compra = coluna D**, **preço de venda = coluna F** e **faturamento = soma da coluna G**. Quando o mesmo produto aparece em várias linhas com preços diferentes, o faturamento é somado e o preço vira a média ponderada pela quantidade.

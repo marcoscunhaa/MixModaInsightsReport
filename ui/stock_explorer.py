@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from core import catalog_editor as ce
 from core.stores import STORES
-from ui.dashboard_page import ExplorerCard, _stable_color
+from ui.explorer_cards import ExplorerCard, _stable_color
 from ui.window_chrome import confirm_action, install_mac_window_chrome, show_message
 from utils.formatting import br_number
 from utils.normalization import normalize_barcode, normalize_text

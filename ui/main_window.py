@@ -1,7 +1,6 @@
 from pathlib import Path
 import traceback
 
-import pandas as pd
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -12,14 +11,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.catalog_store import load_catalog, load_classification_from_catalog
-from core.loader import load_stock, load_sales
-from core.matcher import build_analysis, load_classification
+from core.catalog_store import classification_payload, load_catalog
 from core.models import AnalysisConfig
 from core.stock_alerts import StockAlertStore
 from ui.analysis_page import AnalysisPage
-from ui.dashboard_page import DashboardPage
-from ui.stock_alerts import StockAlertRulesDialog
 from ui.stock_explorer import StockExplorerPage
 from ui.widgets import FeatureCard
 from core.stores import STORES
@@ -37,7 +32,7 @@ class MainWindow(QMainWindow):
 
         self.catalog_path = catalog_path
         self.catalog = load_catalog(catalog_path)
-        self.classification = load_classification_from_catalog(self.catalog, load_classification)
+        self.classification = classification_payload(self.catalog)
 
         data_dir = Path(user_data_dir) if user_data_dir else Path(catalog_path).resolve().parent
         self.alert_store = StockAlertStore(
@@ -165,11 +160,12 @@ class MainWindow(QMainWindow):
 
     def catalog_changed(self):
         """O catálogo foi editado: a classificação usada nas próximas análises é refeita."""
-        self.classification = load_classification_from_catalog(self.catalog, load_classification)
+        self.classification = classification_payload(self.catalog)
         self.refresh_footer()
 
     def open_stock_alerts(self):
         try:
+            from ui.stock_alerts import StockAlertRulesDialog  # rapidfuzz/openpyxl só quando abre
             dialog = StockAlertRulesDialog(self.catalog, self.alert_store, self)
             dialog.exec()
             self.refresh_alerts_tag()
@@ -185,6 +181,12 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.home)
 
     def generate(self, info):
+        # Módulos pesados (pandas, gráficos, PDF) só são carregados aqui, para a
+        # tela inicial abrir rápido. O app.py já os pré-carrega em segundo plano.
+        import pandas as pd
+        from core.loader import load_stock, load_sales
+        from core.matcher import build_analysis
+        from ui.dashboard_page import DashboardPage
         try:
             frames = []
             audits = []
