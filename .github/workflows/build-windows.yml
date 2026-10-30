@@ -36,7 +36,19 @@ jobs:
           python -m pip install -r requirements.txt pytest
           python -m pytest -q tests
 
-      - name: Gerar o executável
+      # Versão em pasta: abre bem mais rápido (não extrai tudo a cada abertura).
+      - name: Gerar versão em pasta (recomendada)
+        shell: cmd
+        run: build.bat pasta
+
+      - name: Compactar versão em pasta
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\MixModaInsights -DestinationPath MixModaInsights-pasta.zip
+          "{0:N1} MB" -f ((Get-Item MixModaInsights-pasta.zip).Length / 1MB)
+
+      # Versão arquivo único: um só .exe, mas abre mais devagar.
+      - name: Gerar executável único
         shell: cmd
         run: build.bat
 
@@ -48,6 +60,12 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          name: MixModaInsights-pasta
+          path: MixModaInsights-pasta.zip
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
           name: MixModaInsights-exe
           path: dist/MixModaInsights.exe
           retention-days: 30
@@ -56,5 +74,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/MixModaInsights.exe
+          files: |
+            dist/MixModaInsights.exe
+            MixModaInsights-pasta.zip
           generate_release_notes: true

@@ -1,4 +1,5 @@
 import sys
+import threading
 from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths
@@ -44,6 +45,7 @@ def ensure_valid_catalog(catalog_path, bundled_path):
         return True
     except CatalogFileError as error:
         problem = str(error)
+    close_splash()  # a tela de abertura ficaria por cima das mensagens
     sources = recovery_sources(catalog_path, bundled_path)
     if not sources:
         show_message(
@@ -73,6 +75,37 @@ def ensure_valid_catalog(catalog_path, bundled_path):
     return True
 
 
+def preload_heavy_modules():
+    """Carrega pandas, gráficos e PDF em segundo plano enquanto a tela inicial já está aberta.
+
+    Só módulos sem janelas Qt: importar não cria widgets, então é seguro fora da
+    thread principal. Se o usuário gerar a análise antes de terminar, o Python
+    espera o carregamento em andamento em vez de repetir.
+    """
+    def work():
+        try:
+            import pandas  # noqa: F401
+            import core.loader  # noqa: F401
+            import core.matcher  # noqa: F401
+            import core.analyzer  # noqa: F401
+            import matplotlib.figure  # noqa: F401
+            import reportlab.platypus  # noqa: F401
+            import openpyxl  # noqa: F401
+            import rapidfuzz  # noqa: F401
+        except Exception:
+            pass  # sem pré-carga o app só fica mais lento na primeira análise
+    threading.Thread(target=work, name="preload", daemon=True).start()
+
+
+def close_splash():
+    """Fecha a tela de abertura do executável (não existe ao rodar pelo código-fonte)."""
+    try:
+        import pyi_splash
+        pyi_splash.close()
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setOrganizationName("Mix Moda")
@@ -86,4 +119,6 @@ if __name__ == "__main__":
         sys.exit(1)
     window = MainWindow(catalog_path, data_dir)
     window.show()
+    close_splash()
+    preload_heavy_modules()
     sys.exit(app.exec())
