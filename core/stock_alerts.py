@@ -82,9 +82,9 @@ class StockAlertStore:
         store = str(rule.get("loja", "*")).strip() or "*"
         minimum = int(rule.get("estoque_minimo", 0))
         if not barcode or not description:
-            raise ValueError("A regra precisa de produto e código de barras.")
+            raise ValueError("The rule needs a product and a barcode.")
         if minimum < 0:
-            raise ValueError("O limite de estoque precisa ser igual ou maior que zero.")
+            raise ValueError("The stock limit must be zero or greater.")
 
         rules = self.load_rules()
         identity = (barcode, normalize_text(description), normalize_text(store))
@@ -168,7 +168,7 @@ class StockAlertStore:
         snapshot = self.load_snapshot() if rows is None else {"rows": rows}
         stock_rows = snapshot.get("rows", [])
 
-        # Regra de loja específica tem prioridade sobre a de "todas as lojas".
+        # A store-specific rule takes priority over an "all stores" rule.
         specific = {
             (normalize_barcode(rule.get("codigo_barras")), normalize_text(rule.get("loja")))
             for rule in rules
@@ -187,9 +187,10 @@ class StockAlertStore:
             except (TypeError, ValueError):
                 continue
 
-            # O produto é encontrado pelo código. A descrição só desempata quando,
-            # na mesma loja, o código aparece com mais de uma descrição; assim a
-            # regra continua valendo se a loja usa outra descrição que o catálogo.
+            # The product is found by barcode. The description only breaks ties when,
+            # in the same store, the barcode appears with more than one description;
+            # this way the rule still applies if the store uses a different
+            # description than the catalog.
             candidates = {}
             for stock in rows_by_code.get(rule_code, []):
                 candidates.setdefault(normalize_text(stock.get("loja", "")), []).append(stock)

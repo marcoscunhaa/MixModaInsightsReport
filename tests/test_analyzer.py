@@ -10,16 +10,16 @@ def frame():
         "grupo": ["G1", "G1", "G2", "G2"],
         "subclasse": ["S", "S", "S", "S"],
         "loja": ["Pedras", "Pedras", "Palmeiras", "Pedras"],
-        "status_estoque": ["SEM ESTOQUE", "CRÍTICO", "NORMAL", "CRÍTICO"],
+        "status_estoque": ["OUT OF STOCK", "CRITICAL", "NORMAL", "CRITICAL"],
         "quantidade_estoque": [0, -3, 5, 1],
     })
 
 
 def test_status_filters_zero_and_negative():
     df = frame()
-    df["status_estoque"] = ["SEM ESTOQUE", "NEGATIVO", "NORMAL", "CRÍTICO"]
-    assert list(filter_analysis(df, status="NEGATIVO").descricao) == ["B"]
-    assert list(filter_analysis(df, status="SEM ESTOQUE").descricao) == ["A"]
+    df["status_estoque"] = ["OUT OF STOCK", "NEGATIVE", "NORMAL", "CRITICAL"]
+    assert list(filter_analysis(df, status="NEGATIVE").descricao) == ["B"]
+    assert list(filter_analysis(df, status="OUT OF STOCK").descricao) == ["A"]
 
 
 def test_filter_off_keeps_everything():
@@ -44,13 +44,13 @@ def one(stock, sold, status):
 
 def test_single_product_labels():
     from core.analyzer import single_product_labels
-    assert single_product_labels(one(0, 46, "SEM ESTOQUE")) == {
-        "Produtos ativos": "1 PRODUTO", "Sem vendas": "COM VENDAS",
-        "Em ruptura": "SEM ESTOQUE", "Críticos": "SEM ESTOQUE",
+    assert single_product_labels(one(0, 46, "OUT OF STOCK")) == {
+        "Active products": "1 PRODUCT", "No sales": "HAS SALES",
+        "Stockouts": "OUT OF STOCK", "Critical": "OUT OF STOCK",
     }
-    labels = single_product_labels(one(-2, 0, "NEGATIVO"))
-    assert (labels["Em ruptura"], labels["Sem vendas"]) == ("ESTOQUE NEGATIVO", "SEM VENDAS")
-    assert single_product_labels(one(8, 3, "NORMAL"))["Em ruptura"] == "COM ESTOQUE"
+    labels = single_product_labels(one(-2, 0, "NEGATIVE"))
+    assert (labels["Stockouts"], labels["No sales"]) == ("NEGATIVE STOCK", "NO SALES")
+    assert single_product_labels(one(8, 3, "NORMAL"))["Stockouts"] == "IN STOCK"
     assert single_product_labels(pd.concat([one(1, 1, "X"), one(2, 2, "Y")])) == {}
 
 
@@ -59,7 +59,7 @@ def test_stock_by_store_pivots_units_per_store():
     df = pd.DataFrame({
         "codigo_barras": ["1", "1", "1", "2", "2"],
         "descricao": ["CAMISA BRANCA G", "CAMISA BRANCA G", "CAMISA BCA G", "CAMISA BRANCA M", "CAMISA BRANCA M"],
-        "grupo": ["PRESIDIO"] * 5, "subclasse": ["CAMISA BRANCA"] * 5,
+        "grupo": ["PRISON SUPPLIES"] * 5, "subclasse": ["WHITE T-SHIRT"] * 5,
         "loja": ["Sapiranga", "Pedras", "Palmeiras", "Sapiranga", "Pedras"],
         "quantidade_estoque": [5, 0, 3, -1, 4],
     })
@@ -68,5 +68,5 @@ def test_stock_by_store_pivots_units_per_store():
     first = table.iloc[0]
     assert (first.descricao, first.Palmeiras, first.Pedras, first.Sapiranga, first.total) == ("CAMISA BRANCA G", 3, 0, 5, 8)
     second = table.iloc[1]
-    assert pd.isna(second.Palmeiras) and second.total == 3          # não existe em Palmeiras ≠ zero
+    assert pd.isna(second.Palmeiras) and second.total == 3          # missing in Palmeiras ≠ zero
     assert totals == {"Palmeiras": 3, "Pedras": 4, "Sapiranga": 4}

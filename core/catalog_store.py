@@ -1,8 +1,8 @@
-"""Acesso ao JSON único do catálogo (catalogo_produtos_estoque_geral.json).
+"""Access to the single catalog JSON (catalogo_produtos_estoque_geral.json).
 
-O arquivo guarda, dentro de cada produto -> lojas[], tanto os dados do catálogo
-quanto os campos que antes ficavam no JSON de classificação
-(`codigo_barras` da loja e `descricao_norm`).
+Inside each product -> lojas[] (stores), the file keeps both the catalog data and
+the fields that used to live in a separate classification JSON
+(the store's `codigo_barras` and `descricao_norm`).
 """
 import json
 import os
@@ -16,7 +16,7 @@ def load_catalog(path):
 
 
 def classification_payload(catalog):
-    """Reconstrói, em memória, o conteúdo do antigo estoque_geral_classificacao.json."""
+    """Rebuild, in memory, the content of the old estoque_geral_classificacao.json."""
     registros = [
         {
             "loja": l["loja"],
@@ -35,10 +35,10 @@ def classification_payload(catalog):
 
 
 def load_classification_from_catalog(catalog, loader):
-    """Chama o `load_classification(path)` já existente, sem precisar do 2º arquivo.
+    """Call the existing `load_classification(path)` without needing a second file.
 
-    `loader` é a função load_classification de core.matcher. Ela continua lendo um
-    caminho; aqui o conteúdo é gerado a partir do catálogo e removido em seguida.
+    `loader` is core.matcher.load_classification. It still reads a path; here the
+    content is generated from the catalog and deleted right afterwards.
     """
     with tempfile.TemporaryDirectory() as tmp:
         p = Path(tmp) / "classificacao.json"

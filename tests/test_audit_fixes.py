@@ -1,4 +1,4 @@
-"""Regressões encontradas na varredura de bugs."""
+"""Regressions found during the bug sweep."""
 import pandas as pd
 import pytest
 
@@ -20,7 +20,7 @@ def snapshot(store, rows):
 
 
 def test_alert_fires_when_store_uses_other_description(store):
-    # Catálogo: "FRIGIDEIRA GAMMA 24CM"; planilha de Sapiranga: "FRIGIDEIRA CERAMICA 24CM".
+    # Catalog: "FRIGIDEIRA GAMMA 24CM"; Sapiranga spreadsheet: "FRIGIDEIRA CERAMICA 24CM".
     store.upsert_rule({"codigo_barras": "789000111", "descricao": "FRIGIDEIRA GAMMA 24CM", "loja": "*", "estoque_minimo": 3})
     snapshot(store, [("789000111", "FRIGIDEIRA CERAMICA 24CM", "Sapiranga", 2)])
     alerts = store.evaluate()
@@ -45,11 +45,11 @@ def raw_sheet(column_c):
 
 
 def test_swapped_files_are_rejected(monkeypatch):
-    monkeypatch.setattr(loader, "read_raw", lambda path: raw_sheet([3.0] * 10))   # vendas
-    with pytest.raises(ValueError, match="VENDAS"):
+    monkeypatch.setattr(loader, "read_raw", lambda path: raw_sheet([3.0] * 10))   # sales
+    with pytest.raises(ValueError, match="SALES"):
         loader.load_stock("vendas.xls")
-    monkeypatch.setattr(loader, "read_raw", lambda path: raw_sheet(["UN"] * 10))  # estoque
-    with pytest.raises(ValueError, match="ESTOQUE"):
+    monkeypatch.setattr(loader, "read_raw", lambda path: raw_sheet(["UN"] * 10))  # stock
+    with pytest.raises(ValueError, match="STOCK"):
         loader.load_sales("estoque.xls")
 
 

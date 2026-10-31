@@ -1,6 +1,13 @@
 from utils.normalization import normalize_barcode, normalize_text
 
+
 def is_produto_ignorado(descricao, codigo_barras=None):
+    """Rows the source system marks as non-products.
+
+    The spreadsheets come from a Brazilian POS, so the markers are in Portuguese:
+    "CODIGO DESATIVADO" (disabled code) and "PECA" (loose part). Legacy 3–4 digit
+    codes are internal shortcuts, not real products.
+    """
     s=normalize_text(descricao)
     codigo = normalize_barcode(codigo_barras)
     return (

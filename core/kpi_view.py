@@ -1,42 +1,44 @@
-"""O que os cards de KPI e as pílulas de status do dashboard mostram.
+"""What the dashboard's KPI cards and status pills show.
 
-Fica fora da interface para poder ser testado: cada KPI tem nome claro, valor,
-uma frase explicando o número e um tom (bom, alerta, ruim) que define a cor.
+Kept outside the UI so it can be tested: each KPI has a clear name, a value,
+a sentence explaining the number and a tone (good, warn, bad) that sets the color.
 """
 from core.analyzer import kpis, rupture, single_product_labels
 from core.models import AnalysisConfig
-from utils.formatting import brl, br_number
+from utils.formatting import fmt_money, fmt_number
 
 CRITICAL = AnalysisConfig.estoque_critico
 LOW = AnalysisConfig.estoque_baixo
 EXCESS = AnalysisConfig.excesso_cobertura
 
-# (valor do status, rótulo, emoji, cor, explicação)
+ALL_STATUSES = "All statuses"
+
+# (status value, label, emoji, color, explanation)
 STATUS_OPTIONS = [
-    ("Todos os status", "Todos", "🗂️", "#2854D9", "Todos os produtos da seleção."),
-    ("NEGATIVO", "Negativo", "🔻", "#7F1D1D", "Estoque abaixo de zero: venda registrada sem entrada no sistema."),
-    ("SEM ESTOQUE", "Sem estoque", "⛔", "#D9284B", "Estoque igual a zero."),
-    ("CRÍTICO", "Crítico", "⚠️", "#E8590C", f"Até {br_number(CRITICAL, 0)} unidade em estoque."),
-    ("BAIXO", "Baixo", "🟡", "#B77900", f"Até {br_number(LOW, 0)} unidades em estoque."),
-    ("SEM VENDA", "Sem venda", "💤", "#5F6D82", "Tem estoque, mas não vendeu nada no período."),
-    ("EXCESSO", "Excesso", "📦", "#4C5BD4",
-     f"Estoque para {br_number(EXCESS, 0)} vezes ou mais as vendas do período."),
-    ("NORMAL", "Normal", "✅", "#087F6A", "Estoque saudável para o ritmo de vendas."),
+    (ALL_STATUSES, "All", "🗂️", "#2854D9", "Every product in the selection."),
+    ("NEGATIVE", "Negative", "🔻", "#7F1D1D", "Stock below zero: a sale was recorded without a stock receipt."),
+    ("OUT OF STOCK", "Out of stock", "⛔", "#D9284B", "Stock equal to zero."),
+    ("CRITICAL", "Critical", "⚠️", "#E8590C", f"Up to {fmt_number(CRITICAL, 0)} unit in stock."),
+    ("LOW", "Low", "🟡", "#B77900", f"Up to {fmt_number(LOW, 0)} units in stock."),
+    ("NO SALES", "No sales", "💤", "#5F6D82", "Has stock, but sold nothing in the period."),
+    ("EXCESS", "Excess", "📦", "#4C5BD4",
+     f"Stock covers {fmt_number(EXCESS, 0)} times the period's sales or more."),
+    ("NORMAL", "Normal", "✅", "#087F6A", "Healthy stock for the sales pace."),
 ]
 
 
 def status_counts(df):
     counts = df.status_estoque.value_counts().to_dict() if len(df) else {}
-    counts["Todos os status"] = len(df)
+    counts[ALL_STATUSES] = len(df)
     return counts
 
 
 def _pct(part, whole):
-    return f"{part / whole * 100:.0f}%".replace(".", ",") if whole else "0%"
+    return f"{part / whole * 100:.0f}%" if whole else "0%"
 
 
 def kpi_cards(d):
-    """Lista de cards na ordem de exibição (duas linhas de cinco)."""
+    """Cards in display order (two rows of five)."""
     kp = kpis(d)
     total = len(d)
     in_stock = int((d.quantidade_estoque > 0).sum()) if total else 0
@@ -44,63 +46,63 @@ def kpi_cards(d):
     stores = d.loja.dropna().unique() if total and "loja" in d else []
     if len(stores) > 1:
         units_hint = " · ".join(
-            f"{store} {br_number(d.loc[d.loja == store, 'quantidade_estoque'].sum(), 0)}"
+            f"{store} {fmt_number(d.loc[d.loja == store, 'quantidade_estoque'].sum(), 0)}"
             for store in sorted(stores, key=str)
         )
     else:
-        units_hint = f"em {br_number(in_stock, 0)} produtos com estoque"
-    unsold = int(kp["Produtos sem vendas"])
-    rupture = int(kp["Produtos em ruptura"])
-    critical = int(kp["Produtos críticos"])
+        units_hint = f"across {fmt_number(in_stock, 0)} products in stock"
+    unsold = int(kp["Products without sales"])
+    rupture = int(kp["Stockout products"])
+    critical = int(kp["Critical products"])
 
     def card(key, label, emoji, accent, value, hint, tone="neutral", clickable=False):
         return {"key": key, "label": label, "emoji": emoji, "accent": accent, "value": value,
                 "hint": hint, "tone": tone, "clickable": clickable}
 
     cards = [
-        # Linha 1: dinheiro e volume
-        card("Valor em estoque", "Valor em estoque", "💰", "#2854D9", brl(kp["Valor em estoque"]),
-             f"custo das {br_number(kp['Unidades em estoque'], 0)} un. em estoque", clickable=True),
-        card("Faturamento estimado", "Faturamento", "💵", "#0F9D8A", brl(kp["Faturamento estimado"]),
-             "soma das vendas do período", clickable=True),
-        card("Margem potencial", "Margem potencial", "📈", "#0F9D8A", brl(kp["Margem potencial"]),
-             "lucro se o estoque atual for vendido"),
-        card("Unidades em estoque", "Unidades em estoque", "📦", "#16B8C8", br_number(kp["Unidades em estoque"], 0),
+        # Row 1: money and volume
+        card("Stock value", "Stock value", "💰", "#2854D9", fmt_money(kp["Stock value"]),
+             f"cost of the {fmt_number(kp['Units in stock'], 0)} units in stock", clickable=True),
+        card("Estimated revenue", "Revenue", "💵", "#0F9D8A", fmt_money(kp["Estimated revenue"]),
+             "total sales in the period", clickable=True),
+        card("Potential margin", "Potential margin", "📈", "#0F9D8A", fmt_money(kp["Potential margin"]),
+             "profit if the current stock is sold"),
+        card("Units in stock", "Units in stock", "📦", "#16B8C8", fmt_number(kp["Units in stock"], 0),
              units_hint, clickable=True),
-        card("Unidades vendidas", "Unidades vendidas", "🛒", "#16B8C8", br_number(kp["Unidades vendidas"], 0),
-             f"{br_number(sold, 0)} produtos venderam no período", clickable=True),
-        # Linha 2: saúde do estoque
-        card("Produtos ativos", "Produtos analisados", "🏷️", "#7C6FE6", br_number(total, 0),
-             "na seleção atual"),
-        card("Sem vendas", "Sem vendas", "💤", "#E85D8A", br_number(unsold, 0),
-             f"{_pct(unsold, total)} dos produtos não venderam" if unsold else "✓ todos venderam no período",
+        card("Units sold", "Units sold", "🛒", "#16B8C8", fmt_number(kp["Units sold"], 0),
+             f"{fmt_number(sold, 0)} products sold in the period", clickable=True),
+        # Row 2: stock health
+        card("Active products", "Products analyzed", "🏷️", "#7C6FE6", fmt_number(total, 0),
+             "in the current selection"),
+        card("No sales", "No sales", "💤", "#E85D8A", fmt_number(unsold, 0),
+             f"{_pct(unsold, total)} of products did not sell" if unsold else "✓ every product sold in the period",
              "warn" if unsold else "good", clickable=True),
-        card("Em ruptura", "Em ruptura", "🚫", "#D9284B", br_number(rupture, 0),
-             "venderam e estão sem estoque" if rupture else "✓ nenhum produto em ruptura",
+        card("Stockouts", "Stockouts", "🚫", "#D9284B", fmt_number(rupture, 0),
+             "sold and are now out of stock" if rupture else "✓ no products out of stock",
              "bad" if rupture else "good", clickable=True),
-        card("Críticos", "Estoque crítico", "⚠️", "#E8590C", br_number(critical, 0),
-             f"com até {br_number(CRITICAL, 0)} un. em estoque" if critical else "✓ nenhum produto crítico",
+        card("Critical", "Critical stock", "⚠️", "#E8590C", fmt_number(critical, 0),
+             f"with up to {fmt_number(CRITICAL, 0)} unit in stock" if critical else "✓ no critical products",
              "bad" if critical else "good", clickable=True),
-        card("Giro médio do período", "Giro do período", "🔄", "#2854D9", f"{kp['Giro médio']:.1f}%".replace(".", ","),
-             "vendas ÷ (vendas + estoque)"),
+        card("Period sell-through", "Sell-through", "🔄", "#2854D9", f"{kp['Average sell-through']:.1f}%",
+             "sales ÷ (sales + stock)"),
     ]
 
-    # Produto isolado: contagens 0/1 confundem, então esses KPIs viram texto.
+    # Single product: 0/1 counts are confusing, so these KPIs become text.
     labels = single_product_labels(d)
     if labels:
         row = d.iloc[0]
         hints = {
-            "Produtos ativos": "produto isolado pelos filtros",
-            "Sem vendas": "no período selecionado",
-            "Em ruptura": "situação do estoque deste produto",
-            "Críticos": "status do estoque deste produto",
+            "Active products": "product isolated by the filters",
+            "No sales": "in the selected period",
+            "Stockouts": "stock situation of this product",
+            "Critical": "stock status of this product",
         }
         tones = {
-            "Produtos ativos": "neutral",
-            "Sem vendas": "bad" if row.quantidade_vendida <= 0 else "good",
-            "Em ruptura": "good" if row.quantidade_estoque > 0 else "bad",
-            "Críticos": ("good" if row.status_estoque in ("NORMAL", "EXCESSO") else
-                         "bad" if row.status_estoque in ("NEGATIVO", "SEM ESTOQUE", "CRÍTICO") else "warn"),
+            "Active products": "neutral",
+            "No sales": "bad" if row.quantidade_vendida <= 0 else "good",
+            "Stockouts": "good" if row.quantidade_estoque > 0 else "bad",
+            "Critical": ("good" if row.status_estoque in ("NORMAL", "EXCESS") else
+                         "bad" if row.status_estoque in ("NEGATIVE", "OUT OF STOCK", "CRITICAL") else "warn"),
         }
         for item in cards:
             if item["key"] in labels:
@@ -108,43 +110,43 @@ def kpi_cards(d):
     return cards
 
 
-def store_list_view(key, d, status="Todos os status"):
-    """O que a lista "por loja" de cada KPI mostra.
+def store_list_view(key, d, status=ALL_STATUSES):
+    """What each KPI's "by store" list shows.
 
-    Devolve {title, emoji, rows, value, kind, ascending, note} ou None se o KPI não
-    tem lista. `kind`: "money" (R$), "stock" (destaca zerado/negativo) ou "units".
+    Returns {title, emoji, rows, value, kind, ascending, note}, or None if the KPI
+    has no list. `kind`: "money", "stock" (highlights zero/negative) or "units".
     """
-    zero_or_negative = status in ("SEM ESTOQUE", "NEGATIVO")
+    zero_or_negative = status in ("OUT OF STOCK", "NEGATIVE")
     views = {
-        "Valor em estoque": (
-            dict(title=f"Valor em estoque • {'Negativos' if status == 'NEGATIVO' else 'Sem estoque'}",
+        "Stock value": (
+            dict(title=f"Stock value • {'Negative' if status == 'NEGATIVE' else 'Out of stock'}",
                  emoji="💰", rows=d, value="quantidade_estoque", kind="stock", ascending=True,
-                 note="Unidades em estoque de cada loja (zerados e negativos).")
+                 note="Units in stock at each store (zero and negative).")
             if zero_or_negative else
-            dict(title="Valor em estoque por loja", emoji="💰", rows=d[d.quantidade_estoque > 0],
+            dict(title="Stock value by store", emoji="💰", rows=d[d.quantidade_estoque > 0],
                  value="valor_estoque", kind="money", ascending=False,
-                 note="Custo do estoque de cada produto em cada loja.")
+                 note="Stock cost of each product at each store.")
         ),
-        "Faturamento estimado": dict(
-            title="Faturamento por loja", emoji="💵", rows=d[d.valor_vendido > 0], value="valor_vendido",
-            kind="money", ascending=False, note="Valor vendido de cada produto no período em cada loja (coluna G)."),
-        "Unidades em estoque": dict(
-            title="Estoque por loja", emoji="📦", rows=d, value="quantidade_estoque", kind="stock",
-            ascending=False, note="Unidades em estoque de cada produto em cada loja."),
-        "Unidades vendidas": dict(
-            title="Vendas por loja", emoji="🛒", rows=d[d.quantidade_vendida > 0], value="quantidade_vendida",
-            kind="units", ascending=False, note="Unidades vendidas no período em cada loja."),
-        "Sem vendas": dict(
-            title="Sem vendas • estoque parado por loja", emoji="💤", rows=d[d.produto_sem_venda],
+        "Estimated revenue": dict(
+            title="Revenue by store", emoji="💵", rows=d[d.valor_vendido > 0], value="valor_vendido",
+            kind="money", ascending=False, note="Sales value of each product in the period at each store (column G)."),
+        "Units in stock": dict(
+            title="Stock by store", emoji="📦", rows=d, value="quantidade_estoque", kind="stock",
+            ascending=False, note="Units in stock of each product at each store."),
+        "Units sold": dict(
+            title="Sales by store", emoji="🛒", rows=d[d.quantidade_vendida > 0], value="quantidade_vendida",
+            kind="units", ascending=False, note="Units sold in the period at each store."),
+        "No sales": dict(
+            title="No sales • idle stock by store", emoji="💤", rows=d[d.produto_sem_venda],
             value="quantidade_estoque", kind="stock", ascending=False,
-            note="Unidades em estoque dos produtos que não venderam nada no período naquela loja."),
-        "Em ruptura": dict(
-            title="Em ruptura • vendas por loja", emoji="🚫", rows=rupture(d), value="quantidade_vendida",
+            note="Units in stock of products that sold nothing in the period at that store."),
+        "Stockouts": dict(
+            title="Stockouts • sales by store", emoji="🚫", rows=rupture(d), value="quantidade_vendida",
             kind="units", ascending=False,
-            note="Quanto cada loja vendeu do produto no período antes de ficar sem estoque."),
-        "Críticos": dict(
-            title="Estoque crítico por loja", emoji="⚠️", rows=d[d.status_estoque == "CRÍTICO"],
+            note="How much each store sold of the product in the period before running out."),
+        "Critical": dict(
+            title="Critical stock by store", emoji="⚠️", rows=d[d.status_estoque == "CRITICAL"],
             value="quantidade_estoque", kind="stock", ascending=True,
-            note=f"Unidades em estoque dos produtos com até {br_number(CRITICAL, 0)} un. naquela loja."),
+            note=f"Units in stock of products with up to {fmt_number(CRITICAL, 0)} unit at that store."),
     }
     return views.get(key)

@@ -10,9 +10,9 @@ from utils.normalization import to_number
 
 
 @pytest.mark.parametrize("value, expected", [
-    (datetime(1900, 1, 24, 23, 45, 36), 24.99),   # 24,99 com formato h:mm
-    (time(12, 0), 0.5),                          # 0,5 vira só hora
-    (datetime(1900, 2, 3), 34.0),                # quantidade 34
+    (datetime(1900, 1, 24, 23, 45, 36), 24.99),   # 24.99 formatted as h:mm
+    (time(12, 0), 0.5),                          # 0.5 becomes just a time
+    (datetime(1900, 2, 3), 34.0),                # quantity 34
     (datetime(1937, 10, 12, 18, 14, 24), 13800.76),
     (pd.Timestamp("1900-01-15"), 15.0),
     ("1.234,56", 1234.56),
@@ -23,7 +23,7 @@ def test_to_number_undoes_date_formatting(value, expected):
 
 
 def sales_frame(rows):
-    """Linhas no layout da planilha: A código, B descrição, C qtd, D compra, E custo, F venda, G faturamento, H lucro."""
+    """Rows in the spreadsheet layout: A barcode, B description, C qty, D purchase, E cost, F sale, G revenue, H profit."""
     raw = pd.DataFrame([
         [code, desc, qty, buy, qty * buy, sell, revenue, revenue - qty * buy]
         for code, desc, qty, buy, sell, revenue in rows
@@ -44,23 +44,23 @@ def analyze(stock, sales):
 def test_prices_and_revenue_come_from_sales_sheet():
     sales = sales_frame([
         ("7896722660389", "SQUISHY FIDGET", 34, 15.0, 24.99, 849.66),
-        ("7896722660389", "SQUISHY FIDGET", 12, 15.0, 29.99, 359.88),  # mesmo produto, outro preço
+        ("7896722660389", "SQUISHY FIDGET", 12, 15.0, 29.99, 359.88),  # same product, another price
         ("7896717230006", "CHINELO ADULTO FEM DE 25", 13, 12.5, 24.99, 324.87),
     ])
     stock = stock_frame([
         ("7896722660389", "SQUISHY FIDGET", 5, 14.0, 29.99),
         ("7896717230006", "CHINELO ADULTO FEM DE 25", 2, 12.5, 26.99),
         ("7890000000001", "PRODUTO SEM VENDA", 3, 10.0, 0),
-        ("7908871903563", "TACA DE 363ML 3PCS", 4, 14.99, 29.99),          # caso real de Sapiranga
+        ("7908871903563", "TACA DE 363ML 3PCS", 4, 14.99, 29.99),          # real case from Sapiranga
     ])
     frame = analyze(stock, sales)
 
     squishy = frame.loc["SQUISHY FIDGET"]
     assert squishy.quantidade_vendida == 46
-    assert squishy.valor_vendido == pytest.approx(849.66 + 359.88)          # soma da coluna G
-    assert squishy.preco_venda == pytest.approx((849.66 + 359.88) / 46)     # média ponderada da F
-    assert squishy.preco_compra == pytest.approx(15.0)                      # coluna D
-    assert squishy.valor_estoque == pytest.approx(5 * 14.0)                 # custo do estoque
+    assert squishy.valor_vendido == pytest.approx(849.66 + 359.88)          # sum of column G
+    assert squishy.preco_venda == pytest.approx((849.66 + 359.88) / 46)     # weighted average of F
+    assert squishy.preco_compra == pytest.approx(15.0)                      # column D
+    assert squishy.valor_estoque == pytest.approx(5 * 14.0)                 # stock cost
     assert squishy.margem_unitaria == pytest.approx(squishy.preco_venda - 15.0)
 
     assert squishy.precos_venda == [
@@ -68,19 +68,19 @@ def test_prices_and_revenue_come_from_sales_sheet():
         {"preco_venda": 24.99, "quantidade": 34.0, "faturamento": pytest.approx(849.66)},
     ]
 
-    assert squishy.preco_venda_atual == pytest.approx(29.99)                 # coluna F do estoque
+    assert squishy.preco_venda_atual == pytest.approx(29.99)                 # stock column F
 
     chinelo = frame.loc["CHINELO ADULTO FEM DE 25"]
     assert len(chinelo.precos_venda) == 1
-    assert pd.isna(chinelo.preco_venda_atual)                               # um preço só: nada muda
+    assert pd.isna(chinelo.preco_venda_atual)                               # single price: nothing changes
     assert (chinelo.preco_compra, chinelo.preco_venda, chinelo.valor_vendido) == pytest.approx((12.5, 24.99, 324.87))
 
     unsold = frame.loc["PRODUTO SEM VENDA"]
     assert (unsold.quantidade_vendida, unsold.valor_vendido) == (0, 0)
-    assert (unsold.preco_compra, unsold.preco_venda) == pytest.approx((10.0, 20.0))  # sem coluna F: 2x
+    assert (unsold.preco_compra, unsold.preco_venda) == pytest.approx((10.0, 20.0))  # no column F: 2x
     assert unsold.precos_venda == []
 
-    taca = frame.loc["TACA DE 363ML 3PCS"]                                   # sem venda: coluna F do estoque
+    taca = frame.loc["TACA DE 363ML 3PCS"]                                   # no sales: stock column F
     assert (taca.preco_compra, taca.preco_venda) == pytest.approx((14.99, 29.99))
     assert taca.margem_unitaria == pytest.approx(15.0)
 
@@ -100,6 +100,6 @@ def test_stock_status_zero_and_negative():
         ("7890000000002", "COM ESTOQUE", 1, 10.0, 0),
     ])
     frame = analyze(stock, sales)
-    assert frame.loc["CHINELO ADULTO FEM DE 25"].status_estoque == "NEGATIVO"
-    assert frame.loc["ZERADO SEM VENDA"].status_estoque == "SEM ESTOQUE"
-    assert frame.loc["COM ESTOQUE"].status_estoque == "CRÍTICO"
+    assert frame.loc["CHINELO ADULTO FEM DE 25"].status_estoque == "NEGATIVE"
+    assert frame.loc["ZERADO SEM VENDA"].status_estoque == "OUT OF STOCK"
+    assert frame.loc["COM ESTOQUE"].status_estoque == "CRITICAL"

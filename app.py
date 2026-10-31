@@ -36,51 +36,51 @@ def persistent_data_directory():
 
 
 def ensure_valid_catalog(catalog_path, bundled_path):
-    """Confere o catálogo antes de abrir o app e oferece restaurar se estiver inválido.
+    """Check the catalog before opening the app and offer to restore it if invalid.
 
-    Devolve True quando o catálogo pode ser usado; False se o app deve fechar.
+    Returns True when the catalog can be used; False if the app should close.
     """
     try:
         check_catalog(catalog_path)
         return True
     except CatalogFileError as error:
         problem = str(error)
-    close_splash()  # a tela de abertura ficaria por cima das mensagens
+    close_splash()  # the splash screen would sit on top of the messages
     sources = recovery_sources(catalog_path, bundled_path)
     if not sources:
         show_message(
-            None, "critical", "Catálogo inválido",
-            f"{problem}\n\nNão há backup válido para restaurar. Corrija o arquivo em:\n{catalog_path}",
+            None, "critical", "Invalid catalog",
+            f"{problem}\n\nThere is no valid backup to restore. Fix the file at:\n{catalog_path}",
         )
         return False
     label, source = sources[0]
     if not confirm_action(
-        None, "Catálogo inválido",
-        f"{problem}\n\nO aplicativo pode restaurar o {label}. O arquivo com problema não é "
-        "apagado: ele fica guardado na mesma pasta com o nome terminando em \".corrompido\".",
-        "Restaurar e abrir",
+        None, "Invalid catalog",
+        f"{problem}\n\nThe app can restore the {label}. The broken file is not "
+        "deleted: it is kept in the same folder with a name containing \".corrupted\".",
+        "Restore and open",
     ):
         return False
     try:
         kept = restore_catalog(catalog_path, source)
         check_catalog(catalog_path)
     except (OSError, CatalogFileError) as error:
-        show_message(None, "critical", "Não foi possível restaurar", str(error))
+        show_message(None, "critical", "Could not restore", str(error))
         return False
     show_message(
-        None, "information", "Catálogo restaurado",
-        f"O catálogo foi restaurado a partir do {label}."
-        + (f"\n\nO arquivo com problema foi guardado em:\n{kept}" if kept else ""),
+        None, "information", "Catalog restored",
+        f"The catalog was restored from the {label}."
+        + (f"\n\nThe broken file was kept at:\n{kept}" if kept else ""),
     )
     return True
 
 
 def preload_heavy_modules():
-    """Carrega pandas, gráficos e PDF em segundo plano enquanto a tela inicial já está aberta.
+    """Load pandas, charts and PDF in the background while the home screen is already open.
 
-    Só módulos sem janelas Qt: importar não cria widgets, então é seguro fora da
-    thread principal. Se o usuário gerar a análise antes de terminar, o Python
-    espera o carregamento em andamento em vez de repetir.
+    Only modules without Qt windows: importing them creates no widgets, so it is safe
+    outside the main thread. If the user generates an analysis before it finishes,
+    Python waits for the in-progress import instead of repeating it.
     """
     def work():
         try:
@@ -93,12 +93,12 @@ def preload_heavy_modules():
             import openpyxl  # noqa: F401
             import rapidfuzz  # noqa: F401
         except Exception:
-            pass  # sem pré-carga o app só fica mais lento na primeira análise
+            pass  # without preloading, the app is only slower on the first analysis
     threading.Thread(target=work, name="preload", daemon=True).start()
 
 
 def close_splash():
-    """Fecha a tela de abertura do executável (não existe ao rodar pelo código-fonte)."""
+    """Close the executable's splash screen (it does not exist when running from source)."""
     try:
         import pyi_splash
         pyi_splash.close()
@@ -111,8 +111,8 @@ if __name__ == "__main__":
     app.setOrganizationName("Mix Moda")
     app.setApplicationName("Mix Moda Insights")
     data_dir = persistent_data_directory()
-    # O JSON embutido no .exe é somente leitura; as edições do estoque vão para a
-    # cópia na pasta de dados (rodando pelo código-fonte é o próprio data/).
+    # The JSON bundled in the .exe is read-only; stock edits go to the copy in the
+    # data folder (when running from source, that is data/ itself).
     bundled_catalog = resource_path("data/catalogo_produtos_estoque_geral.json")
     catalog_path = editable_catalog_path(bundled_catalog, data_dir)
     if not ensure_valid_catalog(catalog_path, bundled_catalog):

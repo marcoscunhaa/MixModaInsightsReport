@@ -20,7 +20,7 @@ from ui.widgets import FeatureCard
 from core.stores import STORES
 from ui.window_chrome import install_mac_window_chrome, show_message
 from ui.styles import APP_QSS
-from utils.formatting import br_number
+from utils.formatting import fmt_number
 
 
 class MainWindow(QMainWindow):
@@ -70,34 +70,34 @@ class MainWindow(QMainWindow):
         title = QLabel("MIX MODA INSIGHTS")
         title.setObjectName("Title")
         layout.addWidget(title)
-        subtitle = QLabel("Uma central executiva para entender estoque, vendas, giro, ruptura e performance por loja.")
+        subtitle = QLabel("An executive hub to understand stock, sales, sell-through, stockouts and performance by store.")
         subtitle.setObjectName("Subtitle")
         layout.addWidget(subtitle)
 
         layout.addSpacing(18)
-        prompt = QLabel("O QUE VOCÊ QUER FAZER?")
+        prompt = QLabel("WHAT DO YOU WANT TO DO?")
         prompt.setStyleSheet("color:#7A879D;font-size:11px;font-weight:900;letter-spacing:1.5px;")
         layout.addWidget(prompt)
 
         cards = QHBoxLayout()
         cards.setSpacing(20)
         analysis_card = FeatureCard(
-            "📊", "Nova análise",
-            f"Cruze estoque e vendas de até {len(STORES)} lojas e gere o dashboard com faturamento, "
-            "giro, margem e ruptura.",
-            "CRIAR ANÁLISE", "#2F5BEA", primary=True,
+            "📊", "New analysis",
+            f"Match stock and sales from up to {len(STORES)} stores and build a dashboard with revenue, "
+            "sell-through, margin and stockouts.",
+            "CREATE ANALYSIS", "#2F5BEA", primary=True,
         )
         analysis_card.clicked.connect(lambda: self.stack.setCurrentWidget(self.analysis))
         stock_card = FeatureCard(
-            "📦", "Explorar estoque",
-            "Navegue por grupo e subclasse e cadastre, edite ou remova produtos do catálogo.",
-            "ABRIR ESTOQUE", "#08A88F",
+            "📦", "Explore stock",
+            "Browse by group and subclass and add, edit or remove products from the catalog.",
+            "OPEN STOCK", "#08A88F",
         )
         stock_card.clicked.connect(lambda: self.open_stock_explorer())
         self.alerts_card = FeatureCard(
-            "🔔", "Alertas de estoque",
-            "Defina o estoque mínimo por produto e loja e veja o que precisa de reposição.",
-            "CONFIGURAR ALERTAS", "#E85D8A",
+            "🔔", "Stock alerts",
+            "Set the minimum stock per product and store and see what needs restocking.",
+            "SET UP ALERTS", "#E85D8A",
         )
         self.alerts_card.clicked.connect(lambda: self.open_stock_alerts())
         for card in (analysis_card, stock_card, self.alerts_card):
@@ -121,7 +121,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(chips)
         layout.addStretch()
 
-        footer = QLabel("Catálogo oficial Mix Moda")
+        footer = QLabel("Official Mix Moda catalog")
         footer.setObjectName("Muted")
         layout.addWidget(footer)
         self.refresh_footer()
@@ -130,10 +130,10 @@ class MainWindow(QMainWindow):
     def refresh_footer(self):
         meta = self.catalog.get("meta", {})
         values = {
-            "codigos": f"🏷️  {br_number(meta.get('total_produtos_unicos_por_codigo', 0), 0)} códigos",
-            "grupos": f"🗂️  {br_number(meta.get('total_grupos', 0), 0)} grupos",
-            "subclasses": f"🧩  {br_number(meta.get('total_subclasses', 0), 0)} subclasses",
-            "lojas": f"🏬  {len(STORES)} lojas",
+            "codigos": f"🏷️  {fmt_number(meta.get('total_produtos_unicos_por_codigo', 0), 0)} barcodes",
+            "grupos": f"🗂️  {fmt_number(meta.get('total_grupos', 0), 0)} groups",
+            "subclasses": f"🧩  {fmt_number(meta.get('total_subclasses', 0), 0)} subclasses",
+            "lojas": f"🏬  {len(STORES)} stores",
         }
         for key, text in values.items():
             self.stat_chips[key].setText(text)
@@ -143,7 +143,7 @@ class MainWindow(QMainWindow):
             count = len(self.alert_store.load_rules())
         except (OSError, ValueError):
             count = 0
-        self.alerts_card.set_tag(f"{count} REGRA{'S' if count != 1 else ''} ATIVA{'S' if count != 1 else ''}" if count else "")
+        self.alerts_card.set_tag(f"{count} ACTIVE RULE{'S' if count != 1 else ''}" if count else "")
 
     def open_stock_explorer(self):
         if self.stock_explorer is None:
@@ -159,13 +159,13 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.stock_explorer)
 
     def catalog_changed(self):
-        """O catálogo foi editado: a classificação usada nas próximas análises é refeita."""
+        """The catalog was edited: rebuild the classification used by the next analyses."""
         self.classification = classification_payload(self.catalog)
         self.refresh_footer()
 
     def open_stock_alerts(self):
         try:
-            from ui.stock_alerts import StockAlertRulesDialog  # rapidfuzz/openpyxl só quando abre
+            from ui.stock_alerts import StockAlertRulesDialog  # load rapidfuzz/openpyxl only when opened
             dialog = StockAlertRulesDialog(self.catalog, self.alert_store, self)
             dialog.exec()
             self.refresh_alerts_tag()
@@ -173,16 +173,16 @@ class MainWindow(QMainWindow):
             show_message(
                 self,
                 "critical",
-                "Não foi possível abrir as regras",
-                f"O formulário de alertas encontrou um erro.\n\n{type(error).__name__}: {error}",
+                "Could not open the rules",
+                f"The alerts form ran into an error.\n\n{type(error).__name__}: {error}",
             )
 
     def open_home(self):
         self.stack.setCurrentWidget(self.home)
 
     def generate(self, info):
-        # Módulos pesados (pandas, gráficos, PDF) só são carregados aqui, para a
-        # tela inicial abrir rápido. O app.py já os pré-carrega em segundo plano.
+        # Heavy modules (pandas, charts, PDF) are only loaded here so the home
+        # screen opens fast. app.py already preloads them in the background.
         import pandas as pd
         from core.loader import load_stock, load_sales
         from core.matcher import build_analysis
@@ -215,8 +215,8 @@ class MainWindow(QMainWindow):
                 show_message(
                     self,
                     "warning",
-                    "Sem dados",
-                    "Nenhum produto válido permaneceu após limpeza e cruzamento.",
+                    "No data",
+                    "No valid product remained after cleaning and matching.",
                 )
                 return
 
@@ -240,8 +240,8 @@ class MainWindow(QMainWindow):
                 on_home=self.open_home,
                 alert_store=self.alert_store,
             )
-            # Descarta o dashboard anterior: cada um carrega vários gráficos e,
-            # sem isso, a memória cresce a cada análise gerada.
+            # Discard the previous dashboard: each one holds several charts and,
+            # without this, memory grows with every analysis.
             if self.dashboard is not None:
                 self.stack.removeWidget(self.dashboard)
                 self.dashboard.deleteLater()
@@ -253,8 +253,8 @@ class MainWindow(QMainWindow):
             show_message(
                 self,
                 "critical",
-                "Erro ao gerar análise",
-                f"Não foi possível processar os arquivos.\n\n{type(error).__name__}: {error}\n\n"
-                "Verifique se os arquivos são XLS/XLSX válidos e se seguem o layout da Mix Moda.",
+                "Error generating the analysis",
+                f"Could not process the files.\n\n{type(error).__name__}: {error}\n\n"
+                "Check that the files are valid XLS/XLSX and follow the Mix Moda layout.",
             )
             print(details)

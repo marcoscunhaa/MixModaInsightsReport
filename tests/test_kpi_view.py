@@ -19,43 +19,43 @@ def by_key(cards):
 
 
 def test_cards_explain_numbers_and_flag_problems():
-    cards = by_key(kpi_cards(frame([(0, 5, "SEM ESTOQUE"), (1, 0, "CRÍTICO"), (10, 2, "NORMAL"), (8, 0, "SEM VENDA")])))
+    cards = by_key(kpi_cards(frame([(0, 5, "OUT OF STOCK"), (1, 0, "CRITICAL"), (10, 2, "NORMAL"), (8, 0, "NO SALES")])))
     assert len(cards) == 10
-    assert cards["Em ruptura"]["value"] == "1" and cards["Em ruptura"]["tone"] == "bad"
-    assert cards["Sem vendas"]["hint"] == "50% dos produtos não venderam"
-    assert cards["Críticos"]["tone"] == "bad"
-    assert cards["Valor em estoque"]["clickable"] and not cards["Margem potencial"]["clickable"]
+    assert cards["Stockouts"]["value"] == "1" and cards["Stockouts"]["tone"] == "bad"
+    assert cards["No sales"]["hint"] == "50% of products did not sell"
+    assert cards["Critical"]["tone"] == "bad"
+    assert cards["Stock value"]["clickable"] and not cards["Potential margin"]["clickable"]
 
 
 def test_zero_problems_are_green():
     cards = by_key(kpi_cards(frame([(10, 2, "NORMAL"), (5, 1, "NORMAL")])))
-    assert cards["Em ruptura"]["tone"] == "good" and cards["Em ruptura"]["hint"].startswith("✓")
-    assert cards["Críticos"]["hint"] == "✓ nenhum produto crítico"
+    assert cards["Stockouts"]["tone"] == "good" and cards["Stockouts"]["hint"].startswith("✓")
+    assert cards["Critical"]["hint"] == "✓ no critical products"
 
 
 def test_single_product_uses_text():
-    cards = by_key(kpi_cards(frame([(0, 46, "SEM ESTOQUE")])))
-    assert cards["Em ruptura"]["value"] == "SEM ESTOQUE" and cards["Em ruptura"]["tone"] == "bad"
-    assert cards["Sem vendas"]["value"] == "COM VENDAS" and cards["Sem vendas"]["tone"] == "good"
-    assert cards["Produtos ativos"]["value"] == "1 PRODUTO"
+    cards = by_key(kpi_cards(frame([(0, 46, "OUT OF STOCK")])))
+    assert cards["Stockouts"]["value"] == "OUT OF STOCK" and cards["Stockouts"]["tone"] == "bad"
+    assert cards["No sales"]["value"] == "HAS SALES" and cards["No sales"]["tone"] == "good"
+    assert cards["Active products"]["value"] == "1 PRODUCT"
 
 
 def test_status_counts_cover_every_option():
-    counts = status_counts(frame([(0, 5, "SEM ESTOQUE"), (-1, 1, "NEGATIVO"), (0, 0, "SEM ESTOQUE")]))
-    assert counts == {"SEM ESTOQUE": 2, "NEGATIVO": 1, "Todos os status": 3}
-    assert {value for value, *_ in STATUS_OPTIONS} >= {"NEGATIVO", "SEM ESTOQUE", "CRÍTICO", "BAIXO", "SEM VENDA", "EXCESSO", "NORMAL"}
+    counts = status_counts(frame([(0, 5, "OUT OF STOCK"), (-1, 1, "NEGATIVE"), (0, 0, "OUT OF STOCK")]))
+    assert counts == {"OUT OF STOCK": 2, "NEGATIVE": 1, "All statuses": 3}
+    assert {value for value, *_ in STATUS_OPTIONS} >= {"NEGATIVE", "OUT OF STOCK", "CRITICAL", "LOW", "NO SALES", "EXCESS", "NORMAL"}
 
 
 def test_store_list_views_pick_rows_and_metric():
     from core.kpi_view import store_list_view
-    df = frame([(0, 5, "SEM ESTOQUE"), (1, 0, "CRÍTICO"), (10, 2, "NORMAL"), (8, 0, "SEM VENDA")])
-    assert store_list_view("Unidades vendidas", df)["value"] == "quantidade_vendida"
-    assert len(store_list_view("Unidades vendidas", df)["rows"]) == 2
-    assert len(store_list_view("Sem vendas", df)["rows"]) == 2
-    assert len(store_list_view("Em ruptura", df)["rows"]) == 1
-    assert store_list_view("Valor em estoque", df)["kind"] == "money"
-    assert store_list_view("Valor em estoque", df, "NEGATIVO")["kind"] == "stock"
-    revenue = store_list_view("Faturamento estimado", df)
+    df = frame([(0, 5, "OUT OF STOCK"), (1, 0, "CRITICAL"), (10, 2, "NORMAL"), (8, 0, "NO SALES")])
+    assert store_list_view("Units sold", df)["value"] == "quantidade_vendida"
+    assert len(store_list_view("Units sold", df)["rows"]) == 2
+    assert len(store_list_view("No sales", df)["rows"]) == 2
+    assert len(store_list_view("Stockouts", df)["rows"]) == 1
+    assert store_list_view("Stock value", df)["kind"] == "money"
+    assert store_list_view("Stock value", df, "NEGATIVE")["kind"] == "stock"
+    revenue = store_list_view("Estimated revenue", df)
     assert (revenue["value"], revenue["kind"], len(revenue["rows"])) == ("valor_vendido", "money", 2)
-    assert by_key(kpi_cards(df))["Faturamento estimado"]["clickable"]
-    assert store_list_view("Margem potencial", df) is None
+    assert by_key(kpi_cards(df))["Estimated revenue"]["clickable"]
+    assert store_list_view("Potential margin", df) is None

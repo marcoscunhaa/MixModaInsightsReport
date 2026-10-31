@@ -1,8 +1,8 @@
-"""Explorar estoque: Grupo → Subclasse → Produto, com cadastro, edição e exclusão.
+"""Explore stock: Group → Subclass → Product, with create, edit and delete.
 
-Os cards seguem o mesmo visual do explorador do dashboard. Os dados vêm direto do
-catálogo JSON (não dependem de uma análise gerada) e cada alteração é gravada no
-arquivo na hora, através de core.catalog_editor.
+The cards share the look of the dashboard explorer. Data comes straight from the
+catalog JSON (no generated analysis needed) and every change is written to the
+file immediately through core.catalog_editor.
 """
 import copy
 
@@ -17,7 +17,7 @@ from core import catalog_editor as ce
 from core.stores import STORES
 from ui.explorer_cards import ExplorerCard, _stable_color
 from ui.window_chrome import confirm_action, install_mac_window_chrome, show_message
-from utils.formatting import br_number
+from utils.formatting import fmt_number
 from utils.normalization import normalize_barcode, normalize_text
 
 SEARCH_LIMIT = 300
@@ -37,7 +37,7 @@ QCheckBox { color:#233451; font-size:12px; font-weight:700; spacing:7px; }
 
 
 def _uppercase_as_typed(line_edit):
-    """Deixa o texto digitado em caixa alta sem mexer no que foi preenchido pelo programa."""
+    """Upper-case typed text without touching what the program filled in."""
     def apply(text):
         upper = text.upper()
         if upper != text:
@@ -56,7 +56,7 @@ def _matches(product, query):
 
 
 class StockExplorerPage(QWidget):
-    """Página do menu inicial. `catalog` é o mesmo dicionário usado pelo resto do app."""
+    """Home-menu page. `catalog` is the same dict used by the rest of the app."""
 
     def __init__(self, catalog, catalog_path, on_home=None, on_catalog_changed=None, parent=None):
         super().__init__(parent)
@@ -72,7 +72,7 @@ class StockExplorerPage(QWidget):
 
         head = QHBoxLayout()
         titlebox = QVBoxLayout()
-        self.title = QLabel("Estoque • Grupos")
+        self.title = QLabel("Stock • Groups")
         self.title.setStyleSheet("font-size:24px;font-weight:900;color:#12213D;")
         titlebox.addWidget(self.title)
         self.crumb = QLabel("")
@@ -81,16 +81,16 @@ class StockExplorerPage(QWidget):
         head.addLayout(titlebox)
         head.addStretch()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Buscar por descrição ou código...")
+        self.search.setPlaceholderText("Search by description or barcode...")
         self.search.setClearButtonEnabled(True)
         self.search.setMinimumWidth(300)
         self.search.textChanged.connect(lambda _text: self.render())
         head.addWidget(self.search)
-        new_button = QPushButton("＋  NOVO PRODUTO")
+        new_button = QPushButton("＋  NEW PRODUCT")
         new_button.setObjectName("AddStore")
         new_button.clicked.connect(self.new_product)
         head.addWidget(new_button)
-        self.back = QPushButton("← Voltar")
+        self.back = QPushButton("← Back")
         self.back.setObjectName("Ghost")
         self.back.clicked.connect(self.go_back)
         head.addWidget(self.back)
@@ -113,7 +113,7 @@ class StockExplorerPage(QWidget):
         root.addWidget(self.empty)
         self.render()
 
-    # ---------- navegação ----------
+    # ---------- navigation ----------
     def products(self):
         return self.catalog.get("produtos", [])
 
@@ -143,68 +143,68 @@ class StockExplorerPage(QWidget):
         self.list.setItemWidget(item, ExplorerCard("", title, subtitle, value, accent, flat=True))
 
     def _summary(self, items, second):
-        # Sem quantidades: o estoque real vem da planilha importada na análise.
-        inactive = sum(1 for p in items if p.get("situacao") != "ATIVO")
-        subtitle = f"{br_number(len(items), 0)} produtos"
+        # No quantities: real stock comes from the spreadsheet imported in the analysis.
+        inactive = sum(1 for p in items if p.get("situacao") != ce.ACTIVE)
+        subtitle = f"{fmt_number(len(items), 0)} products"
         if inactive:
-            subtitle += f"  •  {br_number(inactive, 0)} desativados"
+            subtitle += f"  •  {fmt_number(inactive, 0)} inactive"
         return subtitle, second
 
     def render_groups(self):
-        self.title.setText("Estoque • Grupos")
-        self.crumb.setText("Todos os grupos")
-        self.back.setText("← Início")
+        self.title.setText("Stock • Groups")
+        self.crumb.setText("All groups")
+        self.back.setText("← Home")
         groups = {}
         for product in self.products():
             groups.setdefault(product.get("grupo", ""), []).append(product)
         for name in sorted(groups, key=normalize_text):
             subs = len({p.get("subclasse") for p in groups[name]})
-            subtitle, value = self._summary(groups[name], f"{br_number(subs, 0)} subclasses")
-            self._add_card(name or "SEM GRUPO", subtitle, value, "group", name, _stable_color(name))
-        self.empty.setText("Nenhum produto cadastrado.")
+            subtitle, value = self._summary(groups[name], f"{fmt_number(subs, 0)} subclasses")
+            self._add_card(name or "NO GROUP", subtitle, value, "group", name, _stable_color(name))
+        self.empty.setText("No products registered.")
 
     def render_subclasses(self, group):
         self.title.setText(f"{group} • Subclasses")
-        self.crumb.setText(f"Todos os grupos  ›  {group}")
-        self.back.setText("← Voltar")
+        self.crumb.setText(f"All groups  ›  {group}")
+        self.back.setText("← Back")
         subs = {}
         for product in self.products():
             if product.get("grupo") == group:
                 subs.setdefault(product.get("subclasse", ""), []).append(product)
         for name in sorted(subs, key=normalize_text):
             stores = len({normalize_text(l.get("loja")) for p in subs[name] for l in p.get("lojas", [])})
-            subtitle, value = self._summary(subs[name], f"em {br_number(stores, 0)} loja{'s' if stores != 1 else ''}")
-            self._add_card(name or "SEM SUBCLASSE", subtitle, value, "sub", name, _stable_color(name))
-        self.empty.setText("Nenhuma subclasse neste grupo.")
+            subtitle, value = self._summary(subs[name], f"in {fmt_number(stores, 0)} store{'s' if stores != 1 else ''}")
+            self._add_card(name or "NO SUBCLASS", subtitle, value, "sub", name, _stable_color(name))
+        self.empty.setText("No subclasses in this group.")
 
     def _add_product_card(self, product):
         subtitle = str(product.get("codigo_barras", ""))
-        if product.get("situacao") != "ATIVO":
+        if product.get("situacao") != ce.ACTIVE:
             subtitle += f"  •  {product.get('situacao', '')}"
-        value = ", ".join(l.get("loja", "") for l in product.get("lojas", [])) or "Sem loja"
+        value = ", ".join(l.get("loja", "") for l in product.get("lojas", [])) or "No store"
         self._add_card(product.get("descricao", ""), subtitle, value, "product",
                        product.get("codigo_barras"), _stable_color(product.get("descricao", "")))
 
     def render_products(self, group, sub):
-        self.title.setText(f"Produtos • {sub}")
-        self.crumb.setText(f"Todos os grupos  ›  {group}  ›  {sub}")
-        self.back.setText("← Voltar")
+        self.title.setText(f"Products • {sub}")
+        self.crumb.setText(f"All groups  ›  {group}  ›  {sub}")
+        self.back.setText("← Back")
         items = [p for p in self.products() if p.get("grupo") == group and p.get("subclasse") == sub]
         for product in sorted(items, key=lambda p: (normalize_text(p.get("descricao")), p.get("codigo_barras"))):
             self._add_product_card(product)
-        self.empty.setText("Nenhum produto nesta subclasse.")
+        self.empty.setText("No products in this subclass.")
 
     def render_search(self, query):
         found = [p for p in self.products() if _matches(p, query)]
         found.sort(key=lambda p: (normalize_text(p.get("descricao")), p.get("codigo_barras")))
-        self.title.setText("Estoque • Busca")
+        self.title.setText("Stock • Search")
         shown = found[:SEARCH_LIMIT]
-        extra = f" (mostrando {SEARCH_LIMIT})" if len(found) > SEARCH_LIMIT else ""
-        self.crumb.setText(f"{br_number(len(found), 0)} produto(s) encontrados{extra}")
-        self.back.setText("← Limpar busca")
+        extra = f" (showing {SEARCH_LIMIT})" if len(found) > SEARCH_LIMIT else ""
+        self.crumb.setText(f"{fmt_number(len(found), 0)} product(s) found{extra}")
+        self.back.setText("← Clear search")
         for product in shown:
             self._add_product_card(product)
-        self.empty.setText("Nenhum produto encontrado.")
+        self.empty.setText("No products found.")
 
     def open_item(self, item):
         kind, key = item.data(Qt.ItemDataRole.UserRole)
@@ -240,7 +240,7 @@ class StockExplorerPage(QWidget):
     def open_editor(self, product, defaults=None):
         dialog = ProductEditorDialog(self.catalog, product, self.commit, defaults, self)
         if dialog.exec() == QDialog.DialogCode.Accepted and dialog.result_product is not None:
-            # Depois de salvar, mostra o produto onde ele ficou (pode ter mudado de grupo).
+            # After saving, show the product where it ended up (it may have changed group).
             saved = dialog.result_product
             if not self.search.text():
                 self.path = [saved["grupo"], saved["subclasse"]]
@@ -257,9 +257,9 @@ class StockExplorerPage(QWidget):
             self.path = self.path[:1]
 
     def commit(self, change):
-        """Aplica `change` numa cópia, grava o arquivo e só então atualiza a memória.
+        """Apply `change` to a copy, write the file and only then update memory.
 
-        Se a gravação falhar, o catálogo em uso continua exatamente como estava.
+        If writing fails, the catalog in use stays exactly as it was.
         """
         candidate = copy.deepcopy(self.catalog)
         result = change(candidate)
@@ -273,7 +273,7 @@ class StockExplorerPage(QWidget):
 
 
 class ProductEditorDialog(QDialog):
-    """Formulário de cadastro/edição. `commit` grava; erros mantêm o formulário aberto."""
+    """Create/edit form. `commit` saves; errors keep the form open."""
 
     def __init__(self, catalog, product, commit, defaults=None, parent=None):
         super().__init__(parent)
@@ -284,12 +284,12 @@ class ProductEditorDialog(QDialog):
         self.store_options = ce.store_names(catalog)
         self.tree = ce.groups_and_subclasses(catalog)
         data = copy.deepcopy(product) if product else {
-            "codigo_barras": "", "descricao": "", "situacao": "ATIVO",
+            "codigo_barras": "", "descricao": "", "situacao": ce.ACTIVE,
             "grupo": "", "subclasse": "", "lojas": [], **(defaults or {}),
         }
         self.existing_stores = {normalize_text(l["loja"]): l for l in data.get("lojas", [])}
 
-        self.setWindowTitle("Editar produto" if product else "Novo produto")
+        self.setWindowTitle("Edit product" if product else "New product")
         self.setModal(True)
         self.resize(760, 520)
         self.setMinimumSize(640, 460)
@@ -299,10 +299,10 @@ class ProductEditorDialog(QDialog):
         root.setSpacing(12)
         install_mac_window_chrome(self, root)
 
-        eyebrow = QLabel("CATÁLOGO DE ESTOQUE")
+        eyebrow = QLabel("STOCK CATALOG")
         eyebrow.setObjectName("eyebrow")
         root.addWidget(eyebrow)
-        title = QLabel(data["descricao"] if product else "Cadastrar novo produto")
+        title = QLabel(data["descricao"] if product else "Add a new product")
         title.setObjectName("title")
         title.setWordWrap(True)
         root.addWidget(title)
@@ -312,7 +312,7 @@ class ProductEditorDialog(QDialog):
         root.addStretch(1)
         root.addLayout(self._footer())
 
-    # ---------- montagem ----------
+    # ---------- layout ----------
     def _general_panel(self, data):
         panel = QFrame()
         panel.setObjectName("panel")
@@ -323,27 +323,27 @@ class ProductEditorDialog(QDialog):
 
         self.code = QLineEdit(str(data.get("codigo_barras", "")))
         self.code.setValidator(QRegularExpressionValidator(QRegularExpression(r"\d{0,20}"), self.code))
-        self.code.setPlaceholderText("Somente números")
-        form.addRow("Código de barras", self.code)
+        self.code.setPlaceholderText("Numbers only")
+        form.addRow("Barcode", self.code)
 
         self.description = QLineEdit(data.get("descricao", ""))
-        self.description.setPlaceholderText("Ex.: BLUSA BABY LOOK ESTAMPADA")
+        self.description.setPlaceholderText("E.g. PRINTED BABY TEE")
         _uppercase_as_typed(self.description)
-        form.addRow("Descrição", self.description)
+        form.addRow("Description", self.description)
 
         self.group = self._editable_combo(list(self.tree), data.get("grupo", ""))
         self.group.currentTextChanged.connect(self._refresh_subclasses)
-        form.addRow("Grupo", self.group)
+        form.addRow("Group", self.group)
 
         self.subclass = self._editable_combo([], "")
         self._refresh_subclasses(self.group.currentText())
         self.subclass.setEditText(data.get("subclasse", ""))
-        form.addRow("Subclasse", self.subclass)
+        form.addRow("Subclass", self.subclass)
 
         self.situation = QComboBox()
         self.situation.addItems(list(ce.SITUACOES))
-        self.situation.setCurrentText(data.get("situacao") or "ATIVO")
-        form.addRow("Situação", self.situation)
+        self.situation.setCurrentText(data.get("situacao") or ce.ACTIVE)
+        form.addRow("Status", self.situation)
         return panel
 
     def _editable_combo(self, items, text):
@@ -352,7 +352,7 @@ class ProductEditorDialog(QDialog):
         combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         combo.addItems(items)
         combo.setEditText(text)
-        combo.lineEdit().setPlaceholderText("Escolha ou digite um novo")
+        combo.lineEdit().setPlaceholderText("Pick one or type a new one")
         _uppercase_as_typed(combo.lineEdit())
         return combo
 
@@ -365,13 +365,13 @@ class ProductEditorDialog(QDialog):
         self.subclass.blockSignals(False)
 
     def _stores_panel(self):
-        """Em quais lojas o produto existe. Quantidade e valor ficam nas planilhas."""
+        """Which stores carry the product. Quantity and price live in the spreadsheets."""
         panel = QFrame()
         panel.setObjectName("panel")
         box = QVBoxLayout(panel)
         box.setContentsMargins(18, 14, 18, 16)
         box.setSpacing(10)
-        title = QLabel("LOJAS")
+        title = QLabel("STORES")
         title.setObjectName("section")
         box.addWidget(title)
         row = QHBoxLayout()
@@ -379,7 +379,7 @@ class ProductEditorDialog(QDialog):
         self.store_checks = []
         official = {normalize_text(s): s for s in STORES}
         for name in self.store_options:
-            # Mostra o nome oficial ("Pedras"); grava a grafia do catálogo ("pedras").
+            # Show the official name ("Pedras"); save the catalog spelling ("pedras").
             check = QCheckBox(official.get(normalize_text(name), name))
             check.setChecked(normalize_text(name) in self.existing_stores)
             self.store_checks.append((check, name))
@@ -391,22 +391,22 @@ class ProductEditorDialog(QDialog):
     def _footer(self):
         actions = QHBoxLayout()
         if self.product is not None:
-            delete = QPushButton("Excluir produto")
+            delete = QPushButton("Delete product")
             delete.setObjectName("Danger")
             delete.clicked.connect(lambda checked=False: self.delete())
             actions.addWidget(delete)
         actions.addStretch()
-        cancel = QPushButton("Cancelar")
+        cancel = QPushButton("Cancel")
         cancel.setObjectName("Ghost")
         cancel.clicked.connect(lambda checked=False: self.reject())
         actions.addWidget(cancel)
-        save = QPushButton("Salvar alterações" if self.product is not None else "Cadastrar produto")
+        save = QPushButton("Save changes" if self.product is not None else "Add product")
         save.clicked.connect(lambda checked=False: self.save())
         actions.addWidget(save)
         return actions
 
     def _selected_stores(self):
-        """Lojas marcadas. As que já existiam mantêm descrição, quantidade e valor."""
+        """Checked stores. Existing ones keep their description, quantity and price."""
         stores = []
         for check, name in self.store_checks:
             if not check.isChecked():
@@ -423,7 +423,7 @@ class ProductEditorDialog(QDialog):
                 stores.append({"loja": name, "descricao": "", "quantidade_catalogo": 0, "valor": 0})
         return stores
 
-    # ---------- ações ----------
+    # ---------- actions ----------
     def form_data(self):
         return {
             "codigo_barras": self.code.text(),
@@ -443,11 +443,11 @@ class ProductEditorDialog(QDialog):
             else:
                 saved = self.commit(lambda catalog: ce.update_product(catalog, original, data))
         except ce.CatalogValidationError as error:
-            show_message(self, "warning", "Confira os dados", str(error))
+            show_message(self, "warning", "Check the data", str(error))
             return
         except OSError as error:
-            show_message(self, "critical", "Não foi possível salvar",
-                         f"O catálogo não pôde ser gravado.\n\n{error}")
+            show_message(self, "critical", "Could not save",
+                         f"The catalog could not be written.\n\n{error}")
             return
         self.result_product = saved
         self.accept()
@@ -456,15 +456,15 @@ class ProductEditorDialog(QDialog):
         name = self.product.get("descricao", "")
         code = self.product.get("codigo_barras", "")
         if not confirm_action(
-            self, "Excluir produto",
-            f"Excluir {name} ({code}) do catálogo?\n\n"
-            "O produto sai de todas as lojas. Uma cópia do arquivo anterior fica salva como .bak.",
+            self, "Delete product",
+            f"Delete {name} ({code}) from the catalog?\n\n"
+            "The product is removed from every store. A copy of the previous file is saved as .bak.",
         ):
             return
         try:
             self.commit(lambda catalog: ce.delete_product(catalog, code))
         except (ce.CatalogValidationError, OSError) as error:
-            show_message(self, "critical", "Não foi possível excluir", str(error))
+            show_message(self, "critical", "Could not delete", str(error))
             return
         self.result_product = None
         self.accept()

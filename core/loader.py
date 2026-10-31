@@ -2,17 +2,17 @@ from pathlib import Path
 import pandas as pd
 from utils.normalization import normalize_barcode, normalize_text, to_number
 
-# Layout real das extrações Mix Moda.
-# Estoque: A código, B descrição, D quantidade, E preço de compra, F preço de venda atual.
+# Actual layout of Mix Moda's spreadsheet exports.
+# Stock: A barcode, B description, D quantity, E purchase price, F current sale price.
 STOCK_MAP = {"codigo_barras": 0, "descricao": 1, "quantidade_estoque": 3, "preco_compra": 4, "preco_venda": 5}
-# Vendas: A código, B descrição, C quantidade vendida, D preço de compra,
-# E custo total, F preço de venda, G faturamento (C × F), H lucro.
+# Sales: A barcode, B description, C quantity sold, D purchase price,
+# E total cost, F sale price, G revenue (C × F), H profit.
 SALES_MAP = {
     "codigo_barras": 0, "descricao": 1, "quantidade_vendida": 2,
     "preco_compra": 3, "preco_venda": 5, "faturamento": 6,
 }
-# Extrações antigas de vendas têm só A–C; os preços ausentes viram 0 e o
-# cruzamento usa o preço de venda da planilha de estoque (coluna F).
+# Older sales exports only have A–C; missing prices become 0 and the matching
+# falls back to the sale price from the stock spreadsheet (column F).
 SALES_REQUIRED = ("codigo_barras", "descricao", "quantidade_vendida")
 
 
@@ -28,7 +28,7 @@ def _looks_like_html(path):
 def _read_html_report(path):
     tables = pd.read_html(path, header=None)
     if not tables:
-        raise ValueError("Nenhuma tabela HTML foi encontrada no arquivo.")
+        raise ValueError("No HTML table was found in the file.")
     return max(tables, key=lambda t: (t.shape[0] * max(t.shape[1], 1), t.shape[1]))
 
 
@@ -52,9 +52,9 @@ def read_raw(path):
             return _read_html_report(path)
         except Exception as e:
             errors.append(f"HTML fallback: {e}")
-    msg = "Não foi possível ler a planilha."
+    msg = "Could not read the spreadsheet."
     if errors:
-        msg += " Tentativas: " + " | ".join(errors)
+        msg += " Attempts: " + " | ".join(errors)
     raise ValueError(msg)
 
 
@@ -63,11 +63,12 @@ def _standardize(raw, mapping, required=None):
     required_columns = max(i for k, i in mapping.items() if k in required) + 1
     if raw.shape[1] < required_columns:
         raise ValueError(
-            f"Planilha com {raw.shape[1]} colunas; o layout esperado precisa de pelo menos {required_columns}."
+            f"Spreadsheet has {raw.shape[1]} columns; the expected layout needs at least {required_columns}."
         )
     out = {k: (raw.iloc[:, i] if i < raw.shape[1] else pd.Series(index=raw.index, dtype=float)) for k, i in mapping.items()}
     df = pd.DataFrame(out).dropna(how="all").copy()
     if len(df):
+        # Skip a header row (the source headers are in Portuguese).
         desc0 = normalize_text(df.iloc[0].get("descricao", ""))
         if desc0 in {"DESCRICAO", "PRODUTO", "DESCRICAO DO PRODUTO"}:
             df = df.iloc[1:].copy()
@@ -80,7 +81,7 @@ def _standardize(raw, mapping, required=None):
 
 
 def _column_c_text_share(raw):
-    """Fração de textos na coluna C: "UN" no estoque, quantidade nas vendas."""
+    """Share of text values in column C: "UN" (unit) in stock, a quantity in sales."""
     if raw.shape[1] < 3:
         return None
     values = raw.iloc[:, 2].dropna()
@@ -95,8 +96,8 @@ def load_stock(path):
     share = _column_c_text_share(raw)
     if share is not None and share < 0.5:
         raise ValueError(
-            f"O arquivo {Path(path).name} parece ser uma planilha de VENDAS (coluna C com quantidades). "
-            "Confira se os arquivos de estoque e de vendas não foram trocados."
+            f"The file {Path(path).name} looks like a SALES spreadsheet (column C holds quantities). "
+            "Check that the stock and sales files were not swapped."
         )
     return _standardize(raw, STOCK_MAP)
 
@@ -106,7 +107,7 @@ def load_sales(path):
     share = _column_c_text_share(raw)
     if share is not None and share > 0.5:
         raise ValueError(
-            f"O arquivo {Path(path).name} parece ser uma planilha de ESTOQUE (coluna C com a unidade, ex.: UN). "
-            "Confira se os arquivos de estoque e de vendas não foram trocados."
+            f"The file {Path(path).name} looks like a STOCK spreadsheet (column C holds the unit, e.g. UN). "
+            "Check that the stock and sales files were not swapped."
         )
     return _standardize(raw, SALES_MAP, SALES_REQUIRED)

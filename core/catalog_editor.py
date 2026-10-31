@@ -1,11 +1,11 @@
-"""CRUD do catálogo oficial (catalogo_produtos_estoque_geral.json).
+"""CRUD for the official catalog (catalogo_produtos_estoque_geral.json).
 
-Cada produto tem dados gerais (código, descrição, grupo, subclasse, situação) e
-uma lista `lojas[]` com quantidade, valor e a descrição usada naquela loja. O
-cruzamento com as vendas usa loja + código + descrição, então a descrição de
-cada loja é preservada quando difere da descrição geral.
+Each product has general data (barcode, description, group, subclass, status)
+and a `lojas[]` (stores) list with quantity, price and the description used in
+that store. Sales matching uses store + barcode + description, so each store's
+description is preserved when it differs from the general one.
 
-Este módulo não depende de Qt: a tela de estoque só chama estas funções.
+This module does not depend on Qt: the stock screen only calls these functions.
 """
 import json
 import os
@@ -17,16 +17,17 @@ from pathlib import Path
 from core.stores import STORES
 from utils.normalization import normalize_barcode, normalize_text
 
-SITUACOES = ("ATIVO", "DESATIVADO")
+ACTIVE = "ACTIVE"
+SITUACOES = (ACTIVE, "INACTIVE")
 
 
 class CatalogValidationError(ValueError):
-    """Dados do formulário inválidos; a mensagem é exibida ao usuário."""
+    """Invalid form data; the message is shown to the user."""
 
 
 def clean_label(value):
-    """Remove espaços extras. A caixa alta é aplicada pelo formulário ao digitar,
-    para não reescrever textos legados que o usuário não alterou."""
+    """Collapse extra whitespace. Upper case is applied by the form while typing,
+    so legacy text the user did not touch is not rewritten."""
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
@@ -50,10 +51,10 @@ def product_stock(product):
 
 
 def store_names(catalog):
-    """Lojas da rede (core.stores), com a grafia já usada no catálogo.
+    """The chain's stores (core.stores), using the spelling already in the catalog.
 
-    O catálogo grava "pedras" em minúsculo; reaproveitar a grafia existente evita
-    duas versões da mesma loja no JSON. Lojas que só existem no catálogo vêm no fim.
+    The catalog stores "pedras" in lower case; reusing the existing spelling avoids
+    two versions of the same store in the JSON. Catalog-only stores come last.
     """
     in_catalog = list(catalog.get("meta", {}).get("lojas", []))
     for product in catalog.get("produtos", []):
@@ -70,7 +71,7 @@ def store_names(catalog):
 
 
 def groups_and_subclasses(catalog):
-    """{grupo: [subclasses]} ordenado, para preencher os combos do formulário."""
+    """Sorted {group: [subclasses]} used to fill the form combo boxes."""
     tree = {}
     for product in catalog.get("produtos", []):
         tree.setdefault(product.get("grupo", ""), set()).add(product.get("subclasse", ""))
@@ -82,7 +83,7 @@ def groups_and_subclasses(catalog):
 
 
 def find_product(catalog, codigo_barras):
-    """Busca pelo código exato: o catálogo legado tem pares que só diferem por zeros à esquerda."""
+    """Look up by exact barcode: the legacy catalog has pairs that differ only by leading zeros."""
     code = str(codigo_barras).strip()
     for product in catalog.get("produtos", []):
         if str(product.get("codigo_barras")).strip() == code:
@@ -91,7 +92,7 @@ def find_product(catalog, codigo_barras):
 
 
 def _same_code_product(catalog, code, ignore=None):
-    """Outro produto cujo código é o mesmo número (ignorando zeros à esquerda)."""
+    """Another product whose barcode is the same number (ignoring leading zeros)."""
     key = normalize_barcode(code)
     for product in catalog.get("produtos", []):
         if product is not ignore and normalize_barcode(product.get("codigo_barras")) == key:
@@ -102,28 +103,28 @@ def _same_code_product(catalog, code, ignore=None):
 def _validate(catalog, data, original_code=None):
     code = re.sub(r"\s+", "", str(data.get("codigo_barras", "")))
     if not code:
-        raise CatalogValidationError("Informe o código de barras.")
+        raise CatalogValidationError("Enter the barcode.")
     if not code.isdigit():
-        raise CatalogValidationError("O código de barras deve conter apenas números.")
+        raise CatalogValidationError("The barcode must contain only numbers.")
     descricao = clean_label(data.get("descricao"))
     grupo = clean_label(data.get("grupo"))
     subclasse = clean_label(data.get("subclasse"))
-    situacao = clean_label(data.get("situacao") or "ATIVO").upper()
+    situacao = clean_label(data.get("situacao") or ACTIVE).upper()
     if not descricao:
-        raise CatalogValidationError("Informe a descrição do produto.")
+        raise CatalogValidationError("Enter the product description.")
     if not grupo:
-        raise CatalogValidationError("Informe o grupo.")
+        raise CatalogValidationError("Enter the group.")
     if not subclasse:
-        raise CatalogValidationError("Informe a subclasse.")
+        raise CatalogValidationError("Enter the subclass.")
     if situacao not in SITUACOES:
-        raise CatalogValidationError("Situação deve ser ATIVO ou DESATIVADO.")
+        raise CatalogValidationError("Status must be ACTIVE or INACTIVE.")
 
     original = find_product(catalog, original_code) if original_code is not None else None
     changed_number = original is None or normalize_barcode(code) != normalize_barcode(original_code)
     existing = _same_code_product(catalog, code, ignore=original) if changed_number else None
     if existing is not None:
         raise CatalogValidationError(
-            f"Já existe um produto com o código {existing['codigo_barras']}: {existing['descricao']}."
+            f"A product with barcode {existing['codigo_barras']} already exists: {existing['descricao']}."
         )
 
     lojas = []
@@ -131,15 +132,15 @@ def _validate(catalog, data, original_code=None):
     for entry in data.get("lojas", []):
         loja = str(entry.get("loja", "")).strip()
         if not loja:
-            raise CatalogValidationError("Selecione a loja em todas as linhas.")
+            raise CatalogValidationError("Select the store on every row.")
         if normalize_text(loja) in seen:
-            raise CatalogValidationError(f"A loja {loja} aparece mais de uma vez.")
+            raise CatalogValidationError(f"Store {loja} appears more than once.")
         seen.add(normalize_text(loja))
         quantidade = parse_number(entry.get("quantidade_catalogo"))
         valor = parse_number(entry.get("valor"))
-        # Quantidade negativa existe no estoque real (venda sem entrada); preço não.
+        # Negative quantities happen in real stock (sold without a receipt); negative prices do not.
         if valor < 0:
-            raise CatalogValidationError(f"O valor não pode ser negativo ({loja}).")
+            raise CatalogValidationError(f"The price cannot be negative ({loja}).")
         lojas.append({
             "loja": loja,
             "descricao": clean_label(entry.get("descricao")) or descricao,
@@ -147,7 +148,7 @@ def _validate(catalog, data, original_code=None):
             "valor": valor,
         })
     if not lojas:
-        raise CatalogValidationError("Marque pelo menos uma loja.")
+        raise CatalogValidationError("Select at least one store.")
     return {
         "codigo_barras": code,
         "descricao": descricao,
@@ -159,10 +160,10 @@ def _validate(catalog, data, original_code=None):
 
 
 def _store_entry(clean, store, previous=None):
-    """Monta lojas[] na mesma ordem de chaves do arquivo original.
+    """Build a lojas[] entry with the same key order as the original file.
 
-    Quantidade e valor numericamente iguais mantêm o texto anterior, para que o
-    diff do JSON mostre só o que realmente mudou.
+    Numerically equal quantity and price keep the previous text, so the JSON diff
+    shows only what actually changed.
     """
     previous = previous or {}
     qty = previous.get("quantidade_catalogo")
@@ -200,7 +201,7 @@ def _build_product(clean, previous=None):
 
 
 def refresh_meta(catalog):
-    """Recalcula os totais do meta com as mesmas regras do arquivo gerado."""
+    """Recompute the meta totals with the same rules as the generated file."""
     products = catalog.get("produtos", [])
     entries = [l for p in products for l in p.get("lojas", [])]
     meta = catalog.setdefault("meta", {})
@@ -234,10 +235,10 @@ def update_product(catalog, original_code, data):
     products = catalog.get("produtos", [])
     previous = find_product(catalog, original_code)
     if previous is None:
-        raise CatalogValidationError("Produto não encontrado; ele pode ter sido removido.")
+        raise CatalogValidationError("Product not found; it may have been removed.")
     clean = _validate(catalog, data, original_code=original_code)
     index = next(i for i, p in enumerate(products) if p is previous)
-    # Lojas cuja descrição acompanhava a descrição geral seguem a nova descrição.
+    # Stores whose description matched the general one follow the new description.
     old_description = normalize_text(previous.get("descricao"))
     if normalize_text(clean["descricao"]) != old_description:
         for store in clean["lojas"]:
@@ -253,15 +254,15 @@ def delete_product(catalog, codigo_barras):
     target = find_product(catalog, codigo_barras)
     remaining = [p for p in products if p is not target]
     if target is None:
-        raise CatalogValidationError("Produto não encontrado; ele pode já ter sido removido.")
+        raise CatalogValidationError("Product not found; it may already have been removed.")
     catalog["produtos"] = remaining
     refresh_meta(catalog)
 
 
 def save_catalog(catalog, path, keep_backup=True):
-    """Grava de forma atômica, no mesmo formato do arquivo (indent 2, UTF-8).
+    """Write atomically, in the same format as the file (indent 2, UTF-8).
 
-    A versão anterior fica em `<arquivo>.bak` para desfazer um erro manualmente.
+    The previous version is kept in `<file>.bak` to undo a mistake by hand.
     """
     path = Path(path)
     payload = json.dumps(catalog, ensure_ascii=False, indent=2)
@@ -279,11 +280,11 @@ def save_catalog(catalog, path, keep_backup=True):
 
 
 def editable_catalog_path(bundled_path, data_dir):
-    """Caminho gravável do catálogo.
+    """Writable path of the catalog.
 
-    Rodando pelo código-fonte, o catálogo já fica em data/ e é editado no lugar.
-    No executável, o JSON embutido é somente leitura: na primeira execução ele é
-    copiado para a pasta de dados do usuário e as edições vão para essa cópia.
+    When running from source, the catalog already lives in data/ and is edited in place.
+    In the executable, the bundled JSON is read-only: on first run it is copied to
+    the user's data folder and edits go to that copy.
     """
     bundled = Path(bundled_path)
     target = Path(data_dir) / bundled.name
@@ -295,29 +296,29 @@ def editable_catalog_path(bundled_path, data_dir):
     return target
 
 
-# ---------- catálogo corrompido ----------
+# ---------- corrupted catalog ----------
 
 class CatalogFileError(ValueError):
-    """O arquivo do catálogo não pode ser usado; a mensagem explica o motivo."""
+    """The catalog file cannot be used; the message explains why."""
 
 
 def check_catalog(path):
-    """Lê e valida a estrutura mínima do catálogo. Devolve o catálogo ou levanta CatalogFileError."""
+    """Read and validate the minimal catalog structure. Returns the catalog or raises CatalogFileError."""
     path = Path(path)
     try:
         with open(path, encoding="utf-8") as f:
             catalog = json.load(f)
     except FileNotFoundError:
-        raise CatalogFileError(f"O arquivo {path.name} não foi encontrado.") from None
+        raise CatalogFileError(f"The file {path.name} was not found.") from None
     except json.JSONDecodeError as error:
         raise CatalogFileError(
-            f"O arquivo {path.name} está com o formato JSON inválido "
-            f"(linha {error.lineno}, coluna {error.colno}: {error.msg})."
+            f"The file {path.name} has invalid JSON "
+            f"(line {error.lineno}, column {error.colno}: {error.msg})."
         ) from None
     except (OSError, UnicodeDecodeError) as error:
-        raise CatalogFileError(f"Não foi possível ler {path.name}: {error}") from None
+        raise CatalogFileError(f"Could not read {path.name}: {error}") from None
     if not isinstance(catalog, dict) or not isinstance(catalog.get("produtos"), list):
-        raise CatalogFileError(f"O arquivo {path.name} não tem a lista de produtos do catálogo.")
+        raise CatalogFileError(f"The file {path.name} does not contain the catalog product list.")
     for index, product in enumerate(catalog["produtos"], start=1):
         if (
             not isinstance(product, dict)
@@ -325,18 +326,18 @@ def check_catalog(path):
             or not isinstance(product.get("lojas"), list)
         ):
             raise CatalogFileError(
-                f"O produto nº {index} do arquivo {path.name} está incompleto "
-                "(sem código de barras ou sem a lista de lojas)."
+                f"Product #{index} in {path.name} is incomplete "
+                "(missing barcode or store list)."
             )
     return catalog
 
 
 def recovery_sources(path, bundled_path=None):
-    """Cópias válidas para restaurar, na ordem de preferência: backup e catálogo embutido."""
+    """Valid copies to restore from, in order of preference: backup, then bundled catalog."""
     path = Path(path)
-    options = [("backup da última alteração", path.with_name(path.name + ".bak"))]
+    options = [("backup of the last change", path.with_name(path.name + ".bak"))]
     if bundled_path and Path(bundled_path).resolve() != path.resolve():
-        options.append(("catálogo original do aplicativo", Path(bundled_path)))
+        options.append(("original catalog bundled with the app", Path(bundled_path)))
     valid = []
     for label, source in options:
         try:
@@ -348,10 +349,10 @@ def recovery_sources(path, bundled_path=None):
 
 
 def restore_catalog(path, source):
-    """Troca o catálogo inválido pela cópia `source`, guardando o arquivo inválido.
+    """Replace the invalid catalog with the `source` copy, keeping the invalid file.
 
-    O arquivo com problema nunca é apagado: vira `<nome>.corrompido-<data-hora>.json`
-    na mesma pasta, para conferência. Devolve o caminho onde ele foi guardado.
+    The broken file is never deleted: it becomes `<name>.corrupted-<date-time>.json`
+    in the same folder, for review. Returns the path where it was kept.
     """
     from datetime import datetime
 
@@ -359,7 +360,7 @@ def restore_catalog(path, source):
     kept = None
     if path.exists():
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        kept = path.with_name(f"{path.stem}.corrompido-{stamp}{path.suffix}")
+        kept = path.with_name(f"{path.stem}.corrupted-{stamp}{path.suffix}")
         shutil.copy2(path, kept)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".catalogo-", suffix=".json")
     os.close(fd)

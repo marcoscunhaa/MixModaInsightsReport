@@ -1,41 +1,41 @@
 @echo off
-title Gerador - Mix Moda Insights
-rem Uso:
-rem   build.bat          -> dist\MixModaInsights.exe (arquivo unico; abre mais devagar)
-rem   build.bat pasta    -> dist\MixModaInsights\MixModaInsights.exe (pasta; abre bem mais rapido)
-set MODO=--onefile
-set SAIDA=dist\MixModaInsights.exe
-if /I "%~1"=="pasta" (
-    set MODO=--onedir
-    set SAIDA=dist\MixModaInsights\MixModaInsights.exe
+title Builder - Mix Moda Insights
+rem Usage:
+rem   build.bat          -> dist\MixModaInsights.exe (single file; slower to open)
+rem   build.bat folder   -> dist\MixModaInsights\MixModaInsights.exe (folder; opens much faster)
+set MODE=--onefile
+set OUTPUT=dist\MixModaInsights.exe
+if /I "%~1"=="folder" (
+    set MODE=--onedir
+    set OUTPUT=dist\MixModaInsights\MixModaInsights.exe
 )
 echo ==========================================
-echo       GERANDO MIX MODA INSIGHTS %MODO%
+echo       BUILDING MIX MODA INSIGHTS %MODE%
 echo ==========================================
 echo.
 python -m pip install -r requirements.txt
 if errorlevel 1 (
     echo.
-    echo ERRO ao instalar dependencias.
+    echo ERROR installing dependencies.
     if not defined CI pause
     exit /b 1
 )
-rem xlrd/openpyxl/lxml sao carregados pelo pandas so na hora de ler a planilha;
-rem sem os --hidden-import o .exe nao abre arquivos .xls/.xlsx.
-rem --splash mostra a tela de abertura enquanto o aplicativo carrega.
-python -m PyInstaller --noconfirm --clean %MODO% --windowed --collect-all rapidfuzz ^
+rem xlrd/openpyxl/lxml are only loaded by pandas when a spreadsheet is read;
+rem without --hidden-import the .exe cannot open .xls/.xlsx files.
+rem --splash shows the splash screen while the app loads.
+python -m PyInstaller --noconfirm --clean %MODE% --windowed --collect-all rapidfuzz ^
   --hidden-import xlrd --hidden-import openpyxl --hidden-import lxml.etree ^
   --exclude-module tkinter --splash assets\splash.png ^
   --name MixModaInsights --add-data "data\catalogo_produtos_estoque_geral.json;data" app.py
 if errorlevel 1 (
     echo.
-    echo ERRO ao gerar o executavel.
+    echo ERROR building the executable.
     if not defined CI pause
     exit /b 1
 )
 echo.
 echo ==========================================
-echo EXECUTAVEL GERADO EM:
-echo %SAIDA%
+echo EXECUTABLE CREATED AT:
+echo %OUTPUT%
 echo ==========================================
 if not defined CI pause

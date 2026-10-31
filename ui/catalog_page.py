@@ -4,20 +4,20 @@ class CatalogPage(QWidget):
     product_clicked=Signal(object)
     def __init__(self,catalog,parent=None):
         super().__init__(parent); self.catalog=catalog; l=QVBoxLayout(self)
-        t=QLabel("CATÁLOGO DE PRODUTOS"); t.setObjectName("Title"); l.addWidget(t); l.addWidget(QLabel("Exploração por grupo → subclasse → produto"))
-        top=QHBoxLayout(); self.group=QComboBox(); self.group.addItem("Todos"); self.group.addItems(sorted({p.get("grupo","") for p in catalog.get("produtos",[]) if p.get("grupo")}))
-        self.sub=QComboBox(); self.sub.addItem("Todas"); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código ou descrição...")
+        t=QLabel("PRODUCT CATALOG"); t.setObjectName("Title"); l.addWidget(t); l.addWidget(QLabel("Browse by group → subclass → product"))
+        top=QHBoxLayout(); self.group=QComboBox(); self.group.addItem("All"); self.group.addItems(sorted({p.get("grupo","") for p in catalog.get("produtos",[]) if p.get("grupo")}))
+        self.sub=QComboBox(); self.sub.addItem("All"); self.search=QLineEdit(); self.search.setPlaceholderText("Search product, barcode or description...")
         top.addWidget(self.group); top.addWidget(self.sub); top.addWidget(self.search); l.addLayout(top)
-        self.table=QTableWidget(0,4); self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.table.setHorizontalHeaderLabels(["Código","Produto","Grupo","Subclasse"]); self.table.cellDoubleClicked.connect(self.open_row); l.addWidget(self.table)
+        self.table=QTableWidget(0,4); self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.table.setHorizontalHeaderLabels(["Barcode","Product","Group","Subclass"]); self.table.cellDoubleClicked.connect(self.open_row); l.addWidget(self.table)
         self.group.currentTextChanged.connect(self.refresh_subclasses); self.sub.currentTextChanged.connect(self.refresh); self.search.textChanged.connect(self.refresh); self.refresh()
     def refresh_subclasses(self):
-        self.sub.blockSignals(True); self.sub.clear(); self.sub.addItem("Todas"); g=self.group.currentText()
-        self.sub.addItems(sorted({p.get("subclasse","") for p in self.catalog.get("produtos",[]) if g=="Todos" or p.get("grupo")==g})); self.sub.blockSignals(False); self.refresh()
+        self.sub.blockSignals(True); self.sub.clear(); self.sub.addItem("All"); g=self.group.currentText()
+        self.sub.addItems(sorted({p.get("subclasse","") for p in self.catalog.get("produtos",[]) if g=="All" or p.get("grupo")==g})); self.sub.blockSignals(False); self.refresh()
     def refresh(self):
         g=self.group.currentText(); s=self.sub.currentText(); q=self.search.text().upper(); rows=[]
         for p in self.catalog.get("produtos",[]):
             txt=f'{p.get("codigo_barras","")} {p.get("descricao","")} {p.get("grupo","")} {p.get("subclasse","")}'.upper()
-            if (g=="Todos" or p.get("grupo")==g) and (s=="Todas" or p.get("subclasse")==s) and (not q or q in txt): rows.append(p)
+            if (g=="All" or p.get("grupo")==g) and (s=="All" or p.get("subclasse")==s) and (not q or q in txt): rows.append(p)
         self.rows=rows; self.table.setRowCount(len(rows))
         for i,p in enumerate(rows):
             for j,v in enumerate([p.get("codigo_barras",""),p.get("descricao",""),p.get("grupo",""),p.get("subclasse","")]): self.table.setItem(i,j,QTableWidgetItem(str(v)))

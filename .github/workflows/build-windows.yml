@@ -1,26 +1,26 @@
-# Gera o MixModaInsights.exe num servidor Windows do GitHub.
+# Builds MixModaInsights.exe on a GitHub-hosted Windows runner.
 #
-# - A cada push: roda os testes, gera o .exe com o build.bat e deixa o arquivo
-#   para download na aba Actions (Artifacts) por 30 dias.
-# - Em tag de versão (ex.: v1.0): também publica o .exe numa Release.
-# - Também pode ser disparado à mão em Actions > Build Windows .exe > Run workflow.
+# - On every push: runs the tests, builds the .exe with build.bat and keeps the file
+#   available for download in the Actions tab (Artifacts) for 30 days.
+# - On a version tag (e.g. v1.0): also publishes the .exe in a Release.
+# - Can also be triggered manually from Actions > Build Windows .exe > Run workflow.
 name: Build Windows .exe
 
 on:
   push:
-    branches: ["main", "feature/**", "fix/**"]
+    branches: ["main", "english-version", "feature/**", "fix/**"]
     tags: ["v*"]
   workflow_dispatch:
 
 permissions:
-  contents: write   # necessário só para publicar a Release nas tags
+  contents: write   # only needed to publish the Release on tags
 
 jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 40
     env:
-      CI: "true"    # o build.bat não pausa esperando tecla
+      CI: "true"    # build.bat does not pause waiting for a key press
     steps:
       - uses: actions/checkout@v4
 
@@ -30,29 +30,29 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      - name: Testes
+      - name: Tests
         shell: cmd
         run: |
           python -m pip install -r requirements.txt pytest
           python -m pytest -q tests
 
-      # Versão em pasta: abre bem mais rápido (não extrai tudo a cada abertura).
-      - name: Gerar versão em pasta (recomendada)
+      # Folder version: opens much faster (does not extract everything on each launch).
+      - name: Build folder version (recommended)
         shell: cmd
-        run: build.bat pasta
+        run: build.bat folder
 
-      - name: Compactar versão em pasta
+      - name: Zip folder version
         shell: pwsh
         run: |
-          Compress-Archive -Path dist\MixModaInsights -DestinationPath MixModaInsights-pasta.zip
-          "{0:N1} MB" -f ((Get-Item MixModaInsights-pasta.zip).Length / 1MB)
+          Compress-Archive -Path dist\MixModaInsights -DestinationPath MixModaInsights-folder.zip
+          "{0:N1} MB" -f ((Get-Item MixModaInsights-folder.zip).Length / 1MB)
 
-      # Versão arquivo único: um só .exe, mas abre mais devagar.
-      - name: Gerar executável único
+      # Single-file version: one .exe, but slower to open.
+      - name: Build single executable
         shell: cmd
         run: build.bat
 
-      - name: Conferir o executável
+      - name: Check the executable
         shell: pwsh
         run: |
           $exe = Get-Item dist\MixModaInsights.exe
@@ -60,8 +60,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MixModaInsights-pasta
-          path: MixModaInsights-pasta.zip
+          name: MixModaInsights-folder
+          path: MixModaInsights-folder.zip
           retention-days: 30
 
       - uses: actions/upload-artifact@v4
@@ -70,11 +70,11 @@ jobs:
           path: dist/MixModaInsights.exe
           retention-days: 30
 
-      - name: Publicar na Release (somente tags v*)
+      - name: Publish to Release (v* tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/MixModaInsights.exe
-            MixModaInsights-pasta.zip
+            MixModaInsights-folder.zip
           generate_release_notes: true

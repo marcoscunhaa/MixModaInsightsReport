@@ -17,10 +17,10 @@ def test_valid_catalog_passes(tmp_path):
 
 
 @pytest.mark.parametrize("content, message", [
-    ('{"produtos": [ {"codigo_barras": "1",, }', "JSON inválido"),
-    ({"meta": {}}, "lista de produtos"),
-    ({"produtos": [{"descricao": "sem código", "lojas": []}]}, "produto nº 1"),
-    ({"produtos": [{"codigo_barras": "1"}]}, "lista de lojas"),
+    ('{"produtos": [ {"codigo_barras": "1",, }', "invalid JSON"),
+    ({"meta": {}}, "product list"),
+    ({"produtos": [{"descricao": "no barcode", "lojas": []}]}, "Product #1"),
+    ({"produtos": [{"codigo_barras": "1"}]}, "store list"),
 ])
 def test_invalid_catalog_is_explained(tmp_path, content, message):
     with pytest.raises(ce.CatalogFileError, match=message):
@@ -28,25 +28,25 @@ def test_invalid_catalog_is_explained(tmp_path, content, message):
 
 
 def test_missing_catalog(tmp_path):
-    with pytest.raises(ce.CatalogFileError, match="não foi encontrado"):
+    with pytest.raises(ce.CatalogFileError, match="was not found"):
         ce.check_catalog(tmp_path / "nada.json")
 
 
 def test_recovery_prefers_valid_backup_then_bundled(tmp_path):
-    cat = write(tmp_path / "cat.json", "{quebrado")
+    cat = write(tmp_path / "cat.json", "{broken")
     bundled = write(tmp_path / "bundle.json", GOOD)
     write(tmp_path / "cat.json.bak", GOOD)
     assert [label for label, _ in ce.recovery_sources(cat, bundled)] == [
-        "backup da última alteração", "catálogo original do aplicativo"]
-    write(tmp_path / "cat.json.bak", "{também quebrado")
+        "backup of the last change", "original catalog bundled with the app"]
+    write(tmp_path / "cat.json.bak", "{also broken")
     assert [src for _, src in ce.recovery_sources(cat, bundled)] == [bundled]
-    assert ce.recovery_sources(cat, cat) == []          # rodando pelo código-fonte: sem catálogo embutido separado
+    assert ce.recovery_sources(cat, cat) == []          # running from source: no separate bundled catalog
 
 
 def test_restore_keeps_broken_file(tmp_path):
-    cat = write(tmp_path / "cat.json", "{quebrado")
+    cat = write(tmp_path / "cat.json", "{broken")
     backup = write(tmp_path / "cat.json.bak", GOOD)
     kept = ce.restore_catalog(cat, backup)
     assert ce.check_catalog(cat) == GOOD
-    assert kept.read_text(encoding="utf-8") == "{quebrado"
-    assert kept.name.startswith("cat.corrompido-") and kept.suffix == ".json"
+    assert kept.read_text(encoding="utf-8") == "{broken"
+    assert kept.name.startswith("cat.corrupted-") and kept.suffix == ".json"

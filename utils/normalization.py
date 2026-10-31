@@ -1,17 +1,17 @@
 import re, unicodedata, math
 from datetime import date, datetime, time, timedelta
 
-# Excel conta dias a partir de 1899-12-30; antes de 01/03/1900 o leitor usa
-# 1899-12-31 por causa do 29/02/1900 inexistente (mesma regra do xlrd/openpyxl).
+# Excel counts days from 1899-12-30; before 1900-03-01 readers use 1899-12-31
+# because of the non-existent 1900-02-29 (same rule as xlrd/openpyxl).
 _EXCEL_EPOCH = datetime(1899, 12, 30)
 _EXCEL_EPOCH_BEFORE_MARCH_1900 = datetime(1899, 12, 31)
 
 
 def excel_serial(value):
-    """Desfaz a conversão de um número que a planilha formatou como data/hora.
+    """Undo the conversion of a number the spreadsheet formatted as a date/time.
 
-    As extrações da Mix Moda trazem quantidades e preços com formato de hora
-    (`h:mm AM/PM`), e o leitor de Excel entrega datetime/time no lugar do número.
+    Mix Moda's exports carry quantities and prices with a time format
+    (`h:mm AM/PM`), so the Excel reader returns datetime/time instead of the number.
     """
     if isinstance(value, timedelta):
         return value.total_seconds() / 86400
@@ -45,6 +45,7 @@ def to_number(value, default=0.0):
     if isinstance(value,(int,float)): return float(value)
     serial = excel_serial(value)
     if serial is not None: return serial
+    # Source spreadsheets use Brazilian notation: "R$ 1.234,56".
     s=str(value).strip().replace("R$","").replace(" ","")
     if "," in s and "." in s: s=s.replace(".","").replace(",",".")
     elif "," in s: s=s.replace(",",".")

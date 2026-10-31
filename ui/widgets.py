@@ -1,4 +1,4 @@
-from utils.formatting import brl, br_number
+from utils.formatting import fmt_money, fmt_number
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QHBoxLayout, QGraphicsDropShadowEffect
 
@@ -34,7 +34,7 @@ class RankCard(QFrame):
         l=QHBoxLayout(self); l.setContentsMargins(14,12,14,12); l.setSpacing(12)
         p=QLabel(position); p.setFixedWidth(42); p.setAlignment(Qt.AlignCenter); p.setStyleSheet(f"font-size:22px;font-weight:900;color:{accent};background:#F4F7FC;border-radius:12px;padding:5px;"); l.addWidget(p)
         box=QVBoxLayout(); name=QLabel(str(product)); name.setStyleSheet("font-weight:900;color:#182641;font-size:12px;"); name.setWordWrap(True); box.addWidget(name)
-        q=QLabel(f"{br_number(qty,0)} unidades  •  {brl(revenue)} faturamento"); q.setStyleSheet(f"color:{accent};font-size:11px;font-weight:800;"); box.addWidget(q); l.addLayout(box,1); self.add_shadow()
+        q=QLabel(f"{fmt_number(qty,0)} units  •  {fmt_money(revenue)} revenue"); q.setStyleSheet(f"color:{accent};font-size:11px;font-weight:800;"); box.addWidget(q); l.addLayout(box,1); self.add_shadow()
     def add_shadow(self):
         from PySide6.QtGui import QColor
         shadow=QGraphicsDropShadowEffect(self); shadow.setBlurRadius(20); shadow.setOffset(0,5); shadow.setColor(QColor(25,43,78,22)); self.setGraphicsEffect(shadow)
@@ -47,10 +47,10 @@ def _rgba(hex_color, alpha):
 
 
 class FeatureCard(QFrame):
-    """Card de funcionalidade da tela inicial: emoji, título, descrição e chamada.
+    """Home-screen feature card: emoji, title, description and call to action.
 
-    O card inteiro é clicável (mouse, Enter ou espaço). `primary` destaca a ação
-    principal com fundo em degradê.
+    The whole card is clickable (mouse, Enter or Space). `primary` highlights the
+    main action with a gradient background.
     """
     clicked = Signal()
 
@@ -134,9 +134,9 @@ TONE_COLORS = {"good": "#087F6A", "warn": "#B77900", "bad": "#D9284B"}
 
 
 class KpiCard(QFrame):
-    """Card de KPI: emoji, nome claro, valor e uma frase que explica o número.
+    """KPI card: emoji, clear name, value and a sentence explaining the number.
 
-    `tone` colore o valor/frase: good (verde), warn (âmbar), bad (vermelho).
+    `tone` colors the value/sentence: good (green), warn (amber), bad (red).
     """
     clicked = Signal()
 
@@ -146,7 +146,7 @@ class KpiCard(QFrame):
         self._clickable = clickable
         if clickable:
             self.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.setToolTip("Clique para ver a lista de produtos")
+            self.setToolTip("Click to see the product list")
         value_color = TONE_COLORS["bad"] if tone == "bad" else "#12213D"
         hint_color = TONE_COLORS.get(tone, "#7A879D")
         self.setStyleSheet(
@@ -174,7 +174,7 @@ class KpiCard(QFrame):
         name.setObjectName("kpiLabel")
         top.addWidget(name, 1)
         if clickable:
-            more = QLabel("Ver lista ›")
+            more = QLabel("See list ›")
             more.setObjectName("kpiMore")
             top.addWidget(more)
         layout.addLayout(top)
@@ -200,10 +200,10 @@ class KpiCard(QFrame):
 
 
 class StatusFilterBar(QFrame):
-    """Pílulas de status com contagem; uma selecionada por vez.
+    """Status pills with counts; one selected at a time.
 
-    Mantém a interface do combo antigo (currentText/setCurrentText e o sinal
-    currentTextChanged) para o dashboard não precisar mudar em outros pontos.
+    Keeps the old combo box interface (currentText/setCurrentText and the
+    currentTextChanged signal) so the dashboard did not need other changes.
     """
     currentTextChanged = Signal(str)
 
@@ -218,7 +218,7 @@ class StatusFilterBar(QFrame):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(7)
-        title = QLabel("STATUS DO ESTOQUE")
+        title = QLabel("STOCK STATUS")
         title.setStyleSheet("color:#7A879D;font-size:10px;font-weight:900;letter-spacing:1px;padding-right:4px;")
         layout.addWidget(title)
         group = QButtonGroup(self)
@@ -255,8 +255,8 @@ class StatusFilterBar(QFrame):
             self.currentTextChanged.emit(value)
 
     def set_counts(self, counts):
-        """Atualiza o número em cada pílula; status sem produtos ficam desativados."""
+        """Update the count on each pill; statuses with no products are disabled."""
         for value, (button, label, emoji) in self._buttons.items():
             count = counts.get(value, 0)
-            button.setText(f"{emoji}  {label}  {br_number(count, 0)}")
+            button.setText(f"{emoji}  {label}  {fmt_number(count, 0)}")
             button.setEnabled(bool(count) or value == self._current or value == self._options[0][0])

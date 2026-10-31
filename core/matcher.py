@@ -2,6 +2,8 @@ import pandas as pd
 from utils.normalization import normalize_barcode, normalize_text
 from core.cleaner import clean_dataframe
 
+UNCLASSIFIED = "UNCLASSIFIED"
+
 
 def load_classification(path):
     import json
@@ -57,9 +59,9 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     estoque = estoque[estoque.codigo_barras != ""].copy()
     vendas = vendas[vendas.codigo_barras != ""].copy()
 
-    # Consolida linhas duplicadas do mesmo produto no estoque antes do cruzamento.
-    # Isso evita multiplicar as vendas quando o mesmo código + descrição aparece
-    # mais de uma vez na extração. O preço de compra é média ponderada pela quantidade.
+    # Merge duplicate stock rows of the same product before matching.
+    # This avoids multiplying sales when the same barcode + description appears
+    # more than once in the export. Purchase price is the quantity-weighted average.
     if "preco_venda" not in estoque:
         estoque["preco_venda"] = 0.0
     estoque["preco_venda"] = pd.to_numeric(estoque["preco_venda"], errors="coerce").fillna(0)
@@ -77,10 +79,10 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     )
     estoque = stock_group.drop(columns=["_valor_compra_total", "preco_compra_fallback"])
 
-    # O estoque fornece a descrição atual. Para códigos únicos no estoque, vendas
-    # com descrições antigas são associadas ao produto pelo código de barras.
-    # Se um código aparecer com mais de uma descrição atual, mantém-se a descrição
-    # como desempate para evitar duplicar as vendas entre produtos ambíguos.
+    # Stock provides the current description. For barcodes that are unique in stock,
+    # sales with old descriptions are linked to the product by barcode.
+    # If a barcode has more than one current description, the description is kept
+    # as a tie-breaker so sales are not duplicated across ambiguous products.
     stock_desc_counts = estoque.groupby("codigo_barras")["descricao_norm"].nunique()
     unique_stock_codes = set(stock_desc_counts[stock_desc_counts == 1].index)
     current_description = (
@@ -93,9 +95,9 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     vendas.loc[unique_code_mask, "_descricao_match"] = (
         vendas.loc[unique_code_mask, "codigo_barras"].map(current_description)
     )
-    # Planilha de vendas: C quantidade, D preço de compra, F preço de venda,
-    # G faturamento. O mesmo produto pode vir em várias linhas com preços
-    # diferentes; somamos faturamento e custo e o preço vira a média ponderada.
+    # Sales spreadsheet: C quantity, D purchase price, F sale price, G revenue.
+    # The same product can appear on several rows with different prices; revenue
+    # and cost are summed and the price becomes the weighted average.
     for column in ("preco_compra", "preco_venda", "faturamento"):
         if column not in vendas:
             vendas[column] = 0.0
@@ -109,8 +111,8 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
         _faturamento=("_faturamento", "sum"),
         _custo_vendas=("_custo_vendas", "sum"),
     ).rename(columns={"_descricao_match": "descricao_norm"})
-    # Cada preço de venda (coluna F) com a quantidade e o faturamento daquele
-    # preço, do maior para o menor, para o card mostrar de onde vem o total.
+    # Each sale price (column F) with the quantity and revenue at that price,
+    # highest first, so the product card can show where the total comes from.
     priced = vendas[(vendas.quantidade_vendida > 0) & (vendas.preco_venda > 0)].copy()
     priced["preco"] = priced.preco_venda.round(2)
     tiers = priced.groupby(["codigo_barras", "_descricao_match", "preco"], as_index=False).agg(
@@ -131,7 +133,7 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     merged["precos_venda"] = [v if isinstance(v, list) else [] for v in merged["precos_venda"]]
     merged["loja"] = loja
 
-    # Classificação específica da loja tem prioridade quando existir.
+    # A store-specific classification takes priority when it exists.
     if classification:
         cf = classification_frame(classification)
         cf = cf[cf.loja_ref.map(normalize_text) == normalize_text(loja)].copy()
@@ -140,7 +142,7 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
         merged["grupo_ref"] = None
         merged["subclasse_ref"] = None
 
-    # Primeiro tenta o código da loja selecionada, se ele tiver classificação única.
+    # First try the selected store's barcode, if it has a unique classification.
     if classification:
         cf2 = classification_frame(classification)
         cf2 = cf2[cf2.loja_ref.map(normalize_text) == normalize_text(loja)].copy()
@@ -155,10 +157,11 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     global_catalog = catalog_classification_frame(catalog)
     if not global_catalog.empty:
         # The source JSON has one known barcode collision: two zero-padded
-        # codes both describe LENÇOL CASAL BASICO, but one is wrongly tagged as
-        # a skirt. Keep this explicit correction until the upstream catalog is fixed.
+        # codes both describe LENÇOL CASAL BASICO (basic double bed sheet), but one
+        # is wrongly tagged as a skirt. Keep this explicit correction until the
+        # upstream catalog is fixed.
         linen = global_catalog.descricao_norm == normalize_text("LENÇOL CASAL BASICO")
-        global_catalog.loc[linen, ["grupo_ref", "subclasse_ref"]] = ["UTILIDADES", "COLCHA"]
+        global_catalog.loc[linen, ["grupo_ref", "subclasse_ref"]] = ["HOUSEWARES", "BEDSPREAD"]
         global_code = _unique_classification(global_catalog, "codigo_barras")
         merged = merged.merge(global_code, on="codigo_barras", how="left", suffixes=("", "_global_code"))
         # A unique global classification is authoritative, so choosing a
@@ -176,10 +179,10 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     # Override a known source inconsistency even when the selected store carries
     # the wrong local tag for this globally identifiable product.
     linen = merged.descricao_norm == normalize_text("LENÇOL CASAL BASICO")
-    merged.loc[linen, ["grupo_ref", "subclasse_ref"]] = ["UTILIDADES", "COLCHA"]
+    merged.loc[linen, ["grupo_ref", "subclasse_ref"]] = ["HOUSEWARES", "BEDSPREAD"]
 
-    merged["grupo"] = merged["grupo_ref"].fillna("SEM CLASSIFICAÇÃO")
-    merged["subclasse"] = merged["subclasse_ref"].fillna("SEM CLASSIFICAÇÃO")
+    merged["grupo"] = merged["grupo_ref"].fillna(UNCLASSIFIED)
+    merged["subclasse"] = merged["subclasse_ref"].fillna(UNCLASSIFIED)
 
     stock_keys = set(zip(estoque.codigo_barras, estoque.descricao_norm))
     sales_keys = set(zip(vendas.codigo_barras, vendas["_descricao_match"]))
@@ -204,9 +207,9 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
         for row in unmatched_products.itertuples(index=False)
     ]
 
-    # Preços e faturamento vêm da planilha de vendas (D compra, F venda,
-    # G faturamento). Sem venda no período, o preço de venda é o atual da
-    # planilha de estoque (coluna F); 2x o preço de compra só quando ela vier vazia.
+    # Prices and revenue come from the sales spreadsheet (D purchase, F sale,
+    # G revenue). With no sales in the period, the sale price is the current one
+    # from the stock spreadsheet (column F); 2x the purchase price only when it is empty.
     merged["preco_compra_estoque"] = pd.to_numeric(merged["preco_compra"], errors="coerce").fillna(0)
     sold = merged.quantidade_vendida > 0
     sold_qty = merged.quantidade_vendida.where(sold, 1)
@@ -217,13 +220,13 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     )
     stock_price = merged.preco_venda_estoque.where(merged.preco_venda_estoque > 0, merged.preco_compra * 2)
     merged["preco_venda"] = (merged._faturamento / sold_qty).where(has_sales_revenue, stock_price)
-    # O valor do estoque continua usando o custo da planilha de estoque.
+    # Stock value keeps using the cost from the stock spreadsheet.
     merged["valor_estoque"] = merged.quantidade_estoque * merged.preco_compra_estoque
     merged["valor_vendido"] = merged._faturamento.where(
         has_sales_revenue, merged.quantidade_vendida * merged.preco_venda
     )
-    # Vendido por 2 ou mais preços: o preço de venda exibido é o atual, da
-    # planilha de estoque (coluna F). O preço médio segue em preco_venda.
+    # Sold at 2 or more prices: the displayed sale price is the current one from
+    # the stock spreadsheet (column F). The average price stays in preco_venda.
     many_prices = merged["precos_venda"].map(len) > 1
     merged["preco_venda_atual"] = merged.preco_venda_estoque.where(
         many_prices & (merged.preco_venda_estoque > 0)
@@ -231,11 +234,10 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     merged.drop(columns=["_faturamento", "_custo_vendas", "preco_venda_estoque"], inplace=True)
     merged["margem_unitaria"] = merged.preco_venda - merged.preco_compra
     merged["margem_percentual"] = merged.apply(lambda r: r.margem_unitaria / r.preco_venda * 100 if r.preco_venda else 0, axis=1)
-    # Com os arquivos disponíveis temos vendas do período + estoque final, mas não
-    # temos estoque inicial/entradas. Portanto não é matematicamente correto chamar
-    # vendas/estoque-final de "turnover" (isso pode explodir quando o estoque é 1).
-    # Usamos uma taxa de giro/sell-through do período, limitada a 0–100%:
-    # vendas / (vendas + estoque final).
+    # The available files give period sales + ending stock, but no opening stock or
+    # receipts. So it is not mathematically correct to call sales/ending-stock
+    # "turnover" (it can explode when stock is 1). We use the period sell-through
+    # rate instead, bounded to 0–100%: sales / (sales + ending stock).
     merged["giro"] = merged.apply(
         lambda r: (r.quantidade_vendida / (r.quantidade_vendida + r.quantidade_estoque) * 100)
         if (r.quantidade_vendida + r.quantidade_estoque) > 0 else 0, axis=1
@@ -247,12 +249,12 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
 
     def status(r):
         q, v = r.quantidade_estoque, r.quantidade_vendida
-        if q < 0: return "NEGATIVO"          # venda sem entrada no sistema
-        if q == 0: return "SEM ESTOQUE"
-        if q <= config.estoque_critico: return "CRÍTICO"
-        if q <= config.estoque_baixo: return "BAIXO"
-        if v <= 0: return "SEM VENDA"
-        if r.cobertura >= config.excesso_cobertura: return "EXCESSO"
+        if q < 0: return "NEGATIVE"          # sold without a stock receipt in the system
+        if q == 0: return "OUT OF STOCK"
+        if q <= config.estoque_critico: return "CRITICAL"
+        if q <= config.estoque_baixo: return "LOW"
+        if v <= 0: return "NO SALES"
+        if r.cobertura >= config.excesso_cobertura: return "EXCESS"
         return "NORMAL"
     merged["status_estoque"] = merged.apply(status, axis=1)
 
@@ -265,7 +267,7 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
             for frame in (df_estoque, df_vendas) if "codigo_barras" in frame
         ),
         "descricoes_divergentes": len(sales_keys - stock_keys),
-        "produtos_sem_classificacao": int((merged.grupo == "SEM CLASSIFICAÇÃO").sum()),
+        "produtos_sem_classificacao": int((merged.grupo == UNCLASSIFIED).sum()),
         "vendas_sem_correspondencia_itens": unmatched_items,
     }
     return merged, audit

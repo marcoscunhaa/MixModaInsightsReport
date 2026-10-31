@@ -20,7 +20,7 @@ def catalog(original_text):
 
 
 def form_data(product):
-    """O que o formulário devolve ao abrir e salvar um produto sem mexer em nada."""
+    """What the form returns when a product is opened and saved without changes."""
     return {
         "codigo_barras": product["codigo_barras"],
         "descricao": product["descricao"],
@@ -58,13 +58,13 @@ def test_add_product(catalog):
     product = ce.add_product(catalog, {
         "codigo_barras": "0099887766",
         "descricao": "  BLUSA   TESTE  ",
-        "grupo": "VESTUARIO FEMININO",
-        "subclasse": "BLUSA",
+        "grupo": "WOMEN'S APPAREL",
+        "subclasse": "BLOUSE",
         "lojas": [{"loja": "Palmeiras", "quantidade_catalogo": 3, "valor": "19,9"}],
     })
     assert len(catalog["produtos"]) == total + 1
     assert product["descricao"] == "BLUSA TESTE"
-    assert product["situacao"] == "ATIVO"
+    assert product["situacao"] == "ACTIVE"
     store = product["lojas"][0]
     assert store["codigo_barras"] == "99887766"
     assert store["descricao_norm"] == "BLUSA TESTE"
@@ -79,7 +79,7 @@ def test_negative_quantity_allowed_negative_price_rejected(catalog):
     product = ce.update_product(catalog, data["codigo_barras"], data)
     assert product["lojas"][0]["quantidade_catalogo"] == "-2"
     data["lojas"][0]["valor"] = -1
-    with pytest.raises(ce.CatalogValidationError, match="negativo"):
+    with pytest.raises(ce.CatalogValidationError, match="negative"):
         ce.update_product(catalog, data["codigo_barras"], data)
 
 
@@ -87,7 +87,7 @@ def test_cannot_change_code_into_another_products_number(catalog):
     data = form_data(catalog["produtos"][1])
     original = data["codigo_barras"]
     data["codigo_barras"] = "40141247193"
-    with pytest.raises(ce.CatalogValidationError, match="Já existe"):
+    with pytest.raises(ce.CatalogValidationError, match="already exists"):
         ce.update_product(catalog, original, data)
 
 
@@ -101,11 +101,11 @@ def test_add_rejects_duplicate_code_even_with_leading_zeros(catalog):
 
 
 @pytest.mark.parametrize("patch, message", [
-    ({"codigo_barras": ""}, "código"),
-    ({"codigo_barras": "12A4"}, "números"),
-    ({"descricao": " "}, "descrição"),
-    ({"grupo": ""}, "grupo"),
-    ({"lojas": []}, "pelo menos uma loja"),
+    ({"codigo_barras": ""}, "barcode"),
+    ({"codigo_barras": "12A4"}, "numbers"),
+    ({"descricao": " "}, "description"),
+    ({"grupo": ""}, "group"),
+    ({"lojas": []}, "at least one store"),
 ])
 def test_validation(catalog, patch, message):
     data = {**form_data(catalog["produtos"][0]), "codigo_barras": "123456", **patch}
@@ -116,7 +116,7 @@ def test_validation(catalog, patch, message):
 def test_duplicate_store_rejected(catalog):
     data = form_data(catalog["produtos"][0])
     data["lojas"] = data["lojas"] * 2
-    with pytest.raises(ce.CatalogValidationError, match="mais de uma vez"):
+    with pytest.raises(ce.CatalogValidationError, match="more than once"):
         ce.update_product(catalog, data["codigo_barras"], data)
 
 
@@ -126,12 +126,12 @@ def test_update_propagates_description_but_keeps_store_specific_one(catalog):
                    and any(l["descricao"] == p["descricao"] for l in p["lojas"]))
     data = form_data(product)
     data["descricao"] = "NOVA DESCRICAO"
-    data["grupo"] = "UTILIDADES"
+    data["grupo"] = "HOUSEWARES"
     updated = ce.update_product(catalog, product["codigo_barras"], data)
     for old, new in zip(product["lojas"], updated["lojas"]):
         expected = "NOVA DESCRICAO" if old["descricao"] == product["descricao"] else old["descricao"]
         assert new["descricao"] == expected
-        assert new["grupo"] == "UTILIDADES"
+        assert new["grupo"] == "HOUSEWARES"
 
 
 def test_update_can_change_code_and_store_values(catalog):
@@ -151,7 +151,7 @@ def test_delete_product(catalog):
     ce.delete_product(catalog, "0040141247193")
     assert len(catalog["produtos"]) == total - 1
     assert ce.find_product(catalog, "0040141247193") is None
-    # o par legado com o mesmo número (sem um zero) continua lá
+    # the legacy pair with the same number (one zero fewer) is still there
     assert ce.find_product(catalog, "040141247193") is not None
     with pytest.raises(ce.CatalogValidationError):
         ce.delete_product(catalog, "0040141247193")

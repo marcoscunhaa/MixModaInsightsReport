@@ -1,35 +1,38 @@
 import pandas as pd
 
-def filter_analysis(df,loja="Todas",grupo="Todos",subclasse="Todas",busca="",status="Todos"):
+# Filter value meaning "do not filter by this field".
+ALL = "All"
+
+def filter_analysis(df,loja=ALL,grupo=ALL,subclasse=ALL,busca="",status=ALL):
     out=df
-    if loja!="Todas":out=out[out.loja==loja]
-    if grupo!="Todos":out=out[out.grupo==grupo]
-    if subclasse!="Todas":out=out[out.subclasse==subclasse]
-    if status!="Todos":out=out[out.status_estoque==status]
+    if loja!=ALL:out=out[out.loja==loja]
+    if grupo!=ALL:out=out[out.grupo==grupo]
+    if subclasse!=ALL:out=out[out.subclasse==subclasse]
+    if status!=ALL:out=out[out.status_estoque==status]
     if busca.strip():
         q=busca.strip().upper()
         m=(out.descricao.str.upper().str.contains(q,na=False,regex=False)|out.codigo_barras.str.contains(q,na=False,regex=False)|out.grupo.str.upper().str.contains(q,na=False,regex=False)|out.subclasse.str.upper().str.contains(q,na=False,regex=False))
-        # Leitor de código de barras entrega o EAN com zeros à esquerda; o código
-        # da análise é guardado sem eles.
+        # Barcode scanners send the EAN with leading zeros; the analysis stores
+        # codes without them.
         if q.isdigit() and q.lstrip("0"):
             m=m|out.codigo_barras.str.contains(q.lstrip("0"),na=False,regex=False)
         out=out[m]
     return out
 
 def kpis(df):
-    return {"Valor em estoque":df.valor_estoque.sum(),"Unidades em estoque":df.quantidade_estoque.sum(),
-    "Unidades vendidas":df.quantidade_vendida.sum(),"Produtos ativos analisados":len(df),
-    "Produtos sem vendas":int(df.produto_sem_venda.sum()),"Produtos em ruptura":int(df.ruptura.sum()),
-    "Produtos críticos":int((df.status_estoque=="CRÍTICO").sum()),"Giro médio":df.giro.mean() if len(df) else 0,
-    "Margem potencial":(df.margem_unitaria*df.quantidade_estoque).sum(),"Faturamento estimado":df.valor_vendido.sum()}
+    return {"Stock value":df.valor_estoque.sum(),"Units in stock":df.quantidade_estoque.sum(),
+    "Units sold":df.quantidade_vendida.sum(),"Products analyzed":len(df),
+    "Products without sales":int(df.produto_sem_venda.sum()),"Stockout products":int(df.ruptura.sum()),
+    "Critical products":int((df.status_estoque=="CRITICAL").sum()),"Average sell-through":df.giro.mean() if len(df) else 0,
+    "Potential margin":(df.margem_unitaria*df.quantidade_estoque).sum(),"Estimated revenue":df.valor_vendido.sum()}
 
 def pivot_by_store(df, value="quantidade_estoque", ascending=False):
-    """Uma métrica (`value`) de cada produto por loja, uma coluna por loja.
+    """One metric (`value`) for each product per store, one column per store.
 
-    O produto é identificado pelo código de barras, porque a descrição pode
-    variar entre lojas; o nome exibido é o mais frequente. Loja sem linha do
-    produto em `df` fica vazia (NaN), diferente de zero.
-    Retorna (tabela, lojas, totais por loja).
+    Products are identified by barcode because the description can differ
+    between stores; the displayed name is the most frequent one. A store with no
+    row for the product in `df` stays empty (NaN), which is different from zero.
+    Returns (table, stores, totals per store).
     """
     if df.empty:
         return df.iloc[0:0], [], {}
@@ -47,24 +50,24 @@ def pivot_by_store(df, value="quantidade_estoque", ascending=False):
 
 
 def stock_by_store(df):
-    """Unidades em estoque de cada produto por loja."""
+    """Units in stock for each product per store."""
     return pivot_by_store(df, "quantidade_estoque")
 
 
 def single_product_labels(df):
-    """Com um único produto na análise, KPIs de contagem viram texto legível.
+    """With a single product in the analysis, count KPIs become readable text.
 
-    Retorna {} quando há mais (ou menos) de um produto: aí os números fazem sentido.
+    Returns {} when there are more (or fewer) products: then the numbers make sense.
     """
     if len(df) != 1:
         return {}
     row = df.iloc[0]
     stock = float(row.quantidade_estoque)
     return {
-        "Produtos ativos": "1 PRODUTO",
-        "Sem vendas": "SEM VENDAS" if row.quantidade_vendida <= 0 else "COM VENDAS",
-        "Em ruptura": "ESTOQUE NEGATIVO" if stock < 0 else "SEM ESTOQUE" if stock == 0 else "COM ESTOQUE",
-        "Críticos": str(row.status_estoque),
+        "Active products": "1 PRODUCT",
+        "No sales": "NO SALES" if row.quantidade_vendida <= 0 else "HAS SALES",
+        "Stockouts": "NEGATIVE STOCK" if stock < 0 else "OUT OF STOCK" if stock == 0 else "IN STOCK",
+        "Critical": str(row.status_estoque),
     }
 
 
@@ -85,7 +88,7 @@ def stagnant(df,n=10):
 
 
 def idle_stock(df,n=20):
-    """Estoque parado: sem venda no período, ordenado pela maior quantidade em estoque."""
+    """Idle stock: no sales in the period, ranked by the largest quantity in stock."""
     return (
         df[(df.quantidade_estoque > 0) & (df.quantidade_vendida <= 0)]
         .sort_values(["quantidade_estoque", "valor_estoque"], ascending=[False, False], kind="stable")
@@ -105,8 +108,8 @@ def rupture(df,n=None):
 
 def critical(df,n=None):
     """Rank replenishment attention by severity, coverage risk, and demand."""
-    x = df[df.status_estoque.isin(["NEGATIVO", "SEM ESTOQUE", "CRÍTICO", "BAIXO"])].copy()
-    status_priority = {"NEGATIVO": 0, "SEM ESTOQUE": 0, "CRÍTICO": 1, "BAIXO": 2}
+    x = df[df.status_estoque.isin(["NEGATIVE", "OUT OF STOCK", "CRITICAL", "LOW"])].copy()
+    status_priority = {"NEGATIVE": 0, "OUT OF STOCK": 0, "CRITICAL": 1, "LOW": 2}
     x["_prioridade_status"] = x.status_estoque.map(status_priority)
     x = x.sort_values(
         ["_prioridade_status", "risco_ruptura", "cobertura", "quantidade_vendida", "valor_vendido"],

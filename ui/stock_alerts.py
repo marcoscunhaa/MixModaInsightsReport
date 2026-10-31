@@ -1,4 +1,4 @@
-"""Interface para configurar regras e consultar alertas de estoque."""
+"""UI to configure stock rules and review stock alerts."""
 import re
 
 from PySide6.QtCore import Qt
@@ -13,7 +13,7 @@ from rapidfuzz import fuzz
 from core.stock_alerts import StockAlertStore
 from exports.stock_alerts_export import export_stock_alerts_xlsx
 from core.stores import STORES
-from utils.formatting import brl, br_number
+from utils.formatting import fmt_money, fmt_number
 from utils.normalization import normalize_barcode, normalize_text
 from ui.window_chrome import confirm_action, get_save_file, install_mac_window_chrome, show_message
 
@@ -101,9 +101,9 @@ QFrame#card QLabel#emptyRules { color:#8A96AA; font-size:12px; padding:30px; }
 
 
 class _IntField(QLineEdit):
-    """Campo numérico simples (só dígitos) com a interface do QSpinBox usada aqui.
+    """Simple numeric field (digits only) with the QSpinBox interface used here.
 
-    Substitui o QSpinBox porque o estilo geral do app escondia o número dentro dele.
+    Replaces QSpinBox because the app-wide style hid the number inside it.
     """
 
     def __init__(self, value=0, minimum=0, maximum=100000, parent=None):
@@ -149,7 +149,7 @@ class StockAlertRulesDialog(QDialog):
         }
         self.selected_product = None
         self.editing_rule = None
-        self.setWindowTitle("Regras de estoque • Mix Moda")
+        self.setWindowTitle("Stock rules • Mix Moda")
         screen = self.screen() or QApplication.primaryScreen()
         available = screen.availableGeometry() if screen else None
         width = min(1050, available.width() - 32) if available else 1050
@@ -208,13 +208,13 @@ class StockAlertRulesDialog(QDialog):
         row.addWidget(icon, 0, Qt.AlignmentFlag.AlignTop)
         texts = QVBoxLayout()
         texts.setSpacing(3)
-        eyebrow = QLabel("GESTÃO INTELIGENTE DE ESTOQUE")
+        eyebrow = QLabel("SMART STOCK MANAGEMENT")
         eyebrow.setObjectName("heroEyebrow")
         texts.addWidget(eyebrow)
-        title = QLabel("Regras de estoque crítico")
+        title = QLabel("Critical stock rules")
         title.setObjectName("heroTitle")
         texts.addWidget(title)
-        subtitle = QLabel("Escolha os produtos importantes e defina quando o estoque deve chamar sua atenção.")
+        subtitle = QLabel("Pick the products that matter and decide when their stock should get your attention.")
         subtitle.setObjectName("heroText")
         subtitle.setWordWrap(True)
         texts.addWidget(subtitle)
@@ -228,7 +228,7 @@ class StockAlertRulesDialog(QDialog):
         self.hero_count.setObjectName("heroNumber")
         self.hero_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
         stat_box.addWidget(self.hero_count)
-        self.hero_caption = QLabel("REGRAS ATIVAS")
+        self.hero_caption = QLabel("ACTIVE RULES")
         self.hero_caption.setObjectName("heroCaption")
         self.hero_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         stat_box.addWidget(self.hero_caption)
@@ -240,14 +240,14 @@ class StockAlertRulesDialog(QDialog):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(22, 20, 22, 20)
         layout.setSpacing(10)
-        title = QLabel("✨  Nova regra")
+        title = QLabel("✨  New rule")
         title.setObjectName("cardTitle")
         layout.addWidget(title)
         layout.addSpacing(4)
 
-        layout.addLayout(self._step(1, "PRODUTO"))
+        layout.addLayout(self._step(1, "PRODUCT"))
         self.search = QLineEdit()
-        self.search.setPlaceholderText("🔍  Buscar por nome ou código — ex.: cueca cavada")
+        self.search.setPlaceholderText("🔍  Search by product name or barcode")
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self.refresh_products)
         layout.addWidget(self.search)
@@ -256,17 +256,17 @@ class StockAlertRulesDialog(QDialog):
         self.results.setMaximumHeight(170)
         self.results.currentItemChanged.connect(self.select_product)
         layout.addWidget(self.results)
-        self.selected_label = QLabel("Digite pelo menos 2 caracteres para encontrar um produto.")
+        self.selected_label = QLabel("Type at least 2 characters to find a product.")
         self.selected_label.setObjectName("hint")
         self.selected_label.setWordWrap(True)
         layout.addWidget(self.selected_label)
 
         layout.addSpacing(6)
-        layout.addLayout(self._step(2, "LOJAS"))
+        layout.addLayout(self._step(2, "STORES"))
         layout.addWidget(self._store_checkboxes())
 
         layout.addSpacing(6)
-        layout.addLayout(self._step(3, "ESTOQUE MÍNIMO"))
+        layout.addLayout(self._step(3, "MINIMUM STOCK"))
         limit = QHBoxLayout()
         limit.setSpacing(8)
         minus = QPushButton("−")
@@ -276,7 +276,7 @@ class StockAlertRulesDialog(QDialog):
         self.minimum = _IntField(3, 0, 100000)
         self.minimum.setObjectName("minimumField")
         self.minimum.setFixedSize(90, 40)
-        self.minimum.setToolTip("Avisar quando o estoque ficar igual ou abaixo deste limite.")
+        self.minimum.setToolTip("Alert when stock is at or below this limit.")
         limit.addWidget(self.minimum)
         plus = QPushButton("+")
         plus.setObjectName("stepper")
@@ -284,18 +284,18 @@ class StockAlertRulesDialog(QDialog):
         limit.addWidget(plus)
         minus.clicked.connect(lambda checked=False: self.minimum.stepDown())
         plus.clicked.connect(lambda checked=False: self.minimum.stepUp())
-        unit = QLabel("unidades ou menos")
+        unit = QLabel("units or fewer")
         unit.setObjectName("muted")
         limit.addWidget(unit)
         limit.addStretch()
         layout.addLayout(limit)
 
         layout.addStretch(1)
-        self.status = QLabel("Avisar quando o estoque chegar a este número de unidades ou menos.")
+        self.status = QLabel("Alert when stock reaches this number of units or fewer.")
         self.status.setObjectName("hint")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
-        self.save_button = QPushButton("＋  SALVAR REGRA")
+        self.save_button = QPushButton("＋  SAVE RULE")
         self.save_button.setObjectName("saveRule")
         self.save_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.save_button.setEnabled(False)
@@ -311,13 +311,13 @@ class StockAlertRulesDialog(QDialog):
         )
 
     def _store_checkboxes(self):
-        """"Todas as lojas" ou lojas específicas; cada loja marcada vira uma regra."""
+        """"All stores" or specific stores; each checked store becomes one rule."""
         box = QWidget()
         grid = QGridLayout(box)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(8)
-        self.all_stores = QCheckBox("Todas as lojas")
+        self.all_stores = QCheckBox("All stores")
         self.all_stores.setObjectName("allStores")
         self.all_stores.setCursor(Qt.CursorShape.PointingHandCursor)
         self.all_stores.toggled.connect(self._toggle_all_stores)
@@ -351,7 +351,7 @@ class StockAlertRulesDialog(QDialog):
         layout.setContentsMargins(22, 20, 22, 16)
         layout.setSpacing(10)
         heading = QHBoxLayout()
-        title = QLabel("📋  Suas regras")
+        title = QLabel("📋  Your rules")
         title.setObjectName("cardTitle")
         heading.addWidget(title)
         heading.addStretch()
@@ -361,7 +361,7 @@ class StockAlertRulesDialog(QDialog):
         layout.addLayout(heading)
 
         self.rules_table = QTableWidget(0, 4)
-        self.rules_table.setHorizontalHeaderLabels(["PRODUTO", "LOJA", "LIMITE", ""])
+        self.rules_table.setHorizontalHeaderLabels(["PRODUCT", "STORE", "LIMIT", ""])
         self.rules_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.rules_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.rules_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -373,7 +373,7 @@ class StockAlertRulesDialog(QDialog):
         for column in (1, 2, 3):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.rules_table, 1)
-        self.empty_rules = QLabel("🔕\n\nNenhuma regra ainda.\nCrie a primeira ao lado para acompanhar um produto.")
+        self.empty_rules = QLabel("🔕\n\nNo rules yet.\nCreate your first one on the left to track a product.")
         self.empty_rules.setObjectName("emptyRules")
         self.empty_rules.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_rules.hide()
@@ -388,7 +388,7 @@ class StockAlertRulesDialog(QDialog):
 
     def _footer(self):
         row = QHBoxLayout()
-        note = QLabel("🔒  As regras ficam salvas neste computador e são verificadas com os dados da última análise.")
+        note = QLabel("🔒  Rules are saved on this computer and checked against the data from the latest analysis.")
         note.setObjectName("footNote")
         note.setWordWrap(True)
         row.addWidget(note, 1)
@@ -400,7 +400,7 @@ class StockAlertRulesDialog(QDialog):
         self.save_button.setEnabled(False)
         query = str(text).strip()
         if len(query) < 2:
-            self._set_hint("Digite pelo menos 2 caracteres para encontrar um produto.")
+            self._set_hint("Type at least 2 characters to find a product.")
             return
         normalized_query = normalize_text(query)
         query_digits = normalize_barcode(query)
@@ -426,15 +426,15 @@ class StockAlertRulesDialog(QDialog):
                 matches.append((score, product))
         matches.sort(key=lambda pair: (-pair[0], normalize_text(pair[1].get("descricao", ""))))
         for _, product in matches[:60]:
-            description = str(product.get("descricao", "Produto"))
+            description = str(product.get("descricao", "Product"))
             barcode = str(product.get("codigo_barras", ""))
             item = QListWidgetItem(f"{description}  •  {barcode}")
             item.setData(Qt.ItemDataRole.UserRole, (normalize_barcode(barcode), normalize_text(description)))
             self.results.addItem(item)
         if not matches:
-            self._set_hint("Nenhum produto encontrado. Tente outra palavra ou parte do código.")
+            self._set_hint("No products found. Try another word or part of the barcode.")
         else:
-            self._set_hint(f"{len(matches)} produtos encontrados. Selecione o item para definir a regra.")
+            self._set_hint(f"{len(matches)} products found. Select one to set up the rule.")
 
     def select_product(self, current, _previous):
         self.selected_product = None
@@ -455,7 +455,7 @@ class StockAlertRulesDialog(QDialog):
             return
         stores = self._selected_stores()
         if not stores:
-            show_message(self, "warning", "Escolha as lojas", "Marque \"Todas as lojas\" ou pelo menos uma loja.")
+            show_message(self, "warning", "Choose the stores", "Check \"All stores\" or at least one store.")
             return
         minimum = self.minimum.value()
         product = self.selected_product
@@ -468,33 +468,33 @@ class StockAlertRulesDialog(QDialog):
                     "loja": store,
                     "estoque_minimo": minimum,
                 })
-            # Editando uma regra cuja loja foi desmarcada: a regra antiga sai.
+            # Editing a rule whose store was unchecked: the old rule is removed.
             rule = self.editing_rule
             if rule and key == (normalize_barcode(rule.get("codigo_barras")), normalize_text(rule.get("descricao"))):
                 if normalize_text(rule.get("loja", "*")) not in {normalize_text(s) for s in stores}:
                     self.alert_store.remove_rule(rule.get("id"))
         except (OSError, ValueError) as error:
-            show_message(self, "critical", "Não foi possível salvar", str(error))
+            show_message(self, "critical", "Could not save", str(error))
             return
         self.editing_rule = None
-        where = "todas as lojas" if stores == ["*"] else f"{len(stores)} loja(s)"
-        self.status.setText(f"Regra salva para {where}. O alerta aparece quando o estoque atingir o limite ou ficar abaixo.")
+        where = "all stores" if stores == ["*"] else f"{len(stores)} store(s)"
+        self.status.setText(f"Rule saved for {where}. The alert shows up when stock reaches the limit or drops below it.")
         self.refresh_rules()
 
     def refresh_rules(self):
         rules = self.alert_store.load_rules()
         count = len(rules)
-        self.rule_count.setText(f"{count} REGRA{'S' if count != 1 else ''}")
+        self.rule_count.setText(f"{count} RULE{'S' if count != 1 else ''}")
         self.hero_count.setText(str(count))
-        self.hero_caption.setText("REGRA ATIVA" if count == 1 else "REGRAS ATIVAS")
+        self.hero_caption.setText("ACTIVE RULE" if count == 1 else "ACTIVE RULES")
         self.rules_table.setVisible(bool(rules))
         self.empty_rules.setVisible(not rules)
         self.rules_table.setRowCount(count)
         for row, rule in enumerate(rules):
             store = rule.get("loja", "*")
-            # Mantém o texto nos itens (busca/acessibilidade); o visual vem dos widgets.
-            for col, value in enumerate((rule.get("descricao", ""), "Todas as lojas" if store == "*" else store,
-                                         f"Até {rule.get('estoque_minimo', 0)} un.")):
+            # Keep the text on the items (search/accessibility); the visuals come from widgets.
+            for col, value in enumerate((rule.get("descricao", ""), "All stores" if store == "*" else store,
+                                         f"Up to {rule.get('estoque_minimo', 0)} units")):
                 item = QTableWidgetItem(str(value))
                 item.setForeground(QColor(0, 0, 0, 0))
                 self.rules_table.setItem(row, col, item)
@@ -511,11 +511,11 @@ class StockAlertRulesDialog(QDialog):
             product_box.addWidget(code)
             self.rules_table.setCellWidget(row, 0, product)
 
-            store_label = QLabel("🏬  Todas as lojas" if store == "*" else store)
+            store_label = QLabel("🏬  All stores" if store == "*" else store)
             store_label.setObjectName("storeAll" if store == "*" else "storePill")
             self.rules_table.setCellWidget(row, 1, self._centered(store_label))
 
-            limit = QLabel(f"≤ {rule.get('estoque_minimo', 0)} un.")
+            limit = QLabel(f"≤ {rule.get('estoque_minimo', 0)} units")
             limit.setObjectName("limitPill")
             self.rules_table.setCellWidget(row, 2, self._centered(limit))
 
@@ -525,13 +525,13 @@ class StockAlertRulesDialog(QDialog):
             actions_box.setSpacing(6)
             edit = QPushButton("✏️")
             edit.setObjectName("iconEdit")
-            edit.setToolTip("Editar regra")
+            edit.setToolTip("Edit rule")
             edit.setCursor(Qt.CursorShape.PointingHandCursor)
             edit.clicked.connect(lambda checked=False, saved=dict(rule): self.edit_rule(saved))
             actions_box.addWidget(edit)
             remove = QPushButton("🗑️")
             remove.setObjectName("iconDelete")
-            remove.setToolTip("Excluir regra")
+            remove.setToolTip("Delete rule")
             remove.setCursor(Qt.CursorShape.PointingHandCursor)
             remove.clicked.connect(lambda checked=False, rule_id=rule.get("id"): self.remove_rule(rule_id))
             actions_box.addWidget(remove)
@@ -557,8 +557,8 @@ class StockAlertRulesDialog(QDialog):
             show_message(
                 self,
                 "warning",
-                "Produto não encontrado",
-                "Este produto não está no catálogo carregado. Remova a regra ou selecione outro produto.",
+                "Product not found",
+                "This product is not in the loaded catalog. Remove the rule or select another product.",
             )
             return
 
@@ -572,7 +572,7 @@ class StockAlertRulesDialog(QDialog):
         self._set_selected_stores(rule.get("loja", "*"))
         self.editing_rule = dict(rule)
         self.minimum.setValue(int(rule.get("estoque_minimo", 0)))
-        self.status.setText("Ajuste o limite e salve para atualizar esta regra.")
+        self.status.setText("Adjust the limit and save to update this rule.")
         self.search.setFocus()
 
     def remove_rule(self, rule_id):
@@ -582,19 +582,19 @@ class StockAlertRulesDialog(QDialog):
             return
         confirmed = confirm_action(
             self,
-            "Excluir regra de estoque",
-            f"Excluir a regra de “{rule.get('descricao', 'produto')}” para "
-            f"{'todas as lojas' if rule.get('loja', '*') == '*' else rule.get('loja')}?",
-            "Excluir regra",
+            "Delete stock rule",
+            f"Delete the rule for “{rule.get('descricao', 'product')}” in "
+            f"{'all stores' if rule.get('loja', '*') == '*' else rule.get('loja')}?",
+            "Delete rule",
         )
         if not confirmed:
             return
         try:
             self.alert_store.remove_rule(rule_id)
         except OSError as error:
-            show_message(self, "critical", "Não foi possível remover", str(error))
+            show_message(self, "critical", "Could not remove", str(error))
             return
-        self.status.setText("Regra removida.")
+        self.status.setText("Rule removed.")
         self.refresh_rules()
 
 
@@ -602,7 +602,7 @@ class StockAlertsDialog(QDialog):
     def __init__(self, alerts, parent=None):
         super().__init__(parent)
         self.alerts = list(alerts)
-        self.setWindowTitle("Produtos em atenção • Mix Moda")
+        self.setWindowTitle("Products needing attention • Mix Moda")
         self.resize(900, 620)
         self.setMinimumSize(700, 440)
         self.setStyleSheet(PALETTE)
@@ -611,15 +611,15 @@ class StockAlertsDialog(QDialog):
         root.setSpacing(12)
         install_mac_window_chrome(self, root)
 
-        eyebrow = QLabel("ACOMPANHAMENTO DE ESTOQUE")
+        eyebrow = QLabel("STOCK MONITORING")
         eyebrow.setObjectName("eyebrow")
         root.addWidget(eyebrow)
-        title = QLabel("Produtos em atenção")
+        title = QLabel("Products needing attention")
         title.setObjectName("title")
         root.addWidget(title)
         subtitle = QLabel(
-            "Estes produtos atingiram a faixa de estoque definida nas suas regras. "
-            "A quantidade exibida corresponde à última análise."
+            "These products reached the stock level set in your rules. "
+            "The quantity shown comes from the latest analysis."
         )
         subtitle.setObjectName("muted")
         subtitle.setWordWrap(True)
@@ -629,7 +629,7 @@ class StockAlertsDialog(QDialog):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(14, 14, 14, 14)
         table = QTableWidget(len(alerts), 5)
-        table.setHorizontalHeaderLabels(["Produto", "Código", "Loja", "Estoque atual", "Preço de venda"])
+        table.setHorizontalHeaderLabels(["Product", "Barcode", "Store", "Current stock", "Sale price"])
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setAlternatingRowColors(True)
@@ -642,9 +642,9 @@ class StockAlertsDialog(QDialog):
                 str(alert.get("descricao", "")),
                 str(alert.get("codigo_barras", "")),
                 str(alert.get("loja", "")),
-                f"{br_number(alert.get('quantidade_estoque', 0), 0)} un.  (limite ≤ "
+                f"{fmt_number(alert.get('quantidade_estoque', 0), 0)} units  (limit ≤ "
                 f"{alert.get('estoque_minimo', 0)})",
-                brl(alert.get("preco_venda", 0)),
+                fmt_money(alert.get("preco_venda", 0)),
             ]
             for col, value in enumerate(values):
                 table.setItem(row, col, QTableWidgetItem(value))
@@ -652,10 +652,10 @@ class StockAlertsDialog(QDialog):
         layout.addWidget(table, 1)
         if not alerts:
             table.hide()
-            empty = QLabel("Tudo em dia")
+            empty = QLabel("All good")
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty.setStyleSheet("color:#16836D;font-size:18px;font-weight:900;padding:28px;")
-            detail = QLabel("Nenhum produto atingiu a faixa de estoque definida nas suas regras.")
+            detail = QLabel("No product reached the stock level set in your rules.")
             detail.setAlignment(Qt.AlignmentFlag.AlignCenter)
             detail.setWordWrap(True)
             detail.setStyleSheet("color:#74829A;font-size:11px;padding:0 20px 24px;")
@@ -664,10 +664,10 @@ class StockAlertsDialog(QDialog):
         root.addWidget(panel, 1)
 
         footer = QHBoxLayout()
-        count = QLabel(f"{len(alerts)} produto(s) dentro da faixa configurada")
+        count = QLabel(f"{len(alerts)} product(s) within the configured range")
         count.setObjectName("muted")
         footer.addWidget(count, 1)
-        export_button = QPushButton("EXPORTAR EXCEL")
+        export_button = QPushButton("EXPORT TO EXCEL")
         export_button.setEnabled(bool(self.alerts))
         export_button.setCursor(Qt.CursorShape.PointingHandCursor)
         export_button.setStyleSheet(
@@ -678,7 +678,7 @@ class StockAlertsDialog(QDialog):
         )
         export_button.clicked.connect(self.export_excel)
         footer.addWidget(export_button)
-        close = QPushButton("FECHAR")
+        close = QPushButton("CLOSE")
         close.setObjectName("Ghost")
         close.clicked.connect(self.accept)
         footer.addWidget(close)
@@ -687,8 +687,8 @@ class StockAlertsDialog(QDialog):
     def export_excel(self):
         path = get_save_file(
             self,
-            "Exportar alertas para Excel",
-            "MixModa_Reposicao_Estoque.xlsx",
+            "Export alerts to Excel",
+            "MixModa_Restock_List.xlsx",
             "Excel (*.xlsx)",
             "xlsx",
         )
@@ -697,11 +697,11 @@ class StockAlertsDialog(QDialog):
         try:
             export_stock_alerts_xlsx(path, self.alerts)
         except (OSError, ValueError, ImportError) as error:
-            show_message(self, "critical", "Falha ao exportar", str(error))
+            show_message(self, "critical", "Export failed", str(error))
             return
         show_message(
             self,
             "information",
-            "Planilha exportada",
-            f"Arquivo salvo com sucesso em:\n{path}",
+            "Spreadsheet exported",
+            f"File saved successfully to:\n{path}",
         )

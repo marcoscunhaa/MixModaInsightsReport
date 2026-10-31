@@ -23,9 +23,9 @@ class _MacTitleBar(QFrame):
 
         controls = QHBoxLayout()
         controls.setSpacing(7)
-        self._button(controls, "#FEBC2E", "Minimizar janela", window.showMinimized)
-        self._button(controls, "#28C840", "Maximizar ou restaurar janela", self._toggle_maximize)
-        self._button(controls, "#FF5F57", "Fechar janela", window.close)
+        self._button(controls, "#FEBC2E", "Minimize window", window.showMinimized)
+        self._button(controls, "#28C840", "Maximize or restore window", self._toggle_maximize)
+        self._button(controls, "#FF5F57", "Close window", window.close)
         row.addSpacing(58)
         row.addStretch(1)
 
@@ -85,17 +85,17 @@ class _MacTitleBar(QFrame):
 
 
 class _BringToFrontOnShow(QObject):
-    """Janelas sem moldura nem sempre vêm para a frente no Linux; ao abrir, sobe e pega o foco."""
+    """Frameless windows do not always come to the front on Linux; raise and focus on show."""
 
     def eventFilter(self, watched, event):
         if event.type() == QEvent.Type.Show:
-            # Depois do evento, para o gerenciador de janelas já ter mapeado a janela.
+            # After the event, so the window manager has already mapped the window.
             QTimer.singleShot(0, lambda w=watched: (w.raise_(), w.activateWindow()))
         return False
 
 
 def _owner_window(window):
-    """Janela visível mais à frente para ser dona de um diálogo sem dono definido."""
+    """Front-most visible window to own a dialog that has no owner."""
     parent = window.parentWidget()
     if parent is not None:
         return parent
@@ -118,7 +118,7 @@ def install_mac_window_chrome(window, content_layout):
         window.setMinimumSize(min(minimum.width(), width), min(minimum.height(), height))
 
     if isinstance(window, QDialog) and window.parentWidget() is None:
-        # Diálogo sem dono (ex.: mensagem aberta com parent=None) fica sobre a janela ativa.
+        # A dialog with no owner (e.g. a message opened with parent=None) stays above the active window.
         owner = _owner_window(window)
         if owner is not None:
             window.setParent(owner, window.windowFlags())
@@ -140,7 +140,7 @@ def install_mac_window_chrome(window, content_layout):
         for (row, column, row_span, column_span), item in positions:
             content_layout.addItem(item, row + 1, column, row_span, column_span)
     else:
-        raise TypeError("A janela precisa usar um layout vertical ou em grade para o título personalizado.")
+        raise TypeError("The window must use a vertical or grid layout for the custom title bar.")
 
     window._mac_title_bar = title_bar
     return title_bar
@@ -224,7 +224,7 @@ def get_save_file(parent, title, default_name, name_filter, default_suffix=""):
     files = dialog.selectedFiles()
     return files[0] if accepted and files else ""
 
-def confirm_action(parent, title, message, confirm_label="Excluir"):
+def confirm_action(parent, title, message, confirm_label="Delete"):
     """Show a confirmation dialog with the same app window controls."""
     from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
@@ -252,7 +252,7 @@ def confirm_action(parent, title, message, confirm_label="Excluir"):
     root.addWidget(label, 1)
     actions = QHBoxLayout()
     actions.addStretch(1)
-    cancel = QPushButton("Cancelar")
+    cancel = QPushButton("Cancel")
     cancel.setObjectName("cancelAction")
     cancel.clicked.connect(lambda checked=False: dialog.reject())
     actions.addWidget(cancel)

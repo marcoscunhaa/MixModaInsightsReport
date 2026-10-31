@@ -1,4 +1,4 @@
-from utils.formatting import brl, br_number
+from utils.formatting import fmt_money, fmt_number
 from PySide6.QtWidgets import QApplication,QDialog,QVBoxLayout,QGridLayout,QLabel,QPushButton,QFrame,QHBoxLayout,QWidget,QScrollArea,QSizePolicy
 from PySide6.QtCore import Qt
 from ui.window_chrome import install_mac_window_chrome
@@ -6,7 +6,7 @@ from ui.window_chrome import install_mac_window_chrome
 class ProductModal(QDialog):
     def __init__(self,row,parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Detalhes do Produto")
+        self.setWindowTitle("Product Details")
         price_tiers=[t for t in (row.get("precos_venda") or []) if isinstance(t,dict)]
         many_prices=len(price_tiers)>1
         self._fit_to_screen(760 if many_prices else 720)
@@ -33,38 +33,38 @@ class ProductModal(QDialog):
 
         hero=QFrame(); hero.setObjectName("hero")
         hl=QVBoxLayout(hero); hl.setContentsMargins(22,20,22,20); hl.setSpacing(6)
-        e=QLabel("VISÃO COMPLETA DO PRODUTO"); e.setObjectName("eyebrow"); hl.addWidget(e)
-        description=str(row.get("descricao", "Produto sem descrição"))
+        e=QLabel("FULL PRODUCT OVERVIEW"); e.setObjectName("eyebrow"); hl.addWidget(e)
+        description=str(row.get("descricao", "Product without description"))
         barcode=str(row.get("codigo_barras", "")).strip()
         title=QLabel(description); title.setObjectName("productTitle"); title.setWordWrap(True)
         title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse); hl.addWidget(title)
-        barcode_label=QLabel(f"Código  {barcode or '—'}"); barcode_label.setObjectName("meta")
+        barcode_label=QLabel(f"Barcode  {barcode or '—'}"); barcode_label.setObjectName("meta")
         barcode_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse); hl.addWidget(barcode_label)
         meta=QLabel(f"{row.get('grupo','—')}   •   {row.get('subclasse','—')}   •   {row.get('loja','—')}"); meta.setObjectName("meta"); meta.setWordWrap(True); hl.addWidget(meta)
         root.addWidget(hero)
 
-        # O corpo rola quando a tela é baixa, em vez de espremer os cards.
+        # The body scrolls on short screens instead of squeezing the cards.
         scroll=QScrollArea(); scroll.setObjectName("productScroll"); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); scroll.viewport().setObjectName("productViewport")
         body=QWidget(); body.setObjectName("productBody"); body.setStyleSheet("QWidget#productBody{background:#F3F0FF;border:1px solid #DDD5FA;border-radius:22px;}"); bl=QVBoxLayout(body); bl.setContentsMargins(14,14,14,16); bl.setSpacing(14)
 
         metrics=QGridLayout(); metrics.setHorizontalSpacing(12); metrics.setVerticalSpacing(12)
         fields=[
-            ("ESTOQUE ATUAL",br_number(row.get("quantidade_estoque",0),0),"#7C3AED"),
-            ("VENDAS NO PERÍODO",br_number(row.get("quantidade_vendida",0),0),"#E85D8A"),
-            ("FATURAMENTO",brl(row.get('valor_vendido',0)),"#E85D8A"),
-            ("VALOR EM ESTOQUE",brl(row.get('valor_estoque',0)),"#F3B63F"),
-            ("PREÇO DE COMPRA",brl(row.get('preco_compra',0)),"#36A269"),
-            *([("PREÇO DE VENDA",self._current_price(row),"#2C9FD6")] if many_prices else []),
-            ("PREÇO DE VENDA MÉDIO" if many_prices else "PREÇO DE VENDA",brl(row.get('preco_venda',0)),"#2C9FD6"),
-            ("MARGEM UNITÁRIA",brl(row.get('margem_unitaria',0)),"#36A269"),
-            ("MARGEM %",f"{row.get('margem_percentual',0):.1f}%","#7C3AED"),
-            ("GIRO DO PERÍODO",f"{row.get('giro',0):.1f}%","#2C9FD6"),
+            ("CURRENT STOCK",fmt_number(row.get("quantidade_estoque",0),0),"#7C3AED"),
+            ("UNITS SOLD IN PERIOD",fmt_number(row.get("quantidade_vendida",0),0),"#E85D8A"),
+            ("REVENUE",fmt_money(row.get('valor_vendido',0)),"#E85D8A"),
+            ("STOCK VALUE",fmt_money(row.get('valor_estoque',0)),"#F3B63F"),
+            ("PURCHASE PRICE",fmt_money(row.get('preco_compra',0)),"#36A269"),
+            *([("SALE PRICE",self._current_price(row),"#2C9FD6")] if many_prices else []),
+            ("AVERAGE SALE PRICE" if many_prices else "SALE PRICE",fmt_money(row.get('preco_venda',0)),"#2C9FD6"),
+            ("UNIT MARGIN",fmt_money(row.get('margem_unitaria',0)),"#36A269"),
+            ("MARGIN %",f"{row.get('margem_percentual',0):.1f}%","#7C3AED"),
+            ("PERIOD SELL-THROUGH",f"{row.get('giro',0):.1f}%","#2C9FD6"),
             ("STATUS",str(row.get('status_estoque','—')),"#D9284B"),
         ]
         for i,(k,v,c) in enumerate(fields):
             box=QFrame(); box.setObjectName("metric"); box.setStyleSheet(f"QFrame#metric{{background:#FFFFFF;border:1px solid #E6EAF2;border-radius:16px;border-top:4px solid {c};}} QFrame#metric:hover{{background:#FCFAFF;border:1px solid #D8CFF0;border-top:4px solid {c};}}")
-            box.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Fixed)  # altura nunca encolhe
+            box.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Fixed)  # height never shrinks
             q=QVBoxLayout(box); q.setContentsMargins(14,11,14,12); q.setSpacing(4)
             a=QLabel(k); a.setObjectName("metricLabel"); q.addWidget(a)
             z=QLabel(v); z.setObjectName("metricValue"); q.addWidget(z)
@@ -72,14 +72,14 @@ class ProductModal(QDialog):
         bl.addLayout(metrics)
 
         section=QFrame(); section.setObjectName("section"); sl=QVBoxLayout(section); sl.setContentsMargins(16,15,16,16); sl.setSpacing(8)
-        st=QLabel("LEITURA DOS INDICADORES"); st.setObjectName("sectionTitle"); sl.addWidget(st)
+        st=QLabel("WHAT THE NUMBERS SAY"); st.setObjectName("sectionTitle"); sl.addWidget(st)
         q=row.get("quantidade_estoque",0); v=row.get("quantidade_vendida",0)
-        msg=("Produto vendeu no período e está com estoque baixo, indicando atenção para reposição." if v>0 and q<=3 else
-             "Produto possui estoque, mas não apresentou vendas no período." if q>0 and v==0 else
-             "Os indicadores não apontam um alerta específico pelas regras configuradas.")
+        msg=("The product sold in the period and its stock is low: consider restocking." if v>0 and q<=3 else
+             "The product has stock but had no sales in the period." if q>0 and v==0 else
+             "The indicators do not raise any specific alert under the configured rules.")
         ins=QLabel(msg); ins.setObjectName("insight"); ins.setWordWrap(True); sl.addWidget(ins)
         if many_prices:
-            # Lado a lado para caber sem aumentar a altura do card.
+            # Side by side so it fits without making the card taller.
             details=QHBoxLayout(); details.setSpacing(14)
             details.addWidget(self._price_tiers(price_tiers),3); details.addWidget(section,2)
             bl.addLayout(details)
@@ -89,16 +89,16 @@ class ProductModal(QDialog):
         scroll.setWidget(body)
         root.addWidget(scroll,1)
 
-        bottom=QHBoxLayout(); bottom.addStretch(1); b=QPushButton("Fechar"); b.setObjectName("close"); b.clicked.connect(self.accept); bottom.addWidget(b); root.addLayout(bottom)
+        bottom=QHBoxLayout(); bottom.addStretch(1); b=QPushButton("Close"); b.setObjectName("close"); b.clicked.connect(self.accept); bottom.addWidget(b); root.addLayout(bottom)
 
     @staticmethod
     def _current_price(row):
-        """Preço atual (coluna F do estoque) para produtos vendidos por vários preços."""
+        """Current price (stock column F) for products sold at several prices."""
         try:
             value=float(row.get("preco_venda_atual"))
         except (TypeError,ValueError):
             return "—"
-        return brl(value) if value==value and value>0 else "—"
+        return fmt_money(value) if value==value and value>0 else "—"
 
     def _fit_to_screen(self,height):
         screen=self.screen() or QApplication.primaryScreen()
@@ -108,23 +108,23 @@ class ProductModal(QDialog):
         self.resize(width,height); self.setMinimumSize(min(760,width),min(520,height))
 
     def _price_tiers(self,tiers):
-        """Vendas do período separadas por preço de venda, com o total no fim."""
+        """Period sales split by sale price, with the total at the end."""
         section=QFrame(); section.setObjectName("section"); sl=QVBoxLayout(section); sl.setContentsMargins(16,14,16,14); sl.setSpacing(6)
-        st=QLabel("VALORES DE VENDA NO PERÍODO"); st.setObjectName("sectionTitle"); sl.addWidget(st)
-        hint=QLabel("Vendido por mais de um preço: o faturamento soma cada preço × quantidade.")
+        st=QLabel("SALE PRICES IN THE PERIOD"); st.setObjectName("sectionTitle"); sl.addWidget(st)
+        hint=QLabel("Sold at more than one price: revenue adds up each price × quantity.")
         hint.setStyleSheet("color:#7A8498;font-size:11px;"); hint.setWordWrap(True); sl.addWidget(hint)
         grid=QGridLayout(); grid.setHorizontalSpacing(18); grid.setVerticalSpacing(6)
-        for col,(text,align) in enumerate((("PREÇO",Qt.AlignmentFlag.AlignLeft),("QUANTIDADE",Qt.AlignmentFlag.AlignRight),("FATURAMENTO",Qt.AlignmentFlag.AlignRight))):
+        for col,(text,align) in enumerate((("PRICE",Qt.AlignmentFlag.AlignLeft),("QUANTITY",Qt.AlignmentFlag.AlignRight),("REVENUE",Qt.AlignmentFlag.AlignRight))):
             h=QLabel(text); h.setObjectName("metricLabel"); grid.addWidget(h,0,col,align)
         total_qty=0; total_revenue=0
         for i,t in enumerate(tiers,1):
             qty=float(t.get("quantidade",0)); revenue=float(t.get("faturamento",0)); total_qty+=qty; total_revenue+=revenue
-            price=QLabel(brl(t.get("preco_venda",0))); price.setStyleSheet("color:#2C9FD6;font-size:14px;font-weight:850;")
-            amount=QLabel(f"{br_number(qty,0)} un."); amount.setStyleSheet("color:#24324A;font-size:13px;font-weight:700;")
-            value=QLabel(brl(revenue)); value.setStyleSheet("color:#24324A;font-size:13px;font-weight:800;")
+            price=QLabel(fmt_money(t.get("preco_venda",0))); price.setStyleSheet("color:#2C9FD6;font-size:14px;font-weight:850;")
+            amount=QLabel(f"{fmt_number(qty,0)} units"); amount.setStyleSheet("color:#24324A;font-size:13px;font-weight:700;")
+            value=QLabel(fmt_money(revenue)); value.setStyleSheet("color:#24324A;font-size:13px;font-weight:800;")
             grid.addWidget(price,i,0,Qt.AlignmentFlag.AlignLeft); grid.addWidget(amount,i,1,Qt.AlignmentFlag.AlignRight); grid.addWidget(value,i,2,Qt.AlignmentFlag.AlignRight)
         line=QFrame(); line.setFixedHeight(1); line.setStyleSheet("background:#DCD6F7;"); grid.addWidget(line,len(tiers)+1,0,1,3)
-        for col,(text,align) in enumerate((("TOTAL",Qt.AlignmentFlag.AlignLeft),(f"{br_number(total_qty,0)} un.",Qt.AlignmentFlag.AlignRight),(brl(total_revenue),Qt.AlignmentFlag.AlignRight))):
+        for col,(text,align) in enumerate((("TOTAL",Qt.AlignmentFlag.AlignLeft),(f"{fmt_number(total_qty,0)} units",Qt.AlignmentFlag.AlignRight),(fmt_money(total_revenue),Qt.AlignmentFlag.AlignRight))):
             x=QLabel(text); x.setStyleSheet("color:#E85D8A;font-size:13px;font-weight:900;"); grid.addWidget(x,len(tiers)+2,col,align)
         grid.setColumnStretch(0,1); sl.addLayout(grid)
         return section

@@ -1,7 +1,7 @@
-"""Card do explorador (grupo › subclasse › produto) e cor estável por nome.
+"""Explorer card (group › subclass › product) and a stable color per name.
 
-Fica fora do dashboard para o Explorar estoque não carregar pandas,
-gráficos e PDF só para desenhar os cards.
+Kept outside the dashboard so Explore stock does not load pandas, charts
+and PDF just to draw the cards.
 """
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 

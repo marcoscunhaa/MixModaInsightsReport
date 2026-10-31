@@ -1,3 +1,3 @@
-"""Lojas da rede. Todos os selects de loja do app usam esta lista."""
+"""Stores in the chain. Every store selector in the app uses this list."""
 
 STORES = ("Sitio São João", "Palmeiras", "Sapiranga", "Pedras", "Mix Cosméticos")

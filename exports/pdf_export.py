@@ -20,7 +20,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from utils.formatting import brl, br_number
+from utils.formatting import fmt_money, fmt_number
 
 
 NAVY = colors.HexColor("#14284B")
@@ -120,7 +120,7 @@ class HorizontalBars(Flowable):
         if not self.rows:
             c.setFillColor(MUTED)
             c.setFont("Helvetica", 7.5)
-            c.drawString(0, self.height - 29, "Sem dados para exibir")
+            c.drawString(0, self.height - 29, "No data to display")
             return
 
         max_value = max(float(value) for _, value in self.rows)
@@ -198,11 +198,11 @@ def _card(label, value, accent, styles):
 
 
 def _banner(period, loja, styles, width):
-    title = _paragraph("RELATÓRIO EXECUTIVO<br/><font size='11'>Estoque e vendas</font>", styles["title"], markup=True)
+    title = _paragraph("EXECUTIVE REPORT<br/><font size='11'>Stock and sales</font>", styles["title"], markup=True)
     brand = _paragraph("MIX MODA  /  INSIGHTS", styles["brand"])
     metadata = _paragraph(
-        f"PERÍODO<br/><b>{escape(period[0].strftime('%d/%m/%Y'))} a {escape(period[1].strftime('%d/%m/%Y'))}</b>"
-        f"<br/><br/>VISÃO<br/><b>{escape(str(loja))}</b>", styles["meta"], markup=True
+        f"PERIOD<br/><b>{escape(period[0].strftime('%m/%d/%Y'))} to {escape(period[1].strftime('%m/%d/%Y'))}</b>"
+        f"<br/><br/>VIEW<br/><b>{escape(str(loja))}</b>", styles["meta"], markup=True
     )
     table = Table([[ [brand, title], metadata ]], colWidths=[width * 0.69, width * 0.31])
     table.setStyle(TableStyle([
@@ -263,9 +263,9 @@ def _summary_cards(df, styles, width):
     facts = []
     if len(sales_group):
         share = sales_group.iloc[0] / max(float(df["quantidade_vendida"].sum()), 1) * 100
-        facts.append(("Maior volume", f"{sales_group.index[0]} lidera com {br_number(sales_group.iloc[0], 0)} unidades ({share:.0f}% das vendas).", BLUE))
-    facts.append(("Estoque parado", f"{br_number(no_sales_count, 0)} produtos sem venda somam {brl(no_sales_value)} em estoque.", TEAL))
-    facts.append(("Ação de reposição", f"{br_number(ruptures, 0)} produtos estão sem estoque após vendas no período.", PINK))
+        facts.append(("Top volume", f"{sales_group.index[0]} leads with {fmt_number(sales_group.iloc[0], 0)} units ({share:.0f}% of sales).", BLUE))
+    facts.append(("Idle stock", f"{fmt_number(no_sales_count, 0)} products without sales add up to {fmt_money(no_sales_value)} in stock.", TEAL))
+    facts.append(("Restock action", f"{fmt_number(ruptures, 0)} products are out of stock after selling in the period.", PINK))
     cards = []
     card_width = width / len(facts)
     for title, body, accent in facts:
@@ -303,14 +303,14 @@ def _store_table(df, styles, width):
         capital=("valor_estoque", "sum"),
     ).sort_values("receita", ascending=False)
     total_revenue = max(float(grouped["receita"].sum()), 1)
-    headers = ["Loja", "Unidades vendidas", "Faturamento", "Participação", "Estoque atual", "Capital em estoque"]
+    headers = ["Store", "Units sold", "Revenue", "Share", "Current stock", "Capital in stock"]
     data = [[_paragraph(h, styles["table_head"]) for h in headers]]
     for _, row in grouped.iterrows():
         share = float(row.receita) / total_revenue * 100
         data.append([
             _paragraph(str(row.loja), styles["table_bold"]),
-            br_number(row.unidades, 0), brl(row.receita), f"{share:.1f}%",
-            br_number(row.estoque, 0), brl(row.capital),
+            fmt_number(row.unidades, 0), fmt_money(row.receita), f"{share:.1f}%",
+            fmt_number(row.estoque, 0), fmt_money(row.capital),
         ])
     widths = [width * .20, width * .14, width * .18, width * .13, width * .14, width * .21]
     return _table(data, widths)
@@ -318,15 +318,15 @@ def _store_table(df, styles, width):
 
 def _critical_table(df, styles, width, limit=20):
     critical_rows = ranked_critical(df, limit)
-    headers = ["Produto", "Grupo", "Loja", "Estoque", "Vendas", "Status"]
+    headers = ["Product", "Group", "Store", "Stock", "Sold", "Status"]
     data = [[_paragraph(h, styles["table_head"]) for h in headers]]
     for _, row in critical_rows.iterrows():
         data.append([
             _paragraph(str(row.descricao), styles["table"]),
             _paragraph(str(row.grupo), styles["table"]),
             _paragraph(str(row.loja), styles["table"]),
-            br_number(row.quantidade_estoque, 0),
-            br_number(row.quantidade_vendida, 0),
+            fmt_number(row.quantidade_estoque, 0),
+            fmt_number(row.quantidade_vendida, 0),
             _paragraph(str(row.status_estoque), styles["table_bold"]),
         ])
     widths = [width * .34, width * .23, width * .18, width * .08, width * .08, width * .09]
@@ -341,7 +341,7 @@ def _critical_table(df, styles, width, limit=20):
 
 def _idle_stock_table(df, styles, width, limit=20):
     rows = idle_stock(df, limit)
-    headers = ["#", "Produto", "Grupo", "Loja", "Estoque", "Custo un.", "Valor parado"]
+    headers = ["#", "Product", "Group", "Store", "Stock", "Unit cost", "Idle value"]
     head_right = ParagraphStyle("idle_head_right", parent=styles["table_head"], alignment=TA_RIGHT)
     data = [[_paragraph(h, head_right if i >= 4 else styles["table_head"]) for i, h in enumerate(headers)]]
     for position, (_, row) in enumerate(rows.iterrows(), start=1):
@@ -352,9 +352,9 @@ def _idle_stock_table(df, styles, width, limit=20):
             _paragraph(str(row.descricao), styles["table"]),
             _paragraph(str(row.grupo), styles["table"]),
             _paragraph(str(row.loja), styles["table"]),
-            br_number(quantity, 0),
-            brl(value / quantity if quantity else 0),
-            brl(value),
+            fmt_number(quantity, 0),
+            fmt_money(value / quantity if quantity else 0),
+            fmt_money(value),
         ])
     widths = [22, width * .33, width * .2, width * .14, width * .08, width * .1, None]
     widths[-1] = width - sum(widths[:-1])
@@ -375,14 +375,14 @@ def _idle_stock_table(df, styles, width, limit=20):
 
 def _audit_table(audit, styles, width):
     items = [
-        ("Itens de estoque", audit.get("produtos_estoque", 0), BLUE),
-        ("Linhas de venda", audit.get("produtos_vendas", 0), CYAN),
-        ("Correspondências", audit.get("vendas_correspondentes", 0), TEAL),
-        ("Chaves sem correspondência", audit.get("vendas_sem_correspondencia", 0), PINK),
-        ("Códigos inválidos", audit.get("codigos_invalidos", 0), GOLD),
-        ("Registros ignorados", audit.get("produtos_ignorados", 0), BLUE),
+        ("Stock items", audit.get("produtos_estoque", 0), BLUE),
+        ("Sales rows", audit.get("produtos_vendas", 0), CYAN),
+        ("Matches", audit.get("vendas_correspondentes", 0), TEAL),
+        ("Unmatched keys", audit.get("vendas_sem_correspondencia", 0), PINK),
+        ("Invalid barcodes", audit.get("codigos_invalidos", 0), GOLD),
+        ("Ignored records", audit.get("produtos_ignorados", 0), BLUE),
     ]
-    cards = [_card(label, br_number(value, 0), color, styles) for label, value, color in items]
+    cards = [_card(label, fmt_number(value, 0), color, styles) for label, value, color in items]
     card_width = width / 3
     row = Table([cards[:3], cards[3:]], colWidths=[card_width] * 3)
     row.setStyle(TableStyle([
@@ -398,7 +398,7 @@ def _audit_table(audit, styles, width):
 def _unmatched_table(audit, styles, width):
     items = audit.get("vendas_sem_correspondencia_itens", [])
     if not items:
-        return _paragraph("Nenhum item de venda ficou sem correspondência no estoque.", styles["body"])
+        return _paragraph("Every sales item was matched to stock.", styles["body"])
 
     items = sorted(
         items,
@@ -407,26 +407,26 @@ def _unmatched_table(audit, styles, width):
             str(item.get("descricao", "")).casefold(),
         ),
     )[:20]
-    headers = ["Código de barras", "Descrição do produto", "Loja", "Unidades vendidas"]
+    headers = ["Barcode", "Product description", "Store", "Units sold"]
     data = [[_paragraph(header, styles["table_head"]) for header in headers]]
     for item in items:
         data.append([
             _paragraph(item.get("codigo_barras", ""), styles["table"]),
             _paragraph(item.get("descricao", ""), styles["table_bold"]),
             _paragraph(item.get("loja", ""), styles["table"]),
-            br_number(item.get("quantidade_vendida", 0), 0),
+            fmt_number(item.get("quantidade_vendida", 0), 0),
         ])
     return _table(data, [width * .19, width * .46, width * .20, width * .15], paddings=5)
 
 
 def _audit_legend(styles, width):
     definitions = [
-        ("Itens de estoque", "Produtos únicos com código e descrição válidos, após a consolidação do estoque."),
-        ("Linhas de venda", "Registros de produtos lidos no arquivo de vendas após a limpeza."),
-        ("Correspondências", "Combinações de código e descrição presentes tanto no estoque quanto nas vendas."),
-        ("Chaves sem correspondência", "Combinações de código e descrição das vendas que não foram localizadas no estoque."),
-        ("Códigos inválidos", "Registros, em estoque ou vendas, sem código de barras utilizável."),
-        ("Registros ignorados", "Linhas descartadas por descrição iniciada por “PECA” ou “CODIGO DESATIVADO”, ou por código antigo de 3 ou 4 dígitos, como 313, 315 e 3191."),
+        ("Stock items", "Unique products with a valid barcode and description, after consolidating stock."),
+        ("Sales rows", "Product records read from the sales file after cleaning."),
+        ("Matches", "Barcode + description combinations found in both stock and sales."),
+        ("Unmatched keys", "Barcode + description combinations from sales that were not found in stock."),
+        ("Invalid barcodes", "Stock or sales records without a usable barcode."),
+        ("Ignored records", "Rows dropped because the description starts with “PECA” (loose part) or “CODIGO DESATIVADO” (disabled code), or because of a legacy 3–4 digit code such as 313, 315 or 3191."),
     ]
     cells = [
         _paragraph(f"<b>{escape(title)}:</b> {escape(description)}", styles["legend"], markup=True)
@@ -454,9 +454,9 @@ def export_dashboard_pdf(path, df, period, loja, audit):
         path, pagesize=landscape(A4),
         rightMargin=margin, leftMargin=margin,
         topMargin=18 * mm, bottomMargin=17 * mm,
-        title="Mix Moda Insights - Relatorio executivo",
+        title="Mix Moda Insights - Executive report",
         author="Mix Moda Insights",
-        subject="Relatorio de estoque e vendas",
+        subject="Stock and sales report",
     )
     story = []
 
@@ -468,11 +468,11 @@ def export_dashboard_pdf(path, df, period, loja, audit):
     stock_value = _safe_float(df["valor_estoque"].sum()) if not df.empty else 0
     rupture_count = int(df["ruptura"].sum()) if not df.empty else 0
     kpi_specs = [
-        ("Faturamento", brl(total_sales), BLUE),
-        ("Unidades vendidas", br_number(total_units, 0), TEAL),
-        ("Estoque atual", br_number(stock_units, 0), CYAN),
-        ("Capital em estoque", brl(stock_value), GOLD),
-        ("Rupturas", br_number(rupture_count, 0), PINK),
+        ("Revenue", fmt_money(total_sales), BLUE),
+        ("Units sold", fmt_number(total_units, 0), TEAL),
+        ("Current stock", fmt_number(stock_units, 0), CYAN),
+        ("Capital in stock", fmt_money(stock_value), GOLD),
+        ("Stockouts", fmt_number(rupture_count, 0), PINK),
     ]
     kpis = [_card(label, value, accent, styles) for label, value, accent in kpi_specs]
     kpi_row = Table([kpis], colWidths=[content_width / len(kpis)] * len(kpis))
@@ -483,14 +483,14 @@ def export_dashboard_pdf(path, df, period, loja, audit):
         ("TOPPADDING", (0, 0), (-1, -1), 0),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
     ]))
-    story.extend([kpi_row, Spacer(1, 16), _section_heading("Visão executiva", styles), Spacer(1, 3)])
+    story.extend([kpi_row, Spacer(1, 16), _section_heading("Executive overview", styles), Spacer(1, 3)])
 
     group_sales = _group_rows(df, "quantidade_vendida")
     group_stock = _group_rows(df, "valor_estoque")
     chart_width = (content_width - 14) / 2
     charts = [
-        HorizontalBars("Vendas por grupo | unidades", group_sales, lambda v: br_number(v, 0), TEAL, chart_width),
-        HorizontalBars("Capital em estoque por grupo", group_stock, lambda v: brl(v, 0), BLUE, chart_width),
+        HorizontalBars("Sales by group | units", group_sales, lambda v: fmt_number(v, 0), TEAL, chart_width),
+        HorizontalBars("Capital in stock by group", group_stock, lambda v: fmt_money(v, 0), BLUE, chart_width),
     ]
     chart_panels = []
     for chart in charts:
@@ -516,13 +516,13 @@ def export_dashboard_pdf(path, df, period, loja, audit):
     story.extend(_summary_cards(df, styles, content_width))
 
     # Page 2 - store performance and the products that drove the period.
-    story.extend([PageBreak(), _section_heading("Desempenho comercial", styles,
-                                                "Faturamento da planilha de vendas (coluna G)."),
+    story.extend([PageBreak(), _section_heading("Sales performance", styles,
+                                                "Revenue from the sales spreadsheet (column G)."),
                   _store_table(df, styles, content_width), Spacer(1, 16)])
-    story.extend([PageBreak(), _section_heading("Produtos líderes", styles,
-                                  "Top 20 ordenados por unidades vendidas e faturamento.")])
+    story.extend([PageBreak(), _section_heading("Top products", styles,
+                                  "Top 20 ranked by units sold and revenue.")])
     top = top_sold(df, 20) if not df.empty else df
-    headers = ["#", "Produto", "Loja", "Grupo", "Unidades", "Faturamento", "Estoque"]
+    headers = ["#", "Product", "Store", "Group", "Units", "Revenue", "Stock"]
     data = [[_paragraph(h, styles["table_head"]) for h in headers]]
     for rank, (_, row) in enumerate(top.iterrows(), 1):
         data.append([
@@ -530,49 +530,49 @@ def export_dashboard_pdf(path, df, period, loja, audit):
             _paragraph(str(row.descricao), styles["table_bold"]),
             _paragraph(str(row.loja), styles["table"]),
             _paragraph(str(row.grupo), styles["table"]),
-            br_number(row.quantidade_vendida, 0),
-            brl(row.valor_vendido),
-            br_number(row.quantidade_estoque, 0),
+            fmt_number(row.quantidade_vendida, 0),
+            fmt_money(row.valor_vendido),
+            fmt_number(row.quantidade_estoque, 0),
         ])
     story.append(_table(data, [25, content_width * .29, content_width * .13,
                                content_width * .22, 58, content_width * .16, 48]))
 
     # Page 3 - concrete replenishment actions and data-quality context.
-    story.extend([PageBreak(), _section_heading("Prioridades de estoque", styles,
-                                                "Itens em ruptura e com nível crítico, priorizados por venda."),
+    story.extend([PageBreak(), _section_heading("Stock priorities", styles,
+                                                "Out-of-stock and critical items, prioritized by sales."),
                   Spacer(1, 2)])
     critical, shown = _critical_table(df, styles, content_width)
     story.extend([critical, Spacer(1, 13)])
     if shown == 0:
-        story.append(_paragraph("Nenhum produto está classificado como crítico, baixo ou sem estoque.", styles["body"]))
+        story.append(_paragraph("No product is classified as critical, low or out of stock.", styles["body"]))
 
-    # Page 4 - capital parado: sem venda no período e muito estoque.
+    # Page 4 - idle capital: no sales in the period and a lot of stock.
     idle_all = df[(df.quantidade_estoque > 0) & (df.quantidade_vendida <= 0)]
-    story.extend([PageBreak(), _section_heading("Estoque parado", styles,
-                                                "Top 20 produtos sem venda no período, pela maior quantidade em estoque."),
+    story.extend([PageBreak(), _section_heading("Idle stock", styles,
+                                                "Top 20 products with no sales in the period, by largest quantity in stock."),
                   _paragraph(
-                      f"{br_number(len(idle_all), 0)} produtos não venderam nada no período e somam "
-                      f"{br_number(idle_all.quantidade_estoque.sum(), 0)} unidades e "
-                      f"{brl(idle_all.valor_estoque.sum())} parados em estoque (custo).", styles["muted"]
+                      f"{fmt_number(len(idle_all), 0)} products sold nothing in the period, totaling "
+                      f"{fmt_number(idle_all.quantidade_estoque.sum(), 0)} units and "
+                      f"{fmt_money(idle_all.valor_estoque.sum())} sitting idle in stock (at cost).", styles["muted"]
                   ), Spacer(1, 5)])
     idle_table, idle_shown = _idle_stock_table(df, styles, content_width)
     story.append(idle_table if idle_shown else _paragraph(
-        "Nenhum produto com estoque ficou sem venda no período.", styles["body"]))
+        "Every product with stock sold something in the period.", styles["body"]))
     unmatched_items = (audit or {}).get("vendas_sem_correspondencia_itens", [])
-    story.extend([PageBreak(), _section_heading("Vendas sem correspondência no estoque", styles),
+    story.extend([PageBreak(), _section_heading("Sales not matched to stock", styles),
                   _paragraph(
-                      f"{len(unmatched_items)} combinações de venda não foram encontradas no estoque. "
-                      "A tabela mostra os 20 itens com maior volume vendido para conferência.", styles["muted"]
+                      f"{len(unmatched_items)} sales combinations were not found in stock. "
+                      "The table lists the 20 items with the highest units sold for review.", styles["muted"]
                   ), Spacer(1, 5),
                   _unmatched_table(audit or {}, styles, content_width),
-                  PageBreak(), _section_heading("Qualidade e cobertura dos dados", styles),
+                  PageBreak(), _section_heading("Data quality and coverage", styles),
                   _audit_table(audit or {}, styles, content_width), Spacer(1, 5),
-                  _section_heading("Legenda dos indicadores", styles),
+                  _section_heading("Indicator glossary", styles),
                   _audit_legend(styles, content_width), Spacer(1, 5)])
     story.append(_paragraph(
-        "O código de barras identifica o produto quando é único no estoque; códigos associados a "
-        "descrições diferentes usam a descrição para desempate. Vendas sem correspondência ficam "
-        "fora dos indicadores de produto.", styles["muted"]
+        "The barcode identifies the product when it is unique in stock; barcodes linked to "
+        "different descriptions use the description as a tie-breaker. Unmatched sales are "
+        "left out of the product indicators.", styles["muted"]
     ))
 
     def page_chrome(canvas, document):
@@ -584,7 +584,7 @@ def export_dashboard_pdf(path, df, period, loja, audit):
         canvas.line(margin, 11 * mm, page_width - margin, 11 * mm)
         canvas.setFillColor(MUTED)
         canvas.setFont("Helvetica-Bold", 7)
-        canvas.drawString(margin, 7 * mm, "MIX MODA  |  RELATÓRIO EXECUTIVO")
+        canvas.drawString(margin, 7 * mm, "MIX MODA  |  EXECUTIVE REPORT")
         canvas.setFont("Helvetica", 7)
         canvas.drawRightString(page_width - margin, 7 * mm, f"{document.page}")
         canvas.restoreState()
