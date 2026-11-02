@@ -14,11 +14,11 @@ from PySide6.QtWidgets import (
 )
 
 from core import catalog_editor as ce
-from core.stores import STORES
+from core.stores import STORES, store_sort_key
 from ui.explorer_cards import ExplorerCard, _stable_color
 from ui.window_chrome import confirm_action, install_mac_window_chrome, show_message
 from utils.formatting import br_number
-from utils.normalization import normalize_barcode, normalize_text
+from utils.normalization import barcode_sort_key, normalize_barcode, normalize_text
 
 SEARCH_LIMIT = 300
 
@@ -140,7 +140,8 @@ class StockExplorerPage(QWidget):
         item.setData(Qt.ItemDataRole.UserRole, (kind, key))
         item.setSizeHint(QSize(340, 104))
         self.list.addItem(item)
-        self.list.setItemWidget(item, ExplorerCard("", title, subtitle, value, accent, flat=True))
+        self.list.setItemWidget(item, ExplorerCard("", title, subtitle, value, accent, flat=True,
+                                                   copyable_subtitle=(kind == "product")))
 
     def _summary(self, items, second):
         # Sem quantidades: o estoque real vem da planilha importada na análise.
@@ -181,7 +182,8 @@ class StockExplorerPage(QWidget):
         subtitle = str(product.get("codigo_barras", ""))
         if product.get("situacao") != "ATIVO":
             subtitle += f"  •  {product.get('situacao', '')}"
-        value = ", ".join(l.get("loja", "") for l in product.get("lojas", [])) or "Sem loja"
+        stores = sorted((l.get("loja", "") for l in product.get("lojas", [])), key=store_sort_key)
+        value = ", ".join(stores) or "Sem loja"
         self._add_card(product.get("descricao", ""), subtitle, value, "product",
                        product.get("codigo_barras"), _stable_color(product.get("descricao", "")))
 
@@ -190,13 +192,14 @@ class StockExplorerPage(QWidget):
         self.crumb.setText(f"Todos os grupos  ›  {group}  ›  {sub}")
         self.back.setText("← Voltar")
         items = [p for p in self.products() if p.get("grupo") == group and p.get("subclasse") == sub]
-        for product in sorted(items, key=lambda p: (normalize_text(p.get("descricao")), p.get("codigo_barras"))):
+        # Código de barras do menor para o maior: a grade de tamanhos fica em sequência (P → GG).
+        for product in sorted(items, key=lambda p: barcode_sort_key(p.get("codigo_barras"))):
             self._add_product_card(product)
         self.empty.setText("Nenhum produto nesta subclasse.")
 
     def render_search(self, query):
         found = [p for p in self.products() if _matches(p, query)]
-        found.sort(key=lambda p: (normalize_text(p.get("descricao")), p.get("codigo_barras")))
+        found.sort(key=lambda p: barcode_sort_key(p.get("codigo_barras")))
         self.title.setText("Estoque • Busca")
         shown = found[:SEARCH_LIMIT]
         extra = f" (mostrando {SEARCH_LIMIT})" if len(found) > SEARCH_LIMIT else ""

@@ -64,7 +64,7 @@ def test_stock_by_store_pivots_units_per_store():
         "quantidade_estoque": [5, 0, 3, -1, 4],
     })
     table, stores, totals = stock_by_store(df)
-    assert stores == ["Palmeiras", "Pedras", "Sapiranga"]
+    assert stores == ["Palmeiras", "Sapiranga", "Pedras"]          # ordem oficial das lojas
     first = table.iloc[0]
     assert (first.descricao, first.Palmeiras, first.Pedras, first.Sapiranga, first.total) == ("CAMISA BRANCA G", 3, 0, 5, 8)
     second = table.iloc[1]

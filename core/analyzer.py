@@ -1,5 +1,8 @@
 import pandas as pd
 
+from core.stores import order_stores, store_sort_key
+from utils.normalization import barcode_sort_key
+
 def filter_analysis(df,loja="Todas",grupo="Todos",subclasse="Todas",busca="",status="Todos"):
     out=df
     if loja!="Todas":out=out[out.loja==loja]
@@ -29,11 +32,14 @@ def pivot_by_store(df, value="quantidade_estoque", ascending=False):
     O produto é identificado pelo código de barras, porque a descrição pode
     variar entre lojas; o nome exibido é o mais frequente. Loja sem linha do
     produto em `df` fica vazia (NaN), diferente de zero.
+    Colunas de loja na ordem oficial (core.stores) e linhas pelo código de
+    barras, do menor para o maior: assim a grade de tamanhos fica em sequência
+    (P, M, G, GG). `ascending` é mantido só por compatibilidade.
     Retorna (tabela, lojas, totais por loja).
     """
     if df.empty:
         return df.iloc[0:0], [], {}
-    stores = sorted(df.loja.dropna().unique(), key=str)
+    stores = order_stores(df.loja.dropna().unique())
     names = (df.groupby("codigo_barras").descricao
              .agg(lambda s: s.value_counts().index[0]).rename("descricao"))
     groups = df.groupby("codigo_barras")[["grupo", "subclasse"]].first()
@@ -41,7 +47,7 @@ def pivot_by_store(df, value="quantidade_estoque", ascending=False):
                            aggfunc="sum").reindex(columns=stores)
     table = pd.concat([names, groups, pivot], axis=1).reset_index()
     table["total"] = table[stores].sum(axis=1, min_count=1).fillna(0)
-    table = table.sort_values(["total", "descricao"], ascending=[ascending, True], kind="stable").reset_index(drop=True)
+    table = table.sort_values("codigo_barras", key=lambda col: col.map(barcode_sort_key), kind="stable").reset_index(drop=True)
     totals = {store: float(df.loc[df.loja == store, value].sum()) for store in stores}
     return table, stores, totals
 
@@ -114,3 +120,13 @@ def critical(df,n=None):
         kind="stable",
     ).drop(columns="_prioridade_status")
     return x if n is None else x.head(n)
+
+
+def sort_products(df):
+    """Linhas de produto pelo código de barras (menor → maior) e, no mesmo código, pela ordem das lojas."""
+    if df.empty:
+        return df
+    keys = df.codigo_barras.map(barcode_sort_key)
+    stores = df.loja.map(store_sort_key) if "loja" in df else None
+    order = sorted(range(len(df)), key=lambda i: (keys.iloc[i], stores.iloc[i] if stores is not None else 0))
+    return df.iloc[order]

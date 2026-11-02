@@ -40,6 +40,17 @@ def normalize_barcode(value):
     s=re.sub(r"\D","",s)
     return s.lstrip("0") or "0"
 
+def barcode_sort_key(value):
+    """Chave para ordenar códigos de barras do menor para o maior (valor numérico).
+
+    Os EANs de uma mesma grade costumam crescer do P ao GG, então ordenar pelo
+    número deixa os tamanhos em sequência. Código vazio ou sem dígitos vai para o fim.
+    """
+    digits = normalize_barcode(value)
+    if not digits or digits == "0":
+        return (1, 0, "")
+    return (0, int(digits), str(value))
+
 def to_number(value, default=0.0):
     if value is None or (isinstance(value,float) and math.isnan(value)): return default
     if isinstance(value,(int,float)): return float(value)

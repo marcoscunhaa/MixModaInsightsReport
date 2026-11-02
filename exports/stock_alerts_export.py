@@ -8,6 +8,9 @@ from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 
+from core.stores import store_sort_key
+from utils.normalization import barcode_sort_key
+
 
 NAVY = "14284B"
 BLUE = "2854D9"
@@ -46,7 +49,7 @@ def export_stock_alerts_xlsx(path, alerts):
     workbook.remove(default_sheet)
     used_names = set()
 
-    for store in sorted(grouped, key=str.casefold):
+    for store in sorted(grouped, key=store_sort_key):  # abas na ordem oficial das lojas
         sheet = workbook.create_sheet(_sheet_name(store, used_names))
         sheet.sheet_view.showGridLines = False
         sheet.merge_cells("A1:G1")
@@ -75,13 +78,8 @@ def export_stock_alerts_xlsx(path, alerts):
             cell.border = Border(bottom=Side(style="medium", color=NAVY))
         sheet.row_dimensions[header_row].height = 26
 
-        rows = sorted(
-            grouped[store],
-            key=lambda item: (
-                float(item.get("quantidade_estoque", 0) or 0),
-                str(item.get("descricao", "")).casefold(),
-            ),
-        )
+        # Código de barras do menor para o maior: a grade de tamanhos fica junta (P → GG).
+        rows = sorted(grouped[store], key=lambda item: barcode_sort_key(item.get("codigo_barras")))
         for row_index, alert in enumerate(rows, header_row + 1):
             values = [
                 CHECK_PENDING,
