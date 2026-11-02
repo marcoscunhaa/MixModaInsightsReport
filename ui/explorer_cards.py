@@ -13,7 +13,7 @@ def _stable_color(text):
 
 
 class ExplorerCard(QFrame):
-    def __init__(self, emoji, title, subtitle, value, accent, parent=None, flat=True):
+    def __init__(self, emoji, title, subtitle, value, accent, parent=None, flat=True, copyable_subtitle=False):
         super().__init__(parent); self.setObjectName("ExplorerCard")
         border="none" if flat else "1px solid #DCE6F3"; radius="0px" if flat else "18px"
         self.setStyleSheet(f"QFrame#ExplorerCard{{background:#FFFFFF;border:{border};border-left:6px solid {accent};border-radius:{radius};}} QFrame#ExplorerCard:hover{{background:#F7FAFF;}}")
@@ -21,5 +21,9 @@ class ExplorerCard(QFrame):
         text=QVBoxLayout(); text.setSpacing(3)
         name=QLabel(str(title)); name.setStyleSheet("font-size:13px;font-weight:900;color:#142B52;"); name.setWordWrap(True); text.addWidget(name)
         sub=QLabel(str(subtitle)); sub.setStyleSheet("font-size:10px;font-weight:700;color:#73829A;"); text.addWidget(sub)
+        if copyable_subtitle:
+            # Subtítulo do card de produto traz o código de barras: dois cliques selecionam, Ctrl+C copia.
+            from ui.copyable import make_label_copyable
+            make_label_copyable(sub)
         val=QLabel(str(value)); val.setStyleSheet(f"font-size:10px;font-weight:900;color:{accent};"); text.addWidget(val); l.addLayout(text,1)
         arrow=QLabel("›"); arrow.setStyleSheet(f"font-size:25px;font-weight:300;color:{accent};"); l.addWidget(arrow)

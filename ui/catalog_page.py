@@ -1,5 +1,7 @@
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QWidget,QVBoxLayout,QLineEdit,QComboBox,QTableWidget,QTableWidgetItem,QLabel,QHBoxLayout,QAbstractItemView
+from ui.copyable import make_barcode_copyable
+from utils.normalization import barcode_sort_key
 class CatalogPage(QWidget):
     product_clicked=Signal(object)
     def __init__(self,catalog,parent=None):
@@ -8,7 +10,7 @@ class CatalogPage(QWidget):
         top=QHBoxLayout(); self.group=QComboBox(); self.group.addItem("Todos"); self.group.addItems(sorted({p.get("grupo","") for p in catalog.get("produtos",[]) if p.get("grupo")}))
         self.sub=QComboBox(); self.sub.addItem("Todas"); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código ou descrição...")
         top.addWidget(self.group); top.addWidget(self.sub); top.addWidget(self.search); l.addLayout(top)
-        self.table=QTableWidget(0,4); self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.table.setHorizontalHeaderLabels(["Código","Produto","Grupo","Subclasse"]); self.table.cellDoubleClicked.connect(self.open_row); l.addWidget(self.table)
+        self.table=QTableWidget(0,4); self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.table.setHorizontalHeaderLabels(["Código","Produto","Grupo","Subclasse"]); make_barcode_copyable(self.table,0); self.table.cellDoubleClicked.connect(self.open_row); l.addWidget(self.table)
         self.group.currentTextChanged.connect(self.refresh_subclasses); self.sub.currentTextChanged.connect(self.refresh); self.search.textChanged.connect(self.refresh); self.refresh()
     def refresh_subclasses(self):
         self.sub.blockSignals(True); self.sub.clear(); self.sub.addItem("Todas"); g=self.group.currentText()
@@ -18,11 +20,13 @@ class CatalogPage(QWidget):
         for p in self.catalog.get("produtos",[]):
             txt=f'{p.get("codigo_barras","")} {p.get("descricao","")} {p.get("grupo","")} {p.get("subclasse","")}'.upper()
             if (g=="Todos" or p.get("grupo")==g) and (s=="Todas" or p.get("subclasse")==s) and (not q or q in txt): rows.append(p)
+        rows.sort(key=lambda p: barcode_sort_key(p.get("codigo_barras")))  # menor → maior (P → GG)
         self.rows=rows; self.table.setRowCount(len(rows))
         for i,p in enumerate(rows):
             for j,v in enumerate([p.get("codigo_barras",""),p.get("descricao",""),p.get("grupo",""),p.get("subclasse","")]): self.table.setItem(i,j,QTableWidgetItem(str(v)))
         self.table.resizeColumnsToContents()
     def open_row(self,r,c):
+        if c==0: return  # dois cliques no código servem para selecionar e copiar
         if r<len(self.rows): self.product_clicked.emit(self.rows[r])
 
 

@@ -12,9 +12,10 @@ from rapidfuzz import fuzz
 
 from core.stock_alerts import StockAlertStore
 from exports.stock_alerts_export import export_stock_alerts_xlsx
-from core.stores import STORES
+from core.stores import STORES, store_sort_key
+from ui.copyable import copyable_flags, make_barcode_copyable, make_label_copyable, make_list_copyable
 from utils.formatting import brl, br_number
-from utils.normalization import normalize_barcode, normalize_text
+from utils.normalization import barcode_sort_key, normalize_barcode, normalize_text
 from ui.window_chrome import confirm_action, get_save_file, install_mac_window_chrome, show_message
 
 
@@ -255,6 +256,7 @@ class StockAlertRulesDialog(QDialog):
         self.results.setMinimumHeight(110)
         self.results.setMaximumHeight(170)
         self.results.currentItemChanged.connect(self.select_product)
+        make_list_copyable(self.results)
         layout.addWidget(self.results)
         self.selected_label = QLabel("Digite pelo menos 2 caracteres para encontrar um produto.")
         self.selected_label.setObjectName("hint")
@@ -424,11 +426,12 @@ class StockAlertRulesDialog(QDialog):
                     score = max(score, 950)
             if score >= 48:
                 matches.append((score, product))
-        matches.sort(key=lambda pair: (-pair[0], normalize_text(pair[1].get("descricao", ""))))
+        # Mais relevante primeiro; no empate, código de barras do menor para o maior (P → GG).
+        matches.sort(key=lambda pair: (-pair[0], barcode_sort_key(pair[1].get("codigo_barras"))))
         for _, product in matches[:60]:
             description = str(product.get("descricao", "Produto"))
             barcode = str(product.get("codigo_barras", ""))
-            item = QListWidgetItem(f"{description}  •  {barcode}")
+            item = copyable_flags(QListWidgetItem(f"{description}  •  {barcode}"))
             item.setData(Qt.ItemDataRole.UserRole, (normalize_barcode(barcode), normalize_text(description)))
             self.results.addItem(item)
         if not matches:
@@ -482,7 +485,10 @@ class StockAlertRulesDialog(QDialog):
         self.refresh_rules()
 
     def refresh_rules(self):
-        rules = self.alert_store.load_rules()
+        rules = sorted(
+            self.alert_store.load_rules(),
+            key=lambda r: (barcode_sort_key(r.get("codigo_barras")), store_sort_key(r.get("loja", "*"))),
+        )
         count = len(rules)
         self.rule_count.setText(f"{count} REGRA{'S' if count != 1 else ''}")
         self.hero_count.setText(str(count))
@@ -508,6 +514,7 @@ class StockAlertRulesDialog(QDialog):
             product_box.addWidget(name)
             code = QLabel(str(rule.get("codigo_barras", "")))
             code.setObjectName("ruleCode")
+            make_label_copyable(code)
             product_box.addWidget(code)
             self.rules_table.setCellWidget(row, 0, product)
 
@@ -601,6 +608,11 @@ class StockAlertRulesDialog(QDialog):
 class StockAlertsDialog(QDialog):
     def __init__(self, alerts, parent=None):
         super().__init__(parent)
+        # Código de barras do menor para o maior e, no mesmo código, lojas na ordem oficial.
+        alerts = sorted(
+            alerts,
+            key=lambda a: (barcode_sort_key(a.get("codigo_barras")), store_sort_key(a.get("loja", ""))),
+        )
         self.alerts = list(alerts)
         self.setWindowTitle("Produtos em atenção • Mix Moda")
         self.resize(900, 620)
@@ -649,6 +661,7 @@ class StockAlertsDialog(QDialog):
             for col, value in enumerate(values):
                 table.setItem(row, col, QTableWidgetItem(value))
             table.setRowHeight(row, 42)
+        make_barcode_copyable(table, 1)
         layout.addWidget(table, 1)
         if not alerts:
             table.hide()

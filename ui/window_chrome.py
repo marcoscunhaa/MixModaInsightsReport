@@ -1,6 +1,165 @@
-"""Custom macOS-inspired title bar for application windows."""
-from PySide6.QtCore import QEvent, QObject, Qt, QTimer
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QApplication, QBoxLayout, QGridLayout, QDialog
+"""Custom macOS-inspired title bar for application windows.
+
+Também deixa qualquer janela/modal do app ser movida no estilo BlizzMove:
+- arrastar pela barra de título ou por qualquer área "vazia" (fundo, títulos,
+  painéis, textos) move a janela;
+- Ctrl + arrastar move a janela a partir de qualquer ponto, inclusive em cima
+  de tabelas, listas e botões;
+- cada modal lembra onde foi deixado (pelo título) e reabre no mesmo lugar.
+"""
+from PySide6.QtCore import QEvent, QObject, QPoint, QSettings, Qt, QTimer
+from PySide6.QtWidgets import (
+    QAbstractButton, QAbstractItemView, QAbstractSlider, QAbstractSpinBox, QApplication, QBoxLayout,
+    QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu, QPlainTextEdit,
+    QPushButton, QTabBar, QTextEdit, QWidget,
+)
+
+MOVE_TIP = "Arraste para mover • Ctrl + arrastar move de qualquer ponto da janela"
+_POSITIONS_GROUP = "posicoes_janelas"
+_DRAG_THRESHOLD = 4
+
+
+def _settings():
+    return QSettings("MixModa", "MixModaInsights")
+
+
+def _position_key(window):
+    title = (window.windowTitle() or type(window).__name__).strip()
+    return f"{_POSITIONS_GROUP}/{title.replace('/', '-')}"
+
+
+def remember_position(window):
+    """Guarda onde o modal foi deixado (a janela principal não entra)."""
+    if not isinstance(window, QDialog) or window.isMaximized() or window.isFullScreen():
+        return
+    try:
+        _settings().setValue(_position_key(window), window.pos())
+    except Exception:
+        pass  # posição é conveniência; nunca pode atrapalhar o uso
+
+
+def _clamped(window, pos):
+    """Mantém a barra de título alcançável na tela onde a posição cai."""
+    screen = QApplication.screenAt(pos + QPoint(40, 18)) or window.screen() or QApplication.primaryScreen()
+    if screen is None:
+        return pos
+    area = screen.availableGeometry()
+    x = max(area.left() - window.width() + 120, min(pos.x(), area.right() - 120))
+    y = max(area.top(), min(pos.y(), area.bottom() - 48))
+    return QPoint(x, y)
+
+
+def restore_position(window):
+    """Reabre o modal onde o usuário o deixou da última vez."""
+    if not isinstance(window, QDialog):
+        return
+    try:
+        saved = _settings().value(_position_key(window))
+    except Exception:
+        return
+    if isinstance(saved, QPoint):
+        window.move(_clamped(window, saved))  # marca WA_Moved: o Qt não recentraliza
+
+
+def _is_drag_surface(widget, window):
+    """True quando o clique caiu numa área sem ação própria (fundo, painel, texto comum)."""
+    w = widget
+    while w is not None:
+        if isinstance(w, _MacTitleBar):
+            return False  # a barra de título já move a janela sozinha
+        if isinstance(w, (QAbstractButton, QAbstractItemView, QLineEdit, QTextEdit, QPlainTextEdit,
+                          QComboBox, QAbstractSpinBox, QAbstractSlider, QTabBar, QMenu)):
+            return False
+        if isinstance(w, QLabel) and w.textInteractionFlags() & (
+            Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.LinksAccessibleByMouse
+        ):
+            return False
+        if "Canvas" in type(w).__name__:
+            return False  # gráficos
+        meta = w.metaObject()
+        if meta.indexOfSignal("clicked()") >= 0 or meta.indexOfSignal("clicked(bool)") >= 0:
+            return False  # cards clicáveis
+        if w is window:
+            return True
+        w = w.parentWidget()
+    return False
+
+
+class _WindowMover(QObject):
+    """Filtro global: move janelas com barra personalizada arrastando por qualquer área livre."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._reset()
+
+    def _reset(self):
+        self._window = None
+        self._start = None
+        self._origin = None
+        self._moving = False
+        self._forced = False
+
+    def _finish(self):
+        if self._moving:
+            QApplication.restoreOverrideCursor()
+            if self._window is not None:
+                remember_position(self._window)
+        self._reset()
+
+    def eventFilter(self, watched, event):
+        # Só eventos já entregues a widgets: o nível QWindow faz a contabilidade de
+        # clique do Qt (quem recebeu o press/release) e não pode ser interrompido.
+        if not isinstance(watched, QWidget):
+            return False
+        kind = event.type()
+        if kind == QEvent.Type.MouseButtonPress:
+            if self._window is not None or event.button() != Qt.MouseButton.LeftButton:
+                return False
+            window = watched.window()
+            if (getattr(window, "_mac_title_bar", None) is None or window.isMaximized()
+                    or window.isFullScreen()):
+                return False
+            forced = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+            if forced:
+                if isinstance(watched, (QLineEdit, QTextEdit, QPlainTextEdit)):
+                    return False  # Ctrl+clique em campo de texto continua sendo do campo
+            elif not _is_drag_surface(watched, window):
+                return False
+            self._window = window
+            self._start = event.globalPosition().toPoint()
+            self._origin = window.pos()
+            self._forced = forced
+            # Com Ctrl o clique é só para mover: não seleciona linha nem aciona botão.
+            return forced
+        if self._window is None:
+            return False
+        if kind == QEvent.Type.MouseMove:
+            if not event.buttons() & Qt.MouseButton.LeftButton:
+                self._finish()
+                return False
+            delta = event.globalPosition().toPoint() - self._start
+            if not self._moving and delta.manhattanLength() < _DRAG_THRESHOLD:
+                return self._forced
+            if not self._moving:
+                self._moving = True
+                QApplication.setOverrideCursor(Qt.CursorShape.ClosedHandCursor)
+            self._window.move(self._origin + delta)
+            return True
+        if kind == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+            consumed = self._moving or self._forced
+            self._finish()
+            return consumed
+        if kind in (QEvent.Type.ApplicationDeactivate, QEvent.Type.WindowDeactivate) and watched is self._window:
+            self._finish()
+        return False
+
+
+def _install_window_mover():
+    app = QApplication.instance()
+    if app is None or getattr(app, "_mix_window_mover", None) is not None:
+        return
+    app._mix_window_mover = _WindowMover(app)
+    app.installEventFilter(app._mix_window_mover)
 
 
 class _MacTitleBar(QFrame):
@@ -10,6 +169,7 @@ class _MacTitleBar(QFrame):
         self.drag_offset = None
         self.setObjectName("MacTitleBar")
         self.setFixedHeight(36)
+        self.setToolTip(MOVE_TIP)
         self.setStyleSheet(
             "QFrame#MacTitleBar{background:#2B2B2E;border-top-left-radius:9px;"
             "border-top-right-radius:9px;}"
@@ -73,6 +233,8 @@ class _MacTitleBar(QFrame):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if self.drag_offset is not None:
+            remember_position(self._target)
         self.drag_offset = None
         super().mouseReleaseEvent(event)
 
@@ -143,6 +305,8 @@ def install_mac_window_chrome(window, content_layout):
         raise TypeError("A janela precisa usar um layout vertical ou em grade para o título personalizado.")
 
     window._mac_title_bar = title_bar
+    _install_window_mover()
+    restore_position(window)
     return title_bar
 
 def show_message(parent, level, title, text):

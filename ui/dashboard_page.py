@@ -8,8 +8,11 @@ from ui.widgets import Card, KpiCard, RankCard, StatusFilterBar
 from ui.explorer_cards import ExplorerCard, SUBCLASS_COLORS, _stable_color
 from core.kpi_view import STATUS_OPTIONS, kpi_cards, status_counts, store_list_view
 from ui.product_modal import ProductModal
+from ui.product_picker import ProductPickerDialog
 from charts.dashboard_charts import make_chart
-from core.analyzer import filter_analysis,kpis,single_product_labels,pivot_by_store,top_sold,stagnant,critical,rupture
+from core.analyzer import filter_analysis,kpis,single_product_labels,pivot_by_store,top_sold,stagnant,critical,rupture,sort_products
+from core.stores import order_stores
+from ui.copyable import is_barcode_column, make_barcode_copyable
 from core.insights import generate_insights
 from utils.normalization import normalize_barcode, normalize_text
 from exports.pdf_export import export_dashboard_pdf
@@ -44,7 +47,7 @@ class HierarchyExplorer(QDialog):
 
     def _add_card(self,title,subtitle,value,key,kind,accent,emoji):
         item=QListWidgetItem(); item.setData(Qt.UserRole,(kind,key)); item.setSizeHint(QSize(340,104)); self.list.addItem(item)
-        self.list.setItemWidget(item, ExplorerCard(emoji,title,subtitle,value,accent,flat=True))
+        self.list.setItemWidget(item, ExplorerCard(emoji,title,subtitle,value,accent,flat=True,copyable_subtitle=(kind=="product")))
 
     def render_groups(self):
         self.path=[]; self.crumb.setText("Todos os grupos"); self.title.setText("Explorador • Grupos"); self.list.clear(); self.back.setEnabled(False)
@@ -65,7 +68,7 @@ class HierarchyExplorer(QDialog):
     def render_sub(self,g,sub):
         self.path=[("group",g),("sub",sub)]; self.crumb.setText(f"Todos os grupos  ›  {g}  ›  {sub}"); self.title.setText(f"Produtos • {sub}"); self.list.clear()
         d=self.df[(self.df.grupo==g)&(self.df.subclasse==sub)].copy()
-        d["_ord"] = d["descricao"].map(normalize_text); d=d.sort_values(["_ord","codigo_barras"],kind="stable")
+        d=sort_products(d)  # código de barras do menor para o maior (P → GG) e lojas na ordem oficial
         for i,(_,r) in enumerate(d.iterrows()):
             accent=_stable_color(str(r.descricao)); self._add_card(str(r.descricao),f"{r.codigo_barras}  •  {r.loja}",f"{br_number(r.quantidade_vendida,0)} vendas  •  {brl(r.valor_vendido)}",r.to_dict(),"product",accent,"")
 
@@ -91,12 +94,15 @@ class DashboardPage(QWidget):
         head.addWidget(self.alert_button)
         pdf=QPushButton("EXPORTAR PDF"); pdf.clicked.connect(self.export_pdf); head.addWidget(pdf); root.addLayout(head)
         filters=QFrame(); filters.setObjectName("Panel"); fbox=QVBoxLayout(filters); fbox.setContentsMargins(12,10,12,10); fbox.setSpacing(10); fl=QHBoxLayout(); fl.setSpacing(8); fbox.addLayout(fl)
-        self.store=QComboBox(); self.store.addItem("Todas as lojas"); self.store.addItems(sorted(df.loja.dropna().unique())); self.group=QComboBox(); self.group.addItem("Todos os grupos"); self.group.addItems(sorted(df.grupo.dropna().unique())); self.sub=QComboBox(); self.sub.addItem("Todas as subclasses"); self.status=StatusFilterBar(STATUS_OPTIONS); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código, grupo ou subclasse...")
-        for w in (self.store,self.group,self.sub,self.search): fl.addWidget(w)
-        fl.setStretch(3,1); fbox.addWidget(self.status)
+        self.store=QComboBox(); self.store.addItem("Todas as lojas"); self.store.addItems(order_stores(df.loja.dropna().unique())); self.group=QComboBox(); self.group.addItem("Todos os grupos"); self.group.addItems(sorted(df.grupo.dropna().unique())); self.sub=QComboBox(); self.sub.addItem("Todas as subclasses"); self.status=StatusFilterBar(STATUS_OPTIONS); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código, grupo ou subclasse...")
+        self.selected_codes=set()  # produtos marcados em "Selecionar produtos"; vazio = todos
+        self.pick=QPushButton(); self.pick.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.pick.setToolTip("Marque vários produtos (ex.: os tamanhos de um conjunto); o dashboard inteiro passa a mostrar só eles."); self.pick.clicked.connect(self.open_product_picker)
+        for w in (self.store,self.group,self.sub,self.search,self.pick): fl.addWidget(w)
+        fl.setStretch(3,1); fbox.addWidget(self._selection_bar()); fbox.addWidget(self.status)
         root.addWidget(filters)
         sc=QScrollArea(); sc.setWidgetResizable(True); inner=QWidget(); self.body=QVBoxLayout(inner); self.body.setContentsMargins(0,0,6,0); self.body.setSpacing(14); sc.setWidget(inner); root.addWidget(sc,1)
-        self.store.currentTextChanged.connect(self.refresh); self.group.currentTextChanged.connect(self.refresh); self.sub.currentTextChanged.connect(self.refresh); self.status.currentTextChanged.connect(self.refresh); self.search.textChanged.connect(self.refresh); self.refresh()
+        self.store.currentTextChanged.connect(self.refresh); self.group.currentTextChanged.connect(self.refresh); self.sub.currentTextChanged.connect(self.refresh); self.status.currentTextChanged.connect(self.refresh); self.search.textChanged.connect(self.refresh); self._update_selection_ui(); self.refresh()
 
     def _filtered_alerts(self):
         if not self.alert_store:
@@ -141,8 +147,41 @@ class DashboardPage(QWidget):
     def open_stock_alerts(self):
         StockAlertsDialog(self._filtered_alerts(), self).exec()
 
+    def _selection_bar(self):
+        """Faixa que aparece com a seleção ativa: quantos produtos, quais, Editar e Limpar."""
+        bar=QFrame(); bar.setObjectName("SelectionBar")
+        bar.setStyleSheet("QFrame#SelectionBar{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #EEF3FF,stop:1 #F6F2FF);"
+                          "border:1px solid #C9D6FF;border-radius:14px;} QFrame#SelectionBar QLabel{background:transparent;border:none;}"
+                          # Com o prefixo QFrame#SelectionBar para vencer a regra "QLabel transparente" acima.
+                          "QFrame#SelectionBar QLabel#selBadge{background:#2F5BEA;color:#FFFFFF;border-radius:11px;padding:5px 12px;font-size:11px;font-weight:900;}"
+                          "QFrame#SelectionBar QLabel#selNames{color:#33456A;font-size:11px;font-weight:700;}"
+                          "QPushButton#selEdit{background:#FFFFFF;color:#2F5BEA;border:1px solid #C9D6FF;border-radius:10px;padding:6px 12px;font-weight:900;}"
+                          "QPushButton#selEdit:hover{background:#EEF3FF;}"
+                          "QPushButton#selClear{background:transparent;color:#7A879D;border:none;padding:6px 8px;font-weight:900;}"
+                          "QPushButton#selClear:hover{color:#D9284B;}")
+        row=QHBoxLayout(bar); row.setContentsMargins(12,8,8,8); row.setSpacing(10)
+        self.sel_badge=QLabel(); self.sel_badge.setObjectName("selBadge"); row.addWidget(self.sel_badge)
+        self.sel_names=QLabel(); self.sel_names.setObjectName("selNames"); row.addWidget(self.sel_names,1)
+        edit=QPushButton("Editar seleção"); edit.setObjectName("selEdit"); edit.setCursor(Qt.CursorShape.PointingHandCursor); edit.clicked.connect(self.open_product_picker); row.addWidget(edit)
+        clear=QPushButton("✕  Limpar"); clear.setObjectName("selClear"); clear.setCursor(Qt.CursorShape.PointingHandCursor); clear.setToolTip("Voltar a analisar todos os produtos")
+        clear.clicked.connect(lambda checked=False:self.set_selection(set())); row.addWidget(clear)
+        self.selection_bar=bar; return bar
+    def _update_selection_ui(self):
+        n=len(self.selected_codes)
+        self.pick.setText(f"☑  {br_number(n,0)} SELECIONADO{'S' if n!=1 else ''}" if n else "☑  SELECIONAR PRODUTOS")
+        self.pick.setObjectName("" if n else "Secondary"); self.pick.style().unpolish(self.pick); self.pick.style().polish(self.pick)
+        self.selection_bar.setVisible(bool(n))
+        if n:
+            names=(self.df[self.df.codigo_barras.isin(self.selected_codes)].drop_duplicates("codigo_barras")
+                   .pipe(sort_products).descricao.astype(str).tolist())
+            shown=", ".join(names[:4])+(f"  e mais {br_number(len(names)-4,0)}" if len(names)>4 else "")
+            self.sel_badge.setText(f"🎯  {br_number(n,0)} produto{'s' if n!=1 else ''} na análise"); self.sel_names.setText(shown); self.sel_names.setToolTip("\n".join(names))
+    def set_selection(self,codes):
+        self.selected_codes=set(codes); self._update_selection_ui(); self.refresh()
+    def _apply_selection(self,d):
+        return d[d.codigo_barras.isin(self.selected_codes)] if self.selected_codes else d
     def current_df(self):
-        status="Todos" if self.status.currentText()=="Todos os status" else self.status.currentText(); return filter_analysis(self.df,*self._base_filters(),status)
+        status="Todos" if self.status.currentText()=="Todos os status" else self.status.currentText(); return self._apply_selection(filter_analysis(self.df,*self._base_filters(),status))
     def _base_filters(self):
         loja="Todas" if self.store.currentText()=="Todas as lojas" else self.store.currentText(); grupo="Todos" if self.group.currentText()=="Todos os grupos" else self.group.currentText(); sub="Todas" if self.sub.currentText()=="Todas as subclasses" else self.sub.currentText()
         return loja,grupo,sub,self.search.text()
@@ -155,7 +194,7 @@ class DashboardPage(QWidget):
                     z=item.layout().takeAt(0)
                     if z.widget(): z.widget().deleteLater()
     def refresh(self):
-        options=self.df
+        options=self._apply_selection(self.df)
         if self.store.currentText()!="Todas as lojas":
             options=options[options.loja==self.store.currentText()]
         old_group=self.group.currentText()
@@ -169,7 +208,7 @@ class DashboardPage(QWidget):
         self.sub.blockSignals(True); self.sub.clear(); self.sub.addItem("Todas as subclasses"); self.sub.addItems(subclasses)
         self.sub.setCurrentText(old_sub if old_sub in [self.sub.itemText(i) for i in range(self.sub.count())] else "Todas as subclasses"); self.sub.blockSignals(False)
         # Contagem de cada status com os outros filtros aplicados (sem o de status).
-        self.status.set_counts(status_counts(filter_analysis(self.df,*self._base_filters(),"Todos")))
+        self.status.set_counts(status_counts(self._apply_selection(filter_analysis(self.df,*self._base_filters(),"Todos"))))
         d=self.current_df(); self.refresh_alert_button(); self.clear_body(); grid=QGridLayout(); grid.setHorizontalSpacing(12); grid.setVerticalSpacing(12)
         for i,spec in enumerate(kpi_cards(d)):
             c=KpiCard(spec["label"],spec["value"],spec["hint"],spec["accent"],spec["emoji"],spec["tone"],spec["clickable"])
@@ -237,7 +276,8 @@ class DashboardPage(QWidget):
                     status=str(val).upper(); item.setText(f"  {status}  ")
                     colors={"CRÍTICO":("#FFF0F2","#D9284B"),"BAIXO":("#FFF5D9","#B77900"),"SEM ESTOQUE":("#FFE4E8","#B91C3A"),"NEGATIVO":("#7F1D1D","#FFFFFF"),"NORMAL":("#E8FAF5","#087F6A"),"EXCESSO":("#EEF2FF","#4C5BD4")}
                     bg,fg=colors.get(status,("#F1F4F8","#5F6D82")); item.setBackground(QColor(bg)); item.setForeground(QColor(fg)); item.setFont(QFont("Segoe UI",9,QFont.Weight.Bold))
-        t.cellDoubleClicked.connect(lambda rr,cc,rs=rows:self.open_row(rs,rr)); self.body.addWidget(t)
+        if "codigo_barras" in cols: make_barcode_copyable(t,cols.index("codigo_barras"))
+        t.cellDoubleClicked.connect(lambda rr,cc,rs=rows,tt=t:None if is_barcode_column(tt,cc) else self.open_row(rs,rr)); self.body.addWidget(t)
     def open_row(self,rows,r):
         if 0<=r<len(rows): self.open_row_dict(rows[r][1].to_dict())
     def open_row_dict(self,row,parent=None):
@@ -248,13 +288,24 @@ class DashboardPage(QWidget):
         # Toda lista de KPI abre no formato produto × loja.
         view=store_list_view(name,d,self.status.currentText())
         if view: self.show_store_pivot(view)
-    def show_store_pivot(self,view):
+    def _picker_df(self):
+        """Produtos que podem ser marcados: os da loja escolhida (grupo, subclasse e status não limitam a escolha)."""
+        loja="Todas" if self.store.currentText()=="Todas as lojas" else self.store.currentText()
+        return filter_analysis(self.df,loja)
+    def open_product_picker(self):
+        """Marcar produtos: ao aplicar, o dashboard inteiro passa a considerar só eles."""
+        picker=ProductPickerDialog(self._picker_df(),self.selected_codes,self.search.text() if not self.selected_codes else "",self)
+        if picker.exec()==QDialog.DialogCode.Accepted:
+            if picker.selected:
+                self.search.blockSignals(True); self.search.clear(); self.search.blockSignals(False)  # a seleção substitui a busca
+            self.set_selection(picker.selected)
+    def show_store_pivot(self,view,parent=None):
         """Lista de um KPI dividida por loja: uma linha por produto, uma coluna por loja."""
         rows=view["rows"]; kind=view["kind"]
         table,stores,totals=pivot_by_store(rows,view["value"],view["ascending"])
         def fmt(value): return brl(value) if kind=="money" else br_number(value,0)
         unit="" if kind=="money" else " un."
-        dlg=QDialog(self); dlg.setWindowTitle(view["title"]); dlg.resize(1180,700)
+        dlg=QDialog(parent or self); dlg.setWindowTitle(view["title"]); dlg.resize(1180,700)
         dlg.setStyleSheet("QDialog{background:#F4F7FC;} QLabel{background:transparent;}")
         l=QVBoxLayout(dlg); l.setContentsMargins(12,8,12,12); l.setSpacing(10); install_mac_window_chrome(dlg,l)
         filters=[x for x in (self.group.currentText(),self.sub.currentText()) if x not in ("Todos os grupos","Todas as subclasses")]
@@ -268,9 +319,9 @@ class DashboardPage(QWidget):
                                f"color:{'#B91C3A' if value<0 else '#17326F'};font-size:12px;font-weight:900;")
             chips.addWidget(chip)
         chips.addStretch(); l.addLayout(chips)
-        absent=("o produto não está na planilha de estoque da loja" if view["value"]=="quantidade_estoque" and len(rows)==len(self.current_df())
+        absent=view.get("absent") or ("o produto não está na planilha de estoque da loja" if view["value"]=="quantidade_estoque" and len(rows)==len(self.current_df())
                 else "o produto não entra nesta lista naquela loja")
-        hint=QLabel(f"{view['note']}  Clique numa loja para abrir o card do produto nela.  “—” = {absent}."
+        hint=QLabel(f"{view['note']}  Clique numa loja para abrir o card do produto nela.  Dois cliques no código para copiar.  “—” = {absent}."
                     if len(table) else "Nenhum produto nesta lista com os filtros atuais.")
         hint.setStyleSheet("color:#7A879D;font-size:11px;padding:0 4px;"); hint.setWordWrap(True); l.addWidget(hint)
         headers=["Produto","Código","Subclasse",*stores,"Total"]
@@ -302,12 +353,14 @@ class DashboardPage(QWidget):
             store=stores[c-3]; code=table.iloc[r].codigo_barras
             found=rows[(rows.codigo_barras==code)&(rows.loja==store)]
             if len(found): self.open_row_dict(found.iloc[0].to_dict(),dlg)
+        make_barcode_copyable(t,1)
         t.cellClicked.connect(open_cell); l.addWidget(t,1); dlg.exec()
     def show_product_list(self,title,d):
+        d=sort_products(d)
         dlg=QDialog(self); dlg.setWindowTitle(title); dlg.resize(1180,700); l=QVBoxLayout(dlg); l.setContentsMargins(12,8,12,12); install_mac_window_chrome(dlg,l)
         head=QLabel(f"{title} • {br_number(len(d),0)} registros")
         head.setStyleSheet("font-size:18px;font-weight:900;color:#12213D;padding:4px;"); l.addWidget(head)
-        hint=QLabel("Clique em um produto para abrir o card com todos os detalhes." if len(d) else "Nenhum produto com os filtros atuais.")
+        hint=QLabel("Clique em um produto para abrir o card com todos os detalhes. Dois cliques no código para copiar." if len(d) else "Nenhum produto com os filtros atuais.")
         hint.setStyleSheet("color:#7A879D;font-size:11px;padding:0 4px 4px 4px;"); l.addWidget(hint)
         headers=["Código","Produto","Grupo","Subclasse","Loja","Estoque","Vendas","Preço venda","Faturamento","Valor estoque","Status"]
         status_colors={"NEGATIVO":("#7F1D1D","#FFFFFF"),"SEM ESTOQUE":("#FFE4E8","#B91C3A"),"CRÍTICO":("#FFF0F2","#D9284B"),"BAIXO":("#FFF5D9","#B77900"),"NORMAL":("#E8FAF5","#087F6A"),"EXCESSO":("#EEF2FF","#4C5BD4")}
@@ -325,7 +378,8 @@ class DashboardPage(QWidget):
                     bg,fg=status_colors.get(str(v).upper(),("#F1F4F8","#5F6D82")); item.setBackground(QColor(bg)); item.setForeground(QColor(fg)); item.setFont(QFont("Segoe UI",9,QFont.Weight.Bold))
                 t.setItem(i,j,item)
         t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.horizontalHeader().setSectionResizeMode(1,QHeaderView.Stretch); t.setAlternatingRowColors(True)
-        t.cellClicked.connect(lambda rr,cc:self.open_row_dict(rows[rr][1].to_dict(),dlg)); l.addWidget(t); dlg.exec()
+        make_barcode_copyable(t,0)
+        t.cellClicked.connect(lambda rr,cc:None if cc==0 else self.open_row_dict(rows[rr][1].to_dict(),dlg)); l.addWidget(t); dlg.exec()
     def export_pdf(self):
         p=get_save_file(self,"Exportar PDF","MixModaInsights.pdf","PDF (*.pdf)","pdf")
         if not p: return

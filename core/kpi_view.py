@@ -5,6 +5,7 @@ uma frase explicando o número e um tom (bom, alerta, ruim) que define a cor.
 """
 from core.analyzer import kpis, rupture, single_product_labels
 from core.models import AnalysisConfig
+from core.stores import order_stores
 from utils.formatting import brl, br_number
 
 CRITICAL = AnalysisConfig.estoque_critico
@@ -45,7 +46,7 @@ def kpi_cards(d):
     if len(stores) > 1:
         units_hint = " · ".join(
             f"{store} {br_number(d.loc[d.loja == store, 'quantidade_estoque'].sum(), 0)}"
-            for store in sorted(stores, key=str)
+            for store in order_stores(stores)
         )
     else:
         units_hint = f"em {br_number(in_stock, 0)} produtos com estoque"
