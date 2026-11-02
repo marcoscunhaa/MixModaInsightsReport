@@ -152,8 +152,9 @@ class DashboardPage(QWidget):
         bar=QFrame(); bar.setObjectName("SelectionBar")
         bar.setStyleSheet("QFrame#SelectionBar{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #EEF3FF,stop:1 #F6F2FF);"
                           "border:1px solid #C9D6FF;border-radius:14px;} QFrame#SelectionBar QLabel{background:transparent;border:none;}"
-                          "QLabel#selBadge{background:#2F5BEA;color:#FFFFFF;border-radius:11px;padding:4px 11px;font-size:11px;font-weight:900;}"
-                          "QLabel#selNames{color:#33456A;font-size:11px;font-weight:700;}"
+                          # Com o prefixo QFrame#SelectionBar para vencer a regra "QLabel transparente" acima.
+                          "QFrame#SelectionBar QLabel#selBadge{background:#2F5BEA;color:#FFFFFF;border-radius:11px;padding:5px 12px;font-size:11px;font-weight:900;}"
+                          "QFrame#SelectionBar QLabel#selNames{color:#33456A;font-size:11px;font-weight:700;}"
                           "QPushButton#selEdit{background:#FFFFFF;color:#2F5BEA;border:1px solid #C9D6FF;border-radius:10px;padding:6px 12px;font-weight:900;}"
                           "QPushButton#selEdit:hover{background:#EEF3FF;}"
                           "QPushButton#selClear{background:transparent;color:#7A879D;border:none;padding:6px 8px;font-weight:900;}"
