@@ -68,14 +68,16 @@ def test_ctrl_c_copies_current_cell(app):
     assert QGuiApplication.clipboard().text() == "7896722660010"
 
 
-def _mouse(widget, kind, local, buttons, modifiers=Qt.KeyboardModifier.NoModifier):
+def _mouse(widget, kind, global_pos, buttons, modifiers=Qt.KeyboardModifier.NoModifier):
     button = Qt.MouseButton.LeftButton if kind != QEvent.Type.MouseMove else Qt.MouseButton.NoButton
-    event = QMouseEvent(kind, QPointF(local), QPointF(widget.mapToGlobal(local)), button, buttons, modifiers)
+    local = widget.mapFromGlobal(global_pos)
+    event = QMouseEvent(kind, QPointF(local), QPointF(global_pos), button, buttons, modifiers)
     QApplication.sendEvent(widget, event)
 
 
 def _drag(widget, offset, modifiers=Qt.KeyboardModifier.NoModifier):
-    start = QPoint(5, 5)
+    # Posições de tela fixas: o cursor real não anda junto com a janela.
+    start = widget.mapToGlobal(QPoint(5, 5))
     left = Qt.MouseButton.LeftButton
     _mouse(widget, QEvent.Type.MouseButtonPress, start, left, modifiers)
     for step in (QPoint(3, 3), offset):
