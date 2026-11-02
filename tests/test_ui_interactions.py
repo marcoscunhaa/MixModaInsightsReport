@@ -136,17 +136,63 @@ def test_product_picker_marks_several_and_keeps_marks_across_searches(app, chrom
         "grupo": ["PECAS INTIMAS"] * 4, "subclasse": ["CONJUNTO", "CONJUNTO", "CONJUNTO", "CUECA"],
         "loja": ["Pedras"] * 4,
     })
-    opened = []
-    picker = ProductPickerDialog(df, lambda codes, metric, parent: opened.append((codes, metric)), "conjunto")
+    picker = ProductPickerDialog(df, initial_query="conjunto")
     picker.refresh()
-    texts = [picker.list.item(i).text() for i in range(picker.list.count())]
-    assert [t.split("•")[1].strip() for t in texts] == ["7896722660005", "7896722660006", "7896722660008"]
+    codes = [picker.list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(picker.list.count())]
+    assert codes == ["7896722660005", "7896722660006", "7896722660008"]   # P, M, GG
 
-    picker._set_visible(True)                       # "Marcar todos da busca"
+    picker._mark_visible()                              # "Marcar todos (3)"
     picker.search.setText("cueca"); picker.refresh()
-    picker._toggle_clicked(picker.list.item(0))      # clique na linha marca
+    picker._toggle_item(picker.list.item(0))            # clique na linha marca
     picker.search.setText("conjunto"); picker.refresh()
-    assert all(picker.list.item(i).checkState() == Qt.CheckState.Checked for i in range(picker.list.count()))
+    assert all(code in picker.checked for code in codes)
+    assert picker.chosen.count() == 4
+    assert "4" in picker.apply_button.text()
 
-    picker._open()
-    assert opened == [(["7891000000001", "7896722660005", "7896722660006", "7896722660008"], "Estoque")]
+    picker.toggle("7891000000001")                      # ✕ na coluna de selecionados
+    picker._apply()
+    assert picker.selected == set(codes)
+
+
+def test_picker_starts_with_current_selection(app, chrome):
+    import pandas as pd
+    from ui.product_picker import ProductPickerDialog
+    df = pd.DataFrame({"codigo_barras": ["1", "2"], "descricao": ["A", "B"], "grupo": ["G", "G"],
+                       "subclasse": ["S", "S"], "loja": ["Pedras", "Pedras"]})
+    picker = ProductPickerDialog(df, selected={"2", "999"})
+    assert picker.checked == {"2"}                      # código que não existe mais é ignorado
+    picker._clear()
+    picker._apply()
+    assert picker.selected == set()                     # vazio = todos os produtos
+
+
+def test_selection_filters_the_whole_dashboard(app, chrome):
+    import pandas as pd
+    from core.loader import SALES_MAP, SALES_REQUIRED, _standardize
+    from core.matcher import build_analysis
+    from core.models import AnalysisConfig
+    from ui.dashboard_page import DashboardPage
+
+    stock = pd.DataFrame([
+        ["7896722660005", "CONJUNTO RENDA P", 4, 10.0, 30.0],
+        ["7896722660006", "CONJUNTO RENDA M", 6, 10.0, 30.0],
+        ["7891000000001", "CUECA BOXER M", 9, 5.0, 15.0],
+    ], columns=["codigo_barras", "descricao", "quantidade_estoque", "preco_compra", "preco_venda"])
+    sales = _standardize(pd.DataFrame([
+        ["7896722660005", "CONJUNTO RENDA P", 2, 10.0, 20.0, 30.0, 60.0, 40.0],
+        ["7891000000001", "CUECA BOXER M", 5, 5.0, 25.0, 15.0, 75.0, 50.0],
+    ]), SALES_MAP, SALES_REQUIRED)
+    frame, audit = build_analysis(stock, sales, {"produtos": []}, "Pedras",
+                                  AnalysisConfig("Pedras", None, None, "", ""), None)
+
+    page = DashboardPage(frame, "período", audit)
+    assert len(page.current_df()) == 3 and page.selection_bar.isHidden()
+
+    page.set_selection({"7896722660005", "7896722660006"})
+    d = page.current_df()
+    assert sorted(d.codigo_barras) == ["7896722660005", "7896722660006"]
+    assert not page.selection_bar.isHidden() and "2" in page.pick.text()
+    assert "CONJUNTO RENDA P" in page.sel_names.text()
+
+    page.set_selection(set())
+    assert len(page.current_df()) == 3 and page.selection_bar.isHidden()
