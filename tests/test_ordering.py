@@ -29,3 +29,20 @@ def test_sort_products_by_barcode_then_store():
     assert list(zip(out.codigo_barras, out.loja)) == [
         ("7896722640005", "Palmeiras"), ("7896722640005", "Pedras"), ("7896722660008", "Sitio São João"),
     ]
+
+
+def test_product_options_one_per_code_sorted_and_searchable():
+    from core.analyzer import match_options, product_options
+    df = pd.DataFrame({
+        "codigo_barras": ["7896722660008", "7896722660005", "7896722660005", "7891000000001"],
+        "descricao": ["CONJUNTO RENDA GG", "CONJUNTO RENDA P", "CONJ RENDA P", "CUECA BOXER M"],
+        "grupo": ["PECAS INTIMAS"] * 4, "subclasse": ["CONJUNTO", "CONJUNTO", "CONJUNTO", "CUECA"],
+        "loja": ["Pedras", "Pedras", "Palmeiras", "Pedras"],
+    })
+    options = product_options(df)
+    assert [o["codigo_barras"] for o in options] == ["7891000000001", "7896722660005", "7896722660008"]
+    assert options[1]["descricao"] in ("CONJUNTO RENDA P", "CONJ RENDA P")
+    assert [o["codigo_barras"] for o in match_options(options, "conjunto")] == ["7896722660005", "7896722660008"]
+    assert [o["codigo_barras"] for o in match_options(options, "renda gg")] == ["7896722660008"]
+    assert [o["codigo_barras"] for o in match_options(options, "0000001")] == ["7891000000001"]
+    assert len(match_options(options, "")) == 3

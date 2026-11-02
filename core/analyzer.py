@@ -130,3 +130,38 @@ def sort_products(df):
     stores = df.loja.map(store_sort_key) if "loja" in df else None
     order = sorted(range(len(df)), key=lambda i: (keys.iloc[i], stores.iloc[i] if stores is not None else 0))
     return df.iloc[order]
+
+
+def product_options(df):
+    """Um item por código de barras (nome mais frequente, grupo e subclasse), do menor código para o maior.
+
+    Usado pela seleção de produtos: marcando os tamanhos de um conjunto, eles
+    aparecem em sequência (P → GG) porque os códigos da grade são sequenciais.
+    """
+    if df.empty:
+        return []
+    names = df.groupby("codigo_barras").descricao.agg(lambda s: s.value_counts().index[0])
+    info = df.groupby("codigo_barras")[["grupo", "subclasse"]].first()
+    options = [
+        {"codigo_barras": code, "descricao": str(names[code]),
+         "grupo": str(info.at[code, "grupo"]), "subclasse": str(info.at[code, "subclasse"])}
+        for code in names.index
+    ]
+    return sorted(options, key=lambda o: barcode_sort_key(o["codigo_barras"]))
+
+
+def match_options(options, query):
+    """Filtra pelo texto digitado: todas as palavras no nome/subclasse, ou parte do código."""
+    from utils.normalization import normalize_barcode, normalize_text
+    words = normalize_text(query).split()
+    digits = normalize_barcode(query) if any(ch.isdigit() for ch in str(query)) else ""
+    if not words:
+        return list(options)
+    found = []
+    for option in options:
+        text = normalize_text(f"{option['descricao']} {option['subclasse']} {option['grupo']} {option['codigo_barras']}")
+        if all(word in text for word in words) or (
+            digits not in ("", "0") and digits in normalize_barcode(option["codigo_barras"])
+        ):
+            found.append(option)
+    return found

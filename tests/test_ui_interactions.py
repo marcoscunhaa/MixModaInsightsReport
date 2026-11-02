@@ -125,3 +125,28 @@ def test_plain_drag_on_table_does_not_move_but_ctrl_drag_does(app, chrome):
     app.processEvents()
     assert dialog.pos() == before + QPoint(50, 30)
     dialog.close()
+
+
+def test_product_picker_marks_several_and_keeps_marks_across_searches(app, chrome):
+    import pandas as pd
+    from ui.product_picker import ProductPickerDialog
+    df = pd.DataFrame({
+        "codigo_barras": ["7896722660008", "7896722660005", "7896722660006", "7891000000001"],
+        "descricao": ["CONJUNTO RENDA GG", "CONJUNTO RENDA P", "CONJUNTO RENDA M", "CUECA BOXER M"],
+        "grupo": ["PECAS INTIMAS"] * 4, "subclasse": ["CONJUNTO", "CONJUNTO", "CONJUNTO", "CUECA"],
+        "loja": ["Pedras"] * 4,
+    })
+    opened = []
+    picker = ProductPickerDialog(df, lambda codes, metric, parent: opened.append((codes, metric)), "conjunto")
+    picker.refresh()
+    texts = [picker.list.item(i).text() for i in range(picker.list.count())]
+    assert [t.split("•")[1].strip() for t in texts] == ["7896722660005", "7896722660006", "7896722660008"]
+
+    picker._set_visible(True)                       # "Marcar todos da busca"
+    picker.search.setText("cueca"); picker.refresh()
+    picker._toggle_clicked(picker.list.item(0))      # clique na linha marca
+    picker.search.setText("conjunto"); picker.refresh()
+    assert all(picker.list.item(i).checkState() == Qt.CheckState.Checked for i in range(picker.list.count()))
+
+    picker._open()
+    assert opened == [(["7891000000001", "7896722660005", "7896722660006", "7896722660008"], "Estoque")]

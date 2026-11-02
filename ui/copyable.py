@@ -82,7 +82,8 @@ def _copy_current(view):
         QGuiApplication.clipboard().setText(text[start:start + length] if has_code else text)
 
 
-def _install_copy_shortcut(view):
+def install_copy_shortcut(view):
+    """Ctrl+C na lista/tabela copia o código (ou o texto) do item atual."""
     if getattr(view, "_copy_shortcut", None) is not None:
         return
     shortcut = QShortcut(QKeySequence(QKeySequence.StandardKey.Copy), view)
@@ -99,7 +100,7 @@ def make_barcode_copyable(view, column):
     view.setItemDelegateForColumn(column, view._copy_delegate)
     view.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked)
     view._barcode_column = column
-    _install_copy_shortcut(view)
+    install_copy_shortcut(view)
     tip_item = view.horizontalHeaderItem(column) if hasattr(view, "horizontalHeaderItem") else None
     if tip_item is not None:
         tip_item.setToolTip(COPY_TIP)
@@ -113,7 +114,7 @@ def make_list_copyable(list_widget):
     list_widget._copy_delegate = _CopyEditorDelegate(list_widget)
     list_widget.setItemDelegate(list_widget._copy_delegate)
     list_widget.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked)
-    _install_copy_shortcut(list_widget)
+    install_copy_shortcut(list_widget)
     list_widget.setToolTip(COPY_TIP)
 
 

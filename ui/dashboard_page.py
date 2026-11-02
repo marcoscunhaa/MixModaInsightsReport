@@ -8,6 +8,7 @@ from ui.widgets import Card, KpiCard, RankCard, StatusFilterBar
 from ui.explorer_cards import ExplorerCard, SUBCLASS_COLORS, _stable_color
 from core.kpi_view import STATUS_OPTIONS, kpi_cards, status_counts, store_list_view
 from ui.product_modal import ProductModal
+from ui.product_picker import METRICS, ProductPickerDialog
 from charts.dashboard_charts import make_chart
 from core.analyzer import filter_analysis,kpis,single_product_labels,pivot_by_store,top_sold,stagnant,critical,rupture,sort_products
 from core.stores import order_stores
@@ -94,7 +95,9 @@ class DashboardPage(QWidget):
         pdf=QPushButton("EXPORTAR PDF"); pdf.clicked.connect(self.export_pdf); head.addWidget(pdf); root.addLayout(head)
         filters=QFrame(); filters.setObjectName("Panel"); fbox=QVBoxLayout(filters); fbox.setContentsMargins(12,10,12,10); fbox.setSpacing(10); fl=QHBoxLayout(); fl.setSpacing(8); fbox.addLayout(fl)
         self.store=QComboBox(); self.store.addItem("Todas as lojas"); self.store.addItems(order_stores(df.loja.dropna().unique())); self.group=QComboBox(); self.group.addItem("Todos os grupos"); self.group.addItems(sorted(df.grupo.dropna().unique())); self.sub=QComboBox(); self.sub.addItem("Todas as subclasses"); self.status=StatusFilterBar(STATUS_OPTIONS); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código, grupo ou subclasse...")
-        for w in (self.store,self.group,self.sub,self.search): fl.addWidget(w)
+        self.pick=QPushButton("☑  SELECIONAR PRODUTOS"); self.pick.setObjectName("Secondary"); self.pick.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.pick.setToolTip("Marque vários produtos (ex.: os tamanhos de um conjunto) e veja todos juntos, por loja."); self.pick.clicked.connect(self.open_product_picker)
+        for w in (self.store,self.group,self.sub,self.search,self.pick): fl.addWidget(w)
         fl.setStretch(3,1); fbox.addWidget(self.status)
         root.addWidget(filters)
         sc=QScrollArea(); sc.setWidgetResizable(True); inner=QWidget(); self.body=QVBoxLayout(inner); self.body.setContentsMargins(0,0,6,0); self.body.setSpacing(14); sc.setWidget(inner); root.addWidget(sc,1)
@@ -251,13 +254,28 @@ class DashboardPage(QWidget):
         # Toda lista de KPI abre no formato produto × loja.
         view=store_list_view(name,d,self.status.currentText())
         if view: self.show_store_pivot(view)
-    def show_store_pivot(self,view):
+    def _picker_df(self):
+        """Dados dos filtros atuais (loja, grupo, subclasse, status), sem o texto da busca."""
+        status="Todos" if self.status.currentText()=="Todos os status" else self.status.currentText()
+        loja,grupo,sub,_busca=self._base_filters()
+        return filter_analysis(self.df,loja,grupo,sub,"",status)
+    def open_product_picker(self):
+        """Busca com caixas de marcar: abre a tabela por loja só com os produtos marcados."""
+        ProductPickerDialog(self._picker_df(),self.show_selected_products,self.search.text(),self).exec()
+    def show_selected_products(self,codes,metric,parent=None):
+        spec=METRICS[metric]; d=self._picker_df(); rows=d[d.codigo_barras.isin(set(codes))]
+        absent=("o produto não está na planilha de estoque da loja" if spec["value"]=="quantidade_estoque"
+                else "o produto não tem esse dado naquela loja")
+        view=dict(title=f"{metric} por loja • produtos selecionados",emoji=spec["emoji"],rows=rows,value=spec["value"],
+                  kind=spec["kind"],ascending=False,note=spec["note"],absent=absent)
+        self.show_store_pivot(view,parent)
+    def show_store_pivot(self,view,parent=None):
         """Lista de um KPI dividida por loja: uma linha por produto, uma coluna por loja."""
         rows=view["rows"]; kind=view["kind"]
         table,stores,totals=pivot_by_store(rows,view["value"],view["ascending"])
         def fmt(value): return brl(value) if kind=="money" else br_number(value,0)
         unit="" if kind=="money" else " un."
-        dlg=QDialog(self); dlg.setWindowTitle(view["title"]); dlg.resize(1180,700)
+        dlg=QDialog(parent or self); dlg.setWindowTitle(view["title"]); dlg.resize(1180,700)
         dlg.setStyleSheet("QDialog{background:#F4F7FC;} QLabel{background:transparent;}")
         l=QVBoxLayout(dlg); l.setContentsMargins(12,8,12,12); l.setSpacing(10); install_mac_window_chrome(dlg,l)
         filters=[x for x in (self.group.currentText(),self.sub.currentText()) if x not in ("Todos os grupos","Todas as subclasses")]
@@ -271,7 +289,7 @@ class DashboardPage(QWidget):
                                f"color:{'#B91C3A' if value<0 else '#17326F'};font-size:12px;font-weight:900;")
             chips.addWidget(chip)
         chips.addStretch(); l.addLayout(chips)
-        absent=("o produto não está na planilha de estoque da loja" if view["value"]=="quantidade_estoque" and len(rows)==len(self.current_df())
+        absent=view.get("absent") or ("o produto não está na planilha de estoque da loja" if view["value"]=="quantidade_estoque" and len(rows)==len(self.current_df())
                 else "o produto não entra nesta lista naquela loja")
         hint=QLabel(f"{view['note']}  Clique numa loja para abrir o card do produto nela.  Dois cliques no código para copiar.  “—” = {absent}."
                     if len(table) else "Nenhum produto nesta lista com os filtros atuais.")
