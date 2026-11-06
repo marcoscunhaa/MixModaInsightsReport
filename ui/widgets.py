@@ -1,6 +1,6 @@
 from utils.formatting import brl, br_number
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QHBoxLayout, QGraphicsDropShadowEffect
+from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QHBoxLayout, QGraphicsDropShadowEffect, QWidget
 
 class ShadowMixin:
     def add_shadow(self, blur=28, y=7, opacity=35):
@@ -260,3 +260,190 @@ class StatusFilterBar(QFrame):
             count = counts.get(value, 0)
             button.setText(f"{emoji}  {label}  {br_number(count, 0)}")
             button.setEnabled(bool(count) or value == self._current or value == self._options[0][0])
+
+
+class LastAnalysisCard(QFrame):
+    """Faixa "Continue de onde parou" da tela inicial.
+
+    Com análise salva: painel escuro com período, quando foi gerada, lojas,
+    três números-resumo e o botão ABRIR ANÁLISE (o card inteiro é clicável).
+    Sem análise: estado vazio discreto explicando que a próxima aparece aqui.
+    Só lê o resumo pequeno (dict); nenhum dado pesado passa por aqui.
+    """
+    clicked = Signal()
+
+    _STYLE = (
+        "QFrame#ResumeCard{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+        "stop:0 #0E1B3D,stop:0.55 #172C66,stop:1 #2B2470);border:1px solid #22356F;border-radius:22px;}"
+        "QFrame#ResumeCard:hover, QFrame#ResumeCard:focus{border:1px solid #7F96FF;}"
+        "QFrame#ResumeCard[empty=\"true\"], QFrame#ResumeCard[empty=\"true\"]:hover{background:#FFFFFF;border:1px dashed #C9D5EA;}"
+        "QFrame#ResumeCard QLabel{background:transparent;border:none;}"
+        "QFrame#ResumeCard QWidget#ResumeStats{background:transparent;}"
+        "QFrame#ResumeCard QLabel#ResumeIcon{background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.16);"
+        "border-radius:16px;font-size:24px;}"
+        "QFrame#ResumeCard[empty=\"true\"] QLabel#ResumeIcon{background:#EEF3FF;border:none;}"
+        "QFrame#ResumeCard QLabel#ResumeEyebrow{color:#9DB0FF;font-size:10px;font-weight:900;letter-spacing:1.6px;}"
+        "QFrame#ResumeCard QLabel#ResumeWhen{color:#D9E1FF;background:rgba(255,255,255,0.10);border-radius:9px;"
+        "padding:3px 9px;font-size:10px;font-weight:800;}"
+        "QFrame#ResumeCard QLabel#ResumeTitle{color:#FFFFFF;font-size:19px;font-weight:900;}"
+        "QFrame#ResumeCard[empty=\"true\"] QLabel#ResumeTitle{color:#12213D;font-size:15px;}"
+        "QFrame#ResumeCard QLabel#ResumeText{color:#66758F;font-size:12px;}"
+        "QFrame#ResumeCard QLabel#ResumeStore{color:#E6EBFF;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);"
+        "border-radius:10px;padding:3px 10px;font-size:11px;font-weight:700;}"
+        "QFrame#ResumeCard QLabel#ResumeValue{color:#FFFFFF;font-size:17px;font-weight:900;}"
+        "QFrame#ResumeCard QLabel#ResumeLabel{color:#9DB0FF;font-size:10px;font-weight:800;letter-spacing:0.8px;}"
+        "QFrame#ResumeDivider{background:rgba(255,255,255,0.14);border:none;}"
+        "QPushButton#ResumeOpen{background:#FFFFFF;color:#172C66;border-radius:14px;padding:13px 22px;"
+        "font-size:12px;font-weight:900;letter-spacing:0.6px;}"
+        "QPushButton#ResumeOpen:hover{background:#E9EEFF;}"
+        "QPushButton#ResumeOpen:pressed{background:#D7E0FF;}"
+        "QPushButton#ResumeOpen:disabled{background:rgba(255,255,255,0.55);color:#172C66;}"
+    )
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        from PySide6.QtWidgets import QPushButton
+        self.setObjectName("ResumeCard")
+        self.setStyleSheet(self._STYLE)
+        self.setMinimumHeight(118)
+        self._meta = None
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(24, 18, 24, 18)
+        layout.setSpacing(18)
+        self.icon = QLabel("🕘")
+        self.icon.setObjectName("ResumeIcon")
+        self.icon.setFixedSize(56, 56)
+        self.icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.icon, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        info = QVBoxLayout()
+        info.setSpacing(6)
+        head = QHBoxLayout()
+        head.setSpacing(10)
+        self.eyebrow = QLabel("CONTINUE DE ONDE PAROU")
+        self.eyebrow.setObjectName("ResumeEyebrow")
+        head.addWidget(self.eyebrow)
+        self.when = QLabel()
+        self.when.setObjectName("ResumeWhen")
+        head.addWidget(self.when)
+        head.addStretch()
+        info.addLayout(head)
+        self.title = QLabel()
+        self.title.setObjectName("ResumeTitle")
+        info.addWidget(self.title)
+        self.text = QLabel()
+        self.text.setObjectName("ResumeText")
+        self.text.setWordWrap(True)
+        info.addWidget(self.text)
+        self.stores = QHBoxLayout()
+        self.stores.setSpacing(6)
+        info.addLayout(self.stores)
+        layout.addLayout(info, 1)
+
+        self.stats = QWidget(self)
+        self.stats.setObjectName("ResumeStats")
+        stats = QHBoxLayout(self.stats)
+        stats.setContentsMargins(0, 0, 0, 0)
+        stats.setSpacing(18)
+        self.values = {}
+        for index, (key, label) in enumerate(
+            (("produtos", "PRODUTOS"), ("faturamento", "FATURAMENTO"), ("unidades_vendidas", "VENDIDAS"))
+        ):
+            if index:
+                divider = QFrame()
+                divider.setObjectName("ResumeDivider")
+                divider.setFixedSize(1, 36)
+                stats.addWidget(divider)
+            box = QVBoxLayout()
+            box.setSpacing(2)
+            value = QLabel()
+            value.setObjectName("ResumeValue")
+            box.addWidget(value)
+            caption = QLabel(label)
+            caption.setObjectName("ResumeLabel")
+            box.addWidget(caption)
+            stats.addLayout(box)
+            self.values[key] = value
+        layout.addWidget(self.stats, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self.button = QPushButton("ABRIR ANÁLISE  →")
+        self.button.setObjectName("ResumeOpen")
+        self.button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.button.clicked.connect(self._activate)
+        layout.addWidget(self.button, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self.shadow = QGraphicsDropShadowEffect(self)
+        self.shadow.setBlurRadius(34)
+        self.shadow.setOffset(0, 10)
+        self.setGraphicsEffect(self.shadow)
+        self.set_meta(None)
+
+    def has_analysis(self):
+        return self._meta is not None
+
+    def meta(self):
+        return self._meta
+
+    def set_meta(self, meta):
+        from PySide6.QtGui import QColor
+        from core.last_analysis import describe_period, describe_saved_at
+        self._meta = meta
+        empty = meta is None
+        self.setProperty("empty", empty)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.setCursor(Qt.CursorShape.ArrowCursor if empty else Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus if empty else Qt.FocusPolicy.StrongFocus)
+        self.shadow.setColor(QColor(25, 43, 78, 14) if empty else QColor(23, 44, 102, 80))
+        while self.stores.count():
+            item = self.stores.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.when.setVisible(not empty)
+        self.stats.setVisible(not empty)
+        self.button.setVisible(not empty)
+        self.text.setVisible(empty)
+        self.eyebrow.setVisible(not empty)
+        if empty:
+            self.icon.setText("🗂️")
+            self.title.setText("Nenhuma análise salva ainda")
+            self.text.setText(
+                "Ao gerar uma análise, ela fica guardada aqui para reabrir o dashboard num clique, "
+                "sem selecionar as planilhas de novo."
+            )
+            self.setToolTip("")
+            return
+        self.icon.setText("🕘")
+        self.when.setText(f"Gerada {describe_saved_at(meta)}")
+        period = describe_period(meta)
+        self.title.setText(f"Análise de {period}")
+        for store in meta.get("lojas", []):
+            chip = QLabel(f"🏬 {store}")
+            chip.setObjectName("ResumeStore")
+            self.stores.addWidget(chip)
+        self.stores.addStretch()
+        self.values["produtos"].setText(br_number(meta.get("produtos", 0), 0))
+        self.values["faturamento"].setText(brl(meta.get("faturamento", 0), 0))
+        self.values["unidades_vendidas"].setText(br_number(meta.get("unidades_vendidas", 0), 0))
+        self.setToolTip("Reabre o dashboard desta análise sem reprocessar as planilhas")
+        self.set_loading(False)
+
+    def set_loading(self, loading):
+        self.button.setEnabled(not loading)
+        self.button.setText("ABRINDO…" if loading else "ABRIR ANÁLISE  →")
+
+    def _activate(self):
+        if self._meta is not None and self.button.isEnabled():
+            self.clicked.emit()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.rect().contains(event.position().toPoint()):
+            self._activate()
+        super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            self._activate()
+            return
+        super().keyPressEvent(event)

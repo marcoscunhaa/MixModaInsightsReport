@@ -40,6 +40,13 @@ Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflo
 - A análise permite selecionar até cinco lojas, uma vez cada: Sitio São João, Palmeiras, Sapiranga, Pedras e Mix Cosméticos. A lista fica em `core/stores.py` e é usada em todos os seletores de loja.
 - Explorador hierárquico: **Grupo → Subclasse → Produto → Detalhes**.
 
+## Última análise
+
+- Toda análise gerada fica salva automaticamente. No menu inicial, o painel **Continue de onde parou** mostra o período, quando foi gerada, as lojas, o número de produtos, o faturamento e as unidades vendidas; **ABRIR ANÁLISE** reabre o dashboard sem selecionar as planilhas de novo.
+- Só a última análise é guardada: uma nova substitui a anterior. Ficam em `data/ultima_analise.json` (resumo lido pela tela inicial) e `data/ultima_analise.pkl` (dados completos, com os mesmos tipos da análise original).
+- A gravação acontece em segundo plano e é atômica: fechar o app logo depois de gerar não deixa arquivo pela metade. Se a análise salva voltar a um dashboard que já está aberto, o app só troca de tela, sem reler o arquivo.
+- Se os arquivos estiverem apagados, corrompidos ou forem de outra versão do app, ele avisa e pede uma nova análise.
+
 ## Alertas de estoque crítico
 
 - Pesquise produtos pelo nome ou código de barras; a lista sugere resultados aproximados do catálogo oficial.
