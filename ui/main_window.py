@@ -1,7 +1,9 @@
 from pathlib import Path
 import traceback
 
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -12,11 +14,12 @@ from PySide6.QtWidgets import (
 )
 
 from core.catalog_store import classification_payload, load_catalog
+from core.last_analysis import LastAnalysisError, LastAnalysisStore
 from core.models import AnalysisConfig
 from core.stock_alerts import StockAlertStore
 from ui.analysis_page import AnalysisPage
 from ui.stock_explorer import StockExplorerPage
-from ui.widgets import FeatureCard
+from ui.widgets import FeatureCard, LastAnalysisCard
 from core.stores import STORES
 from ui.window_chrome import install_mac_window_chrome, show_message
 from ui.styles import APP_QSS
@@ -39,6 +42,7 @@ class MainWindow(QMainWindow):
             data_dir / "stock_alert_rules.json",
             data_dir / "stock_alert_snapshot.json",
         )
+        self.last_analysis = LastAnalysisStore(data_dir)
 
         self.stack = QStackedWidget()
         shell = QWidget()
@@ -55,6 +59,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.analysis)
         self.stock_explorer = None
         self.dashboard = None
+        self.dashboard_id = None  # id da análise salva que o dashboard atual mostra
 
 
     def home_page(self):
@@ -74,7 +79,14 @@ class MainWindow(QMainWindow):
         subtitle.setObjectName("Subtitle")
         layout.addWidget(subtitle)
 
-        layout.addSpacing(18)
+        layout.addSpacing(14)
+        # Só o resumo pequeno é lido aqui: a tela inicial continua abrindo sem pandas.
+        self.resume_card = LastAnalysisCard()
+        self.resume_card.clicked.connect(self.open_last_analysis)
+        self.resume_card.set_meta(self.last_analysis.meta())
+        layout.addWidget(self.resume_card)
+
+        layout.addSpacing(12)
         prompt = QLabel("O QUE VOCÊ QUER FAZER?")
         prompt.setStyleSheet("color:#7A879D;font-size:11px;font-weight:900;letter-spacing:1.5px;")
         layout.addWidget(prompt)
@@ -178,7 +190,61 @@ class MainWindow(QMainWindow):
             )
 
     def open_home(self):
+        if self.resume_card.has_analysis():
+            self.resume_card.set_meta(self.resume_card.meta())  # atualiza "hoje/ontem às"
         self.stack.setCurrentWidget(self.home)
+
+    def open_last_analysis(self):
+        meta = self.resume_card.meta()
+        # A análise salva é a que já está aberta nesta sessão: só volta para ela.
+        if self.dashboard is not None and meta and meta.get("id") == self.dashboard_id:
+            self.stack.setCurrentWidget(self.dashboard)
+            return
+        self.resume_card.set_loading(True)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        # Deixa o botão mostrar "ABRINDO…" antes do trabalho pesado começar.
+        QTimer.singleShot(0, self._load_last_analysis)
+
+    def _load_last_analysis(self):
+        try:
+            frame, period, audit, meta = self.last_analysis.load()
+            self.show_dashboard(frame, period, audit, meta["id"])
+        except LastAnalysisError as error:
+            QApplication.restoreOverrideCursor()
+            self.resume_card.set_meta(self.last_analysis.meta())
+            show_message(self, "warning", "Não foi possível abrir a última análise", str(error))
+            return
+        except Exception as error:
+            QApplication.restoreOverrideCursor()
+            self.resume_card.set_loading(False)
+            show_message(
+                self, "critical", "Não foi possível abrir a última análise",
+                "O dashboard encontrou um erro ao montar a análise salva. Gere uma nova análise.\n\n"
+                f"{type(error).__name__}: {error}",
+            )
+            print(traceback.format_exc())
+            return
+        QApplication.restoreOverrideCursor()
+        self.resume_card.set_loading(False)
+
+    def show_dashboard(self, frame, period, audit, analysis_id=None):
+        from ui.dashboard_page import DashboardPage
+        page = DashboardPage(
+            frame,
+            period,
+            audit,
+            on_home=self.open_home,
+            alert_store=self.alert_store,
+        )
+        # Descarta o dashboard anterior: cada um carrega vários gráficos e,
+        # sem isso, a memória cresce a cada análise gerada.
+        if self.dashboard is not None:
+            self.stack.removeWidget(self.dashboard)
+            self.dashboard.deleteLater()
+        self.dashboard = page
+        self.dashboard_id = analysis_id
+        self.stack.addWidget(page)
+        self.stack.setCurrentWidget(page)
 
     def generate(self, info):
         # Módulos pesados (pandas, gráficos, PDF) só são carregados aqui, para a
@@ -186,7 +252,6 @@ class MainWindow(QMainWindow):
         import pandas as pd
         from core.loader import load_stock, load_sales
         from core.matcher import build_analysis
-        from ui.dashboard_page import DashboardPage
         try:
             frames = []
             audits = []
@@ -233,21 +298,9 @@ class MainWindow(QMainWindow):
             ]
             self.alert_store.save_snapshot(frame[snapshot_columns].to_dict("records"))
 
-            page = DashboardPage(
-                frame,
-                (info["data_inicio"], info["data_fim"]),
-                audit,
-                on_home=self.open_home,
-                alert_store=self.alert_store,
-            )
-            # Descarta o dashboard anterior: cada um carrega vários gráficos e,
-            # sem isso, a memória cresce a cada análise gerada.
-            if self.dashboard is not None:
-                self.stack.removeWidget(self.dashboard)
-                self.dashboard.deleteLater()
-            self.dashboard = page
-            self.stack.addWidget(page)
-            self.stack.setCurrentWidget(page)
+            period = (info["data_inicio"], info["data_fim"])
+            analysis_id = self.save_last_analysis(frame, period, audit, info["lojas"])
+            self.show_dashboard(frame, period, audit, analysis_id)
         except Exception as error:
             details = traceback.format_exc()
             show_message(
@@ -258,3 +311,13 @@ class MainWindow(QMainWindow):
                 "Verifique se os arquivos são XLS/XLSX válidos e se seguem o layout da Mix Moda.",
             )
             print(details)
+
+    def save_last_analysis(self, frame, period, audit, stores):
+        """Guarda a análise para o card da tela inicial; uma falha aqui não impede o dashboard."""
+        try:
+            meta = self.last_analysis.save(frame, period, audit, [s["loja"] for s in stores])
+        except Exception as error:
+            print(f"Não foi possível salvar a última análise: {type(error).__name__}: {error}")
+            return None
+        self.resume_card.set_meta(meta)
+        return meta["id"]

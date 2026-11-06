@@ -64,6 +64,8 @@ Desktop.ini
 *.pdf
 
 # Arquivos de teste/dados
+data/ultima_analise.json
+data/ultima_analise.pkl
 *.csv
 *.xlsx
 *.xls
