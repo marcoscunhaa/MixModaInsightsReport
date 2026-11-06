@@ -263,41 +263,48 @@ class StatusFilterBar(QFrame):
 
 
 class LastAnalysisCard(QFrame):
-    """Faixa "Continue de onde parou" da tela inicial.
+    """Painel "Continue de onde parou" da tela inicial.
 
-    Com análise salva: painel escuro com período, quando foi gerada, lojas,
-    três números-resumo e o botão ABRIR ANÁLISE (o card inteiro é clicável).
-    Sem análise: estado vazio discreto explicando que a próxima aparece aqui.
-    Só lê o resumo pequeno (dict); nenhum dado pesado passa por aqui.
+    Segue o visual dos FeatureCards (fundo branco, raio 22, borda e sombra
+    iguais) com um acento laranja → rosa próprio. Os três números usam as
+    cores dos cards de baixo (azul, verde e rosa). O card inteiro é clicável.
+    Sem análise salva: estado vazio discreto com borda tracejada.
+    Só recebe o resumo pequeno (dict); nenhum dado pesado passa por aqui.
     """
     clicked = Signal()
 
+    ACCENT = "#F97316"
+    ACCENT_2 = "#EC4899"
+    STATS = (
+        ("produtos", "📦", "PRODUTOS", "#2F5BEA"),
+        ("faturamento", "💰", "FATURAMENTO", "#08A88F"),
+        ("unidades_vendidas", "🛒", "VENDIDAS", "#E85D8A"),
+    )
+
     _STYLE = (
-        "QFrame#ResumeCard{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-        "stop:0 #0E1B3D,stop:0.55 #172C66,stop:1 #2B2470);border:1px solid #22356F;border-radius:22px;}"
-        "QFrame#ResumeCard:hover, QFrame#ResumeCard:focus{border:1px solid #7F96FF;}"
-        "QFrame#ResumeCard[empty=\"true\"], QFrame#ResumeCard[empty=\"true\"]:hover{background:#FFFFFF;border:1px dashed #C9D5EA;}"
+        "QFrame#ResumeCard{background:#FFFFFF;border:1px solid #DCE6F3;border-radius:22px;}"
+        "QFrame#ResumeCard:hover, QFrame#ResumeCard:focus{background:#FFFCFA;border:1px solid #F97316;}"
+        "QFrame#ResumeCard[empty=\"true\"], QFrame#ResumeCard[empty=\"true\"]:hover"
+        "{background:#FFFFFF;border:1px dashed #C9D5EA;}"
         "QFrame#ResumeCard QLabel{background:transparent;border:none;}"
         "QFrame#ResumeCard QWidget#ResumeStats{background:transparent;}"
-        "QFrame#ResumeCard QLabel#ResumeIcon{background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.16);"
-        "border-radius:16px;font-size:24px;}"
-        "QFrame#ResumeCard[empty=\"true\"] QLabel#ResumeIcon{background:#EEF3FF;border:none;}"
-        "QFrame#ResumeCard QLabel#ResumeEyebrow{color:#9DB0FF;font-size:10px;font-weight:900;letter-spacing:1.6px;}"
-        "QFrame#ResumeCard QLabel#ResumeWhen{color:#D9E1FF;background:rgba(255,255,255,0.10);border-radius:9px;"
-        "padding:3px 9px;font-size:10px;font-weight:800;}"
-        "QFrame#ResumeCard QLabel#ResumeTitle{color:#FFFFFF;font-size:19px;font-weight:900;}"
-        "QFrame#ResumeCard[empty=\"true\"] QLabel#ResumeTitle{color:#12213D;font-size:15px;}"
+        "QFrame#ResumeCard QLabel#ResumeIcon{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,"
+        "stop:0 #F97316,stop:1 #EC4899);border-radius:16px;font-size:26px;}"
+        "QFrame#ResumeCard[empty=\"true\"] QLabel#ResumeIcon{background:rgba(249,115,22,0.12);}"
+        "QFrame#ResumeCard QLabel#ResumeEyebrow{color:#F97316;font-size:11px;font-weight:900;letter-spacing:1.5px;}"
+        "QFrame#ResumeCard QLabel#ResumeWhen{color:#C2410C;background:rgba(249,115,22,0.12);border-radius:9px;"
+        "padding:3px 10px;font-size:10px;font-weight:900;}"
+        "QFrame#ResumeCard QLabel#ResumeTitle{color:#12213D;font-size:19px;font-weight:900;}"
+        "QFrame#ResumeCard[empty=\"true\"] QLabel#ResumeTitle{font-size:16px;}"
         "QFrame#ResumeCard QLabel#ResumeText{color:#66758F;font-size:12px;}"
-        "QFrame#ResumeCard QLabel#ResumeStore{color:#E6EBFF;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);"
-        "border-radius:10px;padding:3px 10px;font-size:11px;font-weight:700;}"
-        "QFrame#ResumeCard QLabel#ResumeValue{color:#FFFFFF;font-size:17px;font-weight:900;}"
-        "QFrame#ResumeCard QLabel#ResumeLabel{color:#9DB0FF;font-size:10px;font-weight:800;letter-spacing:0.8px;}"
-        "QFrame#ResumeDivider{background:rgba(255,255,255,0.14);border:none;}"
-        "QPushButton#ResumeOpen{background:#FFFFFF;color:#172C66;border-radius:14px;padding:13px 22px;"
-        "font-size:12px;font-weight:900;letter-spacing:0.6px;}"
-        "QPushButton#ResumeOpen:hover{background:#E9EEFF;}"
-        "QPushButton#ResumeOpen:pressed{background:#D7E0FF;}"
-        "QPushButton#ResumeOpen:disabled{background:rgba(255,255,255,0.55);color:#172C66;}"
+        "QFrame#ResumeCard QLabel#ResumeStore{color:#40516E;background:#F4F7FC;border:1px solid #DCE6F3;"
+        "border-radius:11px;padding:4px 11px;font-size:11px;font-weight:800;}"
+        "QPushButton#ResumeOpen{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #F97316,stop:1 #EC4899);"
+        "color:#FFFFFF;border:none;border-radius:14px;padding:14px 24px;font-size:12px;font-weight:900;"
+        "letter-spacing:0.6px;}"
+        "QPushButton#ResumeOpen:hover{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #EA580C,stop:1 #DB2777);}"
+        "QPushButton#ResumeOpen:pressed{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #C2410C,stop:1 #BE185D);}"
+        "QPushButton#ResumeOpen:disabled{background:#FBC9A6;color:#FFFFFF;}"
     )
 
     def __init__(self, parent=None):
@@ -305,15 +312,15 @@ class LastAnalysisCard(QFrame):
         from PySide6.QtWidgets import QPushButton
         self.setObjectName("ResumeCard")
         self.setStyleSheet(self._STYLE)
-        self.setMinimumHeight(118)
+        self.setMinimumHeight(132)
         self._meta = None
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(24, 18, 24, 18)
-        layout.setSpacing(18)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(20)
         self.icon = QLabel("🕘")
         self.icon.setObjectName("ResumeIcon")
-        self.icon.setFixedSize(56, 56)
+        self.icon.setFixedSize(60, 60)
         self.icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.icon, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -321,7 +328,7 @@ class LastAnalysisCard(QFrame):
         info.setSpacing(6)
         head = QHBoxLayout()
         head.setSpacing(10)
-        self.eyebrow = QLabel("CONTINUE DE ONDE PAROU")
+        self.eyebrow = QLabel("⏪  CONTINUE DE ONDE PAROU")
         self.eyebrow.setObjectName("ResumeEyebrow")
         head.addWidget(self.eyebrow)
         self.when = QLabel()
@@ -345,38 +352,45 @@ class LastAnalysisCard(QFrame):
         self.stats.setObjectName("ResumeStats")
         stats = QHBoxLayout(self.stats)
         stats.setContentsMargins(0, 0, 0, 0)
-        stats.setSpacing(18)
+        stats.setSpacing(10)
         self.values = {}
-        for index, (key, label) in enumerate(
-            (("produtos", "PRODUTOS"), ("faturamento", "FATURAMENTO"), ("unidades_vendidas", "VENDIDAS"))
-        ):
-            if index:
-                divider = QFrame()
-                divider.setObjectName("ResumeDivider")
-                divider.setFixedSize(1, 36)
-                stats.addWidget(divider)
-            box = QVBoxLayout()
-            box.setSpacing(2)
+        for key, emoji, caption, color in self.STATS:
+            tile = QFrame()
+            tile.setObjectName("ResumeStat")
+            tile.setMinimumWidth(128)
+            tile.setStyleSheet(
+                f"QFrame#ResumeStat{{background:{_rgba(color, 0.09)};border:1px solid {_rgba(color, 0.22)};"
+                "border-radius:16px;}"
+                "QFrame#ResumeStat QLabel{background:transparent;border:none;}"
+                f"QLabel#StatValue{{color:{color};font-size:18px;font-weight:900;}}"
+                "QLabel#StatCaption{color:#66758F;font-size:10px;font-weight:900;letter-spacing:0.8px;}"
+            )
+            box = QVBoxLayout(tile)
+            box.setContentsMargins(14, 10, 16, 10)
+            box.setSpacing(1)
+            label = QLabel(f"{emoji}  {caption}")
+            label.setObjectName("StatCaption")
+            box.addWidget(label)
             value = QLabel()
-            value.setObjectName("ResumeValue")
+            value.setObjectName("StatValue")
             box.addWidget(value)
-            caption = QLabel(label)
-            caption.setObjectName("ResumeLabel")
-            box.addWidget(caption)
-            stats.addLayout(box)
+            stats.addWidget(tile)
             self.values[key] = value
         layout.addWidget(self.stats, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self.button = QPushButton("ABRIR ANÁLISE  →")
+        self.button = QPushButton("🚀  ABRIR ANÁLISE  →")
         self.button.setObjectName("ResumeOpen")
         self.button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.button.clicked.connect(self._activate)
         layout.addWidget(self.button, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self.shadow = QGraphicsDropShadowEffect(self)
-        self.shadow.setBlurRadius(34)
-        self.shadow.setOffset(0, 10)
-        self.setGraphicsEffect(self.shadow)
+        # Mesma sombra dos cards de funcionalidade, para o painel fazer parte do conjunto.
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(30)
+        shadow.setOffset(0, 8)
+        from PySide6.QtGui import QColor
+        shadow.setColor(QColor(25, 43, 78, 26))
+        self.setGraphicsEffect(shadow)
         self.set_meta(None)
 
     def has_analysis(self):
@@ -386,7 +400,6 @@ class LastAnalysisCard(QFrame):
         return self._meta
 
     def set_meta(self, meta):
-        from PySide6.QtGui import QColor
         from core.last_analysis import describe_period, describe_saved_at
         self._meta = meta
         empty = meta is None
@@ -395,7 +408,6 @@ class LastAnalysisCard(QFrame):
         self.style().polish(self)
         self.setCursor(Qt.CursorShape.ArrowCursor if empty else Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus if empty else Qt.FocusPolicy.StrongFocus)
-        self.shadow.setColor(QColor(25, 43, 78, 14) if empty else QColor(23, 44, 102, 80))
         while self.stores.count():
             item = self.stores.takeAt(0)
             if item.widget():
@@ -404,22 +416,20 @@ class LastAnalysisCard(QFrame):
         self.stats.setVisible(not empty)
         self.button.setVisible(not empty)
         self.text.setVisible(empty)
-        self.eyebrow.setVisible(not empty)
         if empty:
             self.icon.setText("🗂️")
             self.title.setText("Nenhuma análise salva ainda")
             self.text.setText(
-                "Ao gerar uma análise, ela fica guardada aqui para reabrir o dashboard num clique, "
+                "✨ Ao gerar uma análise, ela fica guardada aqui para reabrir o dashboard num clique, "
                 "sem selecionar as planilhas de novo."
             )
             self.setToolTip("")
             return
         self.icon.setText("🕘")
-        self.when.setText(f"Gerada {describe_saved_at(meta)}")
-        period = describe_period(meta)
-        self.title.setText(f"Análise de {period}")
+        self.when.setText(f"🕒 GERADA {describe_saved_at(meta).upper()}")
+        self.title.setText(f"Análise de {describe_period(meta)}")
         for store in meta.get("lojas", []):
-            chip = QLabel(f"🏬 {store}")
+            chip = QLabel(f"🏬  {store}")
             chip.setObjectName("ResumeStore")
             self.stores.addWidget(chip)
         self.stores.addStretch()
@@ -431,7 +441,7 @@ class LastAnalysisCard(QFrame):
 
     def set_loading(self, loading):
         self.button.setEnabled(not loading)
-        self.button.setText("ABRINDO…" if loading else "ABRIR ANÁLISE  →")
+        self.button.setText("⏳  ABRINDO…" if loading else "🚀  ABRIR ANÁLISE  →")
 
     def _activate(self):
         if self._meta is not None and self.button.isEnabled():
