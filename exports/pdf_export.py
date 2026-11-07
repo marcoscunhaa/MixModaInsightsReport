@@ -8,7 +8,7 @@ from reportlab.lib.enums import TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from core.analyzer import critical as ranked_critical, idle_stock, top_sold
+from core.analyzer import critical as ranked_critical, idle_stock, merge_stores, top_sold
 
 from reportlab.platypus import (
     Flowable,
@@ -521,7 +521,8 @@ def export_dashboard_pdf(path, df, period, loja, audit):
                   _store_table(df, styles, content_width), Spacer(1, 16)])
     story.extend([PageBreak(), _section_heading("Produtos líderes", styles,
                                   "Top 20 ordenados por unidades vendidas e faturamento.")])
-    top = top_sold(df, 20) if not df.empty else df
+    merged = merge_stores(df)  # um produto por código, lojas somadas (lojas listadas na coluna Loja)
+    top = top_sold(merged, 20) if not merged.empty else merged
     headers = ["#", "Produto", "Loja", "Grupo", "Unidades", "Faturamento", "Estoque"]
     data = [[_paragraph(h, styles["table_head"]) for h in headers]]
     for rank, (_, row) in enumerate(top.iterrows(), 1):
@@ -541,13 +542,13 @@ def export_dashboard_pdf(path, df, period, loja, audit):
     story.extend([PageBreak(), _section_heading("Prioridades de estoque", styles,
                                                 "Itens em ruptura e com nível crítico, priorizados por venda."),
                   Spacer(1, 2)])
-    critical, shown = _critical_table(df, styles, content_width)
+    critical, shown = _critical_table(merged, styles, content_width)
     story.extend([critical, Spacer(1, 13)])
     if shown == 0:
         story.append(_paragraph("Nenhum produto está classificado como crítico, baixo ou sem estoque.", styles["body"]))
 
     # Page 4 - capital parado: sem venda no período e muito estoque.
-    idle_all = df[(df.quantidade_estoque > 0) & (df.quantidade_vendida <= 0)]
+    idle_all = merged[(merged.quantidade_estoque > 0) & (merged.quantidade_vendida <= 0)]
     story.extend([PageBreak(), _section_heading("Estoque parado", styles,
                                                 "Top 20 produtos sem venda no período, pela maior quantidade em estoque."),
                   _paragraph(
@@ -555,7 +556,7 @@ def export_dashboard_pdf(path, df, period, loja, audit):
                       f"{br_number(idle_all.quantidade_estoque.sum(), 0)} unidades e "
                       f"{brl(idle_all.valor_estoque.sum())} parados em estoque (custo).", styles["muted"]
                   ), Spacer(1, 5)])
-    idle_table, idle_shown = _idle_stock_table(df, styles, content_width)
+    idle_table, idle_shown = _idle_stock_table(merged, styles, content_width)
     story.append(idle_table if idle_shown else _paragraph(
         "Nenhum produto com estoque ficou sem venda no período.", styles["body"]))
     unmatched_items = (audit or {}).get("vendas_sem_correspondencia_itens", [])

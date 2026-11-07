@@ -165,3 +165,131 @@ def match_options(options, query):
         ):
             found.append(option)
     return found
+
+
+# ---------- um produto por código (lojas juntas) ----------
+
+# Status mais grave primeiro: entre lojas, vale o pior para o produto.
+STATUS_SEVERITY = ["NEGATIVO", "SEM ESTOQUE", "CRÍTICO", "BAIXO", "SEM VENDA", "EXCESSO", "NORMAL"]
+_SEVERITY = {status: i for i, status in enumerate(STATUS_SEVERITY)}
+
+
+def _code_keys(df):
+    from utils.normalization import normalize_barcode
+    return df.codigo_barras.map(normalize_barcode)
+
+
+def merge_stores(df):
+    """Um registro por código de barras, somando as lojas (vetorizado).
+
+    Produto que está numa loja só fica exatamente como veio. Nos demais,
+    quantidades, faturamento e valor em estoque são somados, preços viram médias,
+    giro/cobertura/margem são recalculados, o status é o mais grave e `loja`
+    lista as lojas na ordem oficial ("Sitio São João, Palmeiras, ...").
+    `n_lojas` diz em quantas lojas o produto está.
+    """
+    if df.empty:
+        out = df.copy()
+        out["n_lojas"] = pd.Series(dtype=int)
+        return out
+    work = df.copy()
+    work["_key"] = _code_keys(work)
+    work["_ordem"] = work.loja.map(store_sort_key)
+    work = work.sort_values(["_key", "_ordem"], kind="stable")
+    sizes = work.groupby("_key")["_key"].transform("size")
+    single = work[sizes == 1].copy()
+    single["n_lojas"] = 1
+    multi = work[sizes > 1]
+    parts = [single]
+    if not multi.empty:
+        g = multi.groupby("_key", sort=False)
+        first = g.first()
+        out = first.copy()
+        for col in ("quantidade_estoque", "quantidade_vendida", "valor_vendido", "valor_estoque"):
+            if col in multi:
+                out[col] = g[col].sum()
+        out["loja"] = g["loja"].agg(lambda s: ", ".join(dict.fromkeys(s.astype(str))))
+        out["n_lojas"] = g["loja"].nunique()
+        if "preco_compra" in multi:
+            out["preco_compra"] = multi.preco_compra.where(multi.preco_compra > 0).groupby(multi["_key"]).mean().fillna(0)
+        if "preco_venda" in multi:
+            avg_price = multi.preco_venda.where(multi.preco_venda > 0).groupby(multi["_key"]).mean().fillna(0)
+            sold = out.quantidade_vendida > 0
+            revenue = out.get("valor_vendido", pd.Series(0, index=out.index))
+            out["preco_venda"] = (revenue / out.quantidade_vendida.where(sold, 1)).where(sold & (revenue > 0), avg_price)
+        if "preco_compra" in out and "preco_venda" in out:
+            out["margem_unitaria"] = out.preco_venda - out.preco_compra
+            out["margem_percentual"] = (out.margem_unitaria / out.preco_venda.where(out.preco_venda != 0) * 100).fillna(0)
+        total = out.quantidade_vendida + out.quantidade_estoque
+        out["giro"] = (out.quantidade_vendida / total.where(total > 0) * 100).fillna(0)
+        out["cobertura"] = (out.quantidade_estoque / out.quantidade_vendida.where(out.quantidade_vendida > 0)).fillna(float("inf"))
+        out["produto_sem_venda"] = out.quantidade_vendida <= 0
+        for col in ("ruptura", "risco_ruptura"):
+            if col in multi:
+                out[col] = g[col].any()
+        if "status_estoque" in multi:
+            worst = multi.status_estoque.map(lambda s: _SEVERITY.get(s, 99)).groupby(multi["_key"]).min()
+            out["status_estoque"] = worst.map(lambda i: STATUS_SEVERITY[i] if i < len(STATUS_SEVERITY) else "—")
+        if "precos_venda" in out:
+            out["precos_venda"] = [[] for _ in range(len(out))]  # vários preços por loja não somam
+        if "preco_venda_atual" in out:
+            out["preco_venda_atual"] = float("nan")
+        parts.append(out.reset_index())
+    merged = pd.concat(parts, ignore_index=True)
+    merged = merged.sort_values("codigo_barras", key=lambda col: col.map(barcode_sort_key), kind="stable")
+    return merged.drop(columns=["_key", "_ordem"], errors="ignore").reset_index(drop=True)
+
+
+def _per_store(rows):
+    def num(v):
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return 0.0
+        return v if v == v else 0.0
+    return [
+        {
+            "loja": str(r.get("loja", "")),
+            "descricao": str(r.get("descricao", "")),
+            "quantidade_estoque": num(r.get("quantidade_estoque")),
+            "quantidade_vendida": num(r.get("quantidade_vendida")),
+            "valor_vendido": num(r.get("valor_vendido")),
+            "preco_compra": num(r.get("preco_compra")),
+            "preco_venda": num(r.get("preco_venda")),
+            "status_estoque": str(r.get("status_estoque", "")),
+        }
+        for r in rows
+    ]
+
+
+def product_detail(df, codigo_barras):
+    """Registro do card de um produto: lojas juntas + `por_loja` (ordem oficial das lojas)."""
+    from utils.normalization import normalize_barcode
+    rows = df[_code_keys(df) == normalize_barcode(codigo_barras)] if not df.empty else df
+    if rows.empty:
+        return None
+    rows = rows.iloc[sorted(range(len(rows)), key=lambda i: store_sort_key(rows.loja.iloc[i]))]
+    record = merge_stores(rows).iloc[0].to_dict()
+    record["lojas"] = order_stores(dict.fromkeys(rows.loja.astype(str)))
+    record["por_loja"] = _per_store(rows.to_dict("records"))
+    return record
+
+
+def merge_by_barcode(df):
+    """Lista de registros (um por código), cada um com `lojas` e `por_loja`."""
+    if df.empty:
+        return []
+    keys = _code_keys(df)
+    records = []
+    for _key, part in df.groupby(keys, sort=False):
+        part = part.iloc[sorted(range(len(part)), key=lambda i: store_sort_key(part.loja.iloc[i]))]
+        record = merge_stores(part).iloc[0].to_dict()
+        record["lojas"] = order_stores(dict.fromkeys(part.loja.astype(str)))
+        record["por_loja"] = _per_store(part.to_dict("records"))
+        records.append(record)
+    return sorted(records, key=lambda r: barcode_sort_key(r["codigo_barras"]))
+
+
+def product_count(df):
+    """Produtos distintos: o mesmo código em várias lojas conta uma vez."""
+    return int(_code_keys(df).nunique()) if not df.empty else 0

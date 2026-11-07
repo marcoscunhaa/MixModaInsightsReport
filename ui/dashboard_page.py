@@ -10,7 +10,7 @@ from core.kpi_view import STATUS_OPTIONS, kpi_cards, status_counts, store_list_v
 from ui.product_modal import ProductModal
 from ui.product_picker import ProductPickerDialog
 from charts.dashboard_charts import make_chart
-from core.analyzer import filter_analysis,kpis,single_product_labels,pivot_by_store,top_sold,stagnant,critical,rupture,sort_products
+from core.analyzer import filter_analysis,kpis,single_product_labels,pivot_by_store,top_sold,stagnant,critical,rupture,sort_products,merge_stores,merge_by_barcode,product_count,product_detail
 from core.stores import order_stores
 from ui.copyable import is_barcode_column, make_barcode_copyable
 from core.insights import generate_insights
@@ -18,7 +18,7 @@ from utils.normalization import normalize_barcode, normalize_text
 from exports.pdf_export import export_dashboard_pdf
 from ui.stock_alerts import StockAlertsDialog
 from ui.window_chrome import get_save_file, install_mac_window_chrome, show_message
-from core.unclassified import is_unclassified, merge_by_barcode, product_count, unclassified_rows
+from core.unclassified import is_unclassified, unclassified_rows
 from ui.unclassified_dialog import UnclassifiedDialog, export_unclassified_excel
 
 SUBCLASS_EMOJIS = ["👗","👚","👕","👖","👟","🥿","👜","💄","💍","🧸","🏠","🛏️","🍳","🧴","🧢","🩱","🩴","🎀","🧦","🧺"]
@@ -55,7 +55,7 @@ class HierarchyExplorer(QDialog):
 
     @staticmethod
     def _counts(d,key):
-        """Produtos por `key`; os sem classificação contam uma vez por código (não uma por loja)."""
+        """Produtos por `key`: o mesmo código em várias lojas conta uma vez."""
         return {k:product_count(part) for k,part in d.groupby(key,dropna=False)}
 
     def _add_card(self,title,subtitle,value,key,kind,accent,emoji):
@@ -84,15 +84,10 @@ class HierarchyExplorer(QDialog):
         self.path=[("group",g),("sub",sub)]; self.crumb.setText(f"Todos os grupos  ›  {g}  ›  {sub}"); self.title.setText(f"Produtos • {sub}"); self.list.clear()
         d=self.df[(self.df.grupo==g)&(self.df.subclasse==sub)].copy()
         self._show_excel(g)
-        if is_unclassified(g) or is_unclassified(sub):
-            # Sem classificação: um card por código, com as lojas onde ele está.
-            for r in merge_by_barcode(d):
-                n=len(r["lojas"]); where=r["loja"] if n<=2 else f"{n} lojas"
-                self._add_card(str(r["descricao"]),f"{r['codigo_barras']}  •  {where}",f"{br_number(r['quantidade_estoque'],0)} em estoque  •  {br_number(r['quantidade_vendida'],0)} vendas",r,"product",_stable_color(str(r["descricao"])),"")
-            return
-        d=sort_products(d)  # código de barras do menor para o maior (P → GG) e lojas na ordem oficial
-        for i,(_,r) in enumerate(d.iterrows()):
-            accent=_stable_color(str(r.descricao)); self._add_card(str(r.descricao),f"{r.codigo_barras}  •  {r.loja}",f"{br_number(r.quantidade_vendida,0)} vendas  •  {brl(r.valor_vendido)}",r.to_dict(),"product",accent,"")
+        # Um card por código; o card do produto mostra a situação em cada loja.
+        for r in merge_by_barcode(d):
+            n=len(r["lojas"]); where=r["loja"] if n<=2 else f"{n} lojas"
+            self._add_card(str(r["descricao"]),f"{r['codigo_barras']}  •  {where}",f"{br_number(r['quantidade_vendida'],0)} vendas  •  {brl(r['valor_vendido'])}",r,"product",_stable_color(str(r["descricao"])),"")
 
     def open_item(self,item):
         kind,key=item.data(Qt.UserRole)
@@ -252,14 +247,15 @@ class DashboardPage(QWidget):
             if spec["clickable"]: c.clicked.connect(lambda name=spec["key"]:self.detail(name,d))
             grid.addWidget(c,i//5,i%5)
         self.body.addLayout(grid)
-        row1=QHBoxLayout(); row1.setSpacing(12); row1.addWidget(self.panel("TOP 3 MAIS VENDIDOS NA ANÁLISE",self.top3(d)),1); row1.addWidget(self.panel("RANKING POR LOJA",self.store_ranking(d)),1); self.body.addLayout(row1)
+        m=merge_stores(d)  # um registro por código (lojas somadas) para rankings e tabelas de produto
+        row1=QHBoxLayout(); row1.setSpacing(12); row1.addWidget(self.panel("TOP 3 MAIS VENDIDOS NA ANÁLISE",self.top3(m)),1); row1.addWidget(self.panel("RANKING POR LOJA",self.store_ranking(d)),1); self.body.addLayout(row1)
         charts=QGridLayout(); charts.setSpacing(12)
         for i,k in enumerate(["grupo_valor_3d","grupo_pizza","vendas_3d","rotacao","status","estoque_x_vendas"]): charts.addWidget(self.chart_panel(make_chart(k,d)),i//2,i%2)
         self.body.addLayout(charts)
         self.body.addWidget(self.section_label("EXPLORADOR DINÂMICO — GRUPO › SUBCLASSE › PRODUTO")); self.pivot_table(d)
-        self.body.addWidget(self.section_label("PRODUTOS MAIS VENDIDOS")); self.table_section(top_sold(d,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_vendida","valor_vendido","giro"],150,"#2F5BEA")
-        self.body.addWidget(self.section_label("ESTOQUE PARADO / CAPITAL PRESO")); self.table_section(stagnant(d,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_estoque","valor_estoque"],150,"#FF9F43")
-        self.body.addWidget(self.section_label("PRODUTOS CRÍTICOS")); self.table_section(critical(d,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_estoque","quantidade_vendida","status_estoque"],160,"#E94B5F",critical_mode=True)
+        self.body.addWidget(self.section_label("PRODUTOS MAIS VENDIDOS")); self.table_section(top_sold(m,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_vendida","valor_vendido","giro"],150,"#2F5BEA")
+        self.body.addWidget(self.section_label("ESTOQUE PARADO / CAPITAL PRESO")); self.table_section(stagnant(m,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_estoque","valor_estoque"],150,"#FF9F43")
+        self.body.addWidget(self.section_label("PRODUTOS CRÍTICOS")); self.table_section(critical(m,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_estoque","quantidade_vendida","status_estoque"],160,"#E94B5F",critical_mode=True)
         ins=QFrame(); ins.setObjectName("Panel"); il=QVBoxLayout(ins); il.setContentsMargins(16,14,16,14); il.addWidget(self.section_label("INSIGHTS INTELIGENTES"))
         insight_colors=[("#5B6CFF","💡"),("#00A88F","📈"),("#FF9F43","⚠️"),("#E85D8A","🎯")]  # azul, verde, laranja, rosa (mesma cor do título de cada insight)
         for idx,x in enumerate(generate_insights(d)):
@@ -297,7 +293,7 @@ class DashboardPage(QWidget):
     def open_group(self,rows,r):
         if 0<=r<len(rows): HierarchyExplorer(self.current_df(),str(rows[r][1]["grupo"]),self,self.catalog).exec()
     def table_section(self,d,cols,height=140,accent="#2F5BEA",critical_mode=False):
-        t=QTableWidget(len(d),len(cols)); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setMinimumHeight(max(height, 44 + len(d)*38)); t.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); t.setAlternatingRowColors(True); t.setSortingEnabled(False); t.setHorizontalHeaderLabels([c.replace("_"," ").title() for c in cols]); t.horizontalHeader().setStretchLastSection(True); t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.verticalHeader().setVisible(False); t.setSelectionBehavior(QTableWidget.SelectRows); rows=list(d.iterrows())
+        t=QTableWidget(len(d),len(cols)); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setMinimumHeight(max(height, 44 + len(d)*38)); t.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); t.setAlternatingRowColors(True); t.setSortingEnabled(False); t.setHorizontalHeaderLabels(["Lojas" if c=="loja" else c.replace("_"," ").title() for c in cols]); t.horizontalHeader().setStretchLastSection(True); t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.verticalHeader().setVisible(False); t.setSelectionBehavior(QTableWidget.SelectRows); rows=list(d.iterrows())
         t.setStyleSheet(f"QTableWidget{{border:1px solid {accent}55;border-radius:14px;gridline-color:#E9EEF5;alternate-background-color:#FAFCFF;}} QHeaderView::section{{background:{accent};color:white;border:none;padding:10px;font-weight:900;}}")
         for i,(_,r) in enumerate(rows):
             for j,c in enumerate(cols):
@@ -321,6 +317,9 @@ class DashboardPage(QWidget):
     def open_row_dict(self,row,parent=None):
         # A dona do card é a janela onde o clique aconteceu; se for o dashboard
         # com uma lista aberta por cima, o card abriria atrás da lista.
+        if row.get("n_lojas",1)>1 and not row.get("por_loja"):
+            # Produto em várias lojas: card com os totais e a situação em cada loja.
+            row=product_detail(self.current_df(),row.get("codigo_barras")) or row
         ProductModal(row,parent or self).exec()
     def detail(self,name,d):
         # Toda lista de KPI abre no formato produto × loja.
