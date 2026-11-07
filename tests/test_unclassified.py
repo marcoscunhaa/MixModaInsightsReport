@@ -68,16 +68,18 @@ def test_excel_has_one_tab_per_store_and_round_trips(tmp_path):
     assert [sap.cell(r, 1).value for r in (5, 6)] == ["789001", "789002"]
     assert sap.cell(5, 4).value == "Palmeiras, pedras"
     # Classifica o urso só na aba Sapiranga e a saia (já sugerida) fica como veio.
-    assert "Confiança" not in [c.value for c in sap[4]]
-    sap.cell(6, 11, "brinquedo"); sap.cell(6, 12, "pelucia")
+    headers = [c.value for c in sap[4]]
+    assert headers[-2:] == ["GRUPO", "SUBCLASSE"]
+    assert not any("sugerid" in str(h).lower() or "confian" in str(h).lower() for h in headers)
+    assert all(sap.cell(r, c).value in (None, "") for r in (5, 6) for c in (9, 10))  # em branco para o cliente
+    sap.cell(6, 9, "brinquedo"); sap.cell(6, 10, "pelucia")
     wb.save(path)
 
     items, warnings = read_classification_xlsx(path)
     assert warnings == []
     by_code = {i["codigo_barras"]: i for i in items}
     assert by_code["789002"]["grupo"] == "BRINQUEDO"
-    if "789001" in by_code:  # sugestão com confiança alta já vem preenchida
-        assert len(by_code["789001"]["lojas"]) == 3
+    assert "789001" not in by_code  # não preenchido: fica de fora
 
     catalog = copy.deepcopy(CATALOG)
     summary = apply_classifications(catalog, items)
@@ -91,8 +93,8 @@ def test_conflicting_classification_between_tabs_is_reported(tmp_path):
     path = tmp_path / "x.xlsx"
     export_unclassified_xlsx(path, frame(), CATALOG)
     wb = load_workbook(path)
-    wb["Sapiranga"].cell(5, 11, "VESTUARIO FEMININO"); wb["Sapiranga"].cell(5, 12, "SAIA")
-    wb["Palmeiras"].cell(5, 11, "UTILIDADES"); wb["Palmeiras"].cell(5, 12, "COLCHA")
+    wb["Sapiranga"].cell(5, 9, "VESTUARIO FEMININO"); wb["Sapiranga"].cell(5, 10, "SAIA")
+    wb["Palmeiras"].cell(5, 9, "UTILIDADES"); wb["Palmeiras"].cell(5, 10, "COLCHA")
     wb.save(path)
     items, warnings = read_classification_xlsx(path)
     assert "789001" not in {i["codigo_barras"] for i in items}

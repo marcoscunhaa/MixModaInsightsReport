@@ -1,7 +1,7 @@
 """Excel de produtos sem classificação (uma aba por loja) e leitura do Excel preenchido.
 
 Cada aba traz o que é preciso para cadastrar: código, descrição, estoque, preços,
-uma sugestão de grupo/subclasse e as colunas GRUPO e SUBCLASSE a preencher (com
+as colunas GRUPO e SUBCLASSE a preencher pelo cliente (com
 lista suspensa). O mesmo arquivo, preenchido, volta para o app em
 Explorar estoque › Importar classificações.
 """
@@ -14,7 +14,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from core.stores import order_stores, store_sort_key
-from core.unclassified import AUTO_FILL_SCORE, ClassificationSuggester, is_unclassified, merge_by_barcode, unclassified_rows
+from core.unclassified import is_unclassified, merge_by_barcode, unclassified_rows
 from exports.stock_alerts_export import _sheet_name
 from utils.normalization import barcode_sort_key, normalize_barcode, normalize_text, to_number
 
@@ -34,10 +34,10 @@ LISTS_SHEET = "Listas"
 HEADER_ROW = 4
 HEADERS = [
     "Código de barras", "Descrição", "Loja", "Também em", "Estoque", "Vendas no período",
-    "Preço de compra", "Preço de venda", "Grupo sugerido", "Subclasse sugerida",
+    "Preço de compra", "Preço de venda",
     "GRUPO", "SUBCLASSE",
 ]
-WIDTHS = [20, 42, 17, 26, 10, 11, 13, 13, 24, 24, 26, 26]
+WIDTHS = [20, 42, 17, 26, 10, 11, 13, 13, 28, 28]
 COL = {name: i + 1 for i, name in enumerate(HEADERS)}
 
 
@@ -73,10 +73,9 @@ def _guide_sheet(workbook, total, stores):
         (f"{total} produto(s) sem classificação • lojas: {', '.join(stores)}", Font(name="Aptos", size=11, bold=True, color=INK), None),
         ("", None, None),
         ("1. Em cada aba de loja, preencha as colunas laranja GRUPO e SUBCLASSE (há lista suspensa; a subclasse acompanha o grupo).", None, None),
-        ("2. Quando a sugestão é muito parecida com um produto já cadastrado, GRUPO e SUBCLASSE já vêm preenchidos: só confira.", None, None),
-        ("3. Um produto em várias lojas aparece em cada aba, mas é um produto só: preencher em uma aba já vale para todas.", None, None),
-        ("4. Salve o arquivo e, no app, use Importar cadastro na tela inicial (ou Explorar estoque › IMPORTAR CLASSIFICAÇÕES).", None, None),
-        ("5. Linhas com GRUPO ou SUBCLASSE vazios são ignoradas. Pode importar aos poucos.", None, None),
+        ("2. Um produto em várias lojas aparece em cada aba, mas é um produto só: preencher em uma aba já vale para todas.", None, None),
+        ("3. Salve o arquivo e, no app, use Importar cadastro na tela inicial (ou Explorar estoque › IMPORTAR CLASSIFICAÇÕES).", None, None),
+        ("4. Linhas com GRUPO ou SUBCLASSE vazios são ignoradas. Pode importar aos poucos.", None, None),
     ]
     for i, (text, font, fill) in enumerate(lines, 1):
         cell = sheet.cell(i, 1, text)
@@ -91,9 +90,7 @@ def export_unclassified_xlsx(path, df, catalog=None):
     """Escreve o Excel e retorna quantos produtos únicos foram exportados."""
     rows = unclassified_rows(df)
     products = merge_by_barcode(rows)
-    suggester = ClassificationSuggester(catalog)
     tree = _tree(catalog)
-    suggestions = {p["codigo_barras"]: suggester.suggest(p["descricao"]) for p in products}
 
     workbook = Workbook()
     workbook.remove(workbook.active)
@@ -136,15 +133,12 @@ def export_unclassified_xlsx(path, df, catalog=None):
         sheet.row_dimensions[HEADER_ROW].height = 30
 
         for r, (product, entry) in enumerate(lines, HEADER_ROW + 1):
-            hint = suggestions.get(product["codigo_barras"])
-            auto = hint is not None and hint[2] >= AUTO_FILL_SCORE
             others = ", ".join(s for s in product["lojas"] if s != store)
             values = [
                 str(product["codigo_barras"]), entry["descricao"], store, others or "—",
                 entry["quantidade_estoque"], entry["quantidade_vendida"],
                 entry["preco_compra"], entry["preco_venda"],
-                hint[0] if hint else "", hint[1] if hint else "",
-                hint[0] if auto else "", hint[1] if auto else "",
+                "", "",  # GRUPO e SUBCLASSE: o cliente preenche
             ]
             for c, value in enumerate(values, 1):
                 cell = sheet.cell(r, c, value)
