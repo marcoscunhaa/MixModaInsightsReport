@@ -174,6 +174,9 @@ class MainWindow(QMainWindow):
         """O catálogo foi editado: a classificação usada nas próximas análises é refeita."""
         self.classification = classification_payload(self.catalog)
         self.refresh_footer()
+        # O dashboard aberto (inclusive a última análise) passa a mostrar a classificação nova.
+        if self.dashboard is not None:
+            self.dashboard.apply_catalog(self.catalog)
 
     def open_stock_alerts(self):
         try:
@@ -208,6 +211,9 @@ class MainWindow(QMainWindow):
     def _load_last_analysis(self):
         try:
             frame, period, audit, meta = self.last_analysis.load()
+            # A análise salva guarda a classificação da época; vale a do catálogo atual.
+            from core.matcher import reclassify
+            frame, _changed = reclassify(frame, self.catalog)
             self.show_dashboard(frame, period, audit, meta["id"])
         except LastAnalysisError as error:
             QApplication.restoreOverrideCursor()
@@ -235,6 +241,7 @@ class MainWindow(QMainWindow):
             audit,
             on_home=self.open_home,
             alert_store=self.alert_store,
+            catalog=self.catalog,
         )
         # Descarta o dashboard anterior: cada um carrega vários gráficos e,
         # sem isso, a memória cresce a cada análise gerada.

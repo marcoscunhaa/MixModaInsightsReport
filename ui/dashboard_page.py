@@ -18,6 +18,8 @@ from utils.normalization import normalize_barcode, normalize_text
 from exports.pdf_export import export_dashboard_pdf
 from ui.stock_alerts import StockAlertsDialog
 from ui.window_chrome import get_save_file, install_mac_window_chrome, show_message
+from core.unclassified import is_unclassified, merge_by_barcode, product_count, unclassified_rows
+from ui.unclassified_dialog import UnclassifiedDialog, export_unclassified_excel
 
 SUBCLASS_EMOJIS = ["👗","👚","👕","👖","👟","🥿","👜","💄","💍","🧸","🏠","🛏️","🍳","🧴","🧢","🩱","🩴","🎀","🧦","🧺"]
 
@@ -35,15 +37,26 @@ def _emoji(text, idx=0):
 
 
 class HierarchyExplorer(QDialog):
-    def __init__(self, df, start_group=None, parent=None):
-        super().__init__(parent); self.df=df.copy(); self.path=[]
+    def __init__(self, df, start_group=None, parent=None, catalog=None):
+        super().__init__(parent); self.df=df.copy(); self.path=[]; self.catalog=catalog
         self.setWindowTitle("Explorador de Produtos • Mix Moda Insights"); self.resize(1180,720)
         root=QVBoxLayout(self); root.setContentsMargins(12,8,12,12); root.setSpacing(12); install_mac_window_chrome(self,root)
         head=QHBoxLayout(); titlebox=QVBoxLayout(); self.title=QLabel("Explorador de catálogo"); self.title.setStyleSheet("font-size:24px;font-weight:900;color:#12213D;"); titlebox.addWidget(self.title)
         self.crumb=QLabel(""); self.crumb.setStyleSheet("color:#64728A;font-size:12px;font-weight:800;"); titlebox.addWidget(self.crumb); head.addLayout(titlebox); head.addStretch()
+        self.excel=QPushButton("⬇  EXCEL PARA CADASTRO"); self.excel.setObjectName("AddStore"); self.excel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.excel.setToolTip("Baixa os produtos sem classificação, uma aba por loja, com sugestão de grupo e subclasse."); self.excel.clicked.connect(lambda: export_unclassified_excel(self,self.df,self.catalog)); head.addWidget(self.excel)
         self.back=QPushButton("← Voltar"); self.back.setObjectName("Ghost"); self.back.clicked.connect(self.go_back); head.addWidget(self.back); root.addLayout(head)
         self.list=QListWidget(); self.list.setViewMode(QListWidget.IconMode); self.list.setResizeMode(QListWidget.Adjust); self.list.setSpacing(10); self.list.setGridSize(QSize(350,116)); self.list.setUniformItemSizes(False); self.list.itemClicked.connect(self.open_item); root.addWidget(self.list,1)
         self.render_group(start_group) if start_group else self.render_groups()
+
+    def _show_excel(self,group=None):
+        # Só faz sentido onde há produto sem classificação.
+        self.excel.setVisible(group is not None and is_unclassified(group) and not unclassified_rows(self.df).empty)
+
+    @staticmethod
+    def _counts(d,key):
+        """Produtos por `key`; os sem classificação contam uma vez por código (não uma por loja)."""
+        return {k:product_count(part) for k,part in d.groupby(key,dropna=False)}
 
     def _add_card(self,title,subtitle,value,key,kind,accent,emoji):
         item=QListWidgetItem(); item.setData(Qt.UserRole,(kind,key)); item.setSizeHint(QSize(340,104)); self.list.addItem(item)
@@ -52,6 +65,7 @@ class HierarchyExplorer(QDialog):
     def render_groups(self):
         self.path=[]; self.crumb.setText("Todos os grupos"); self.title.setText("Explorador • Grupos"); self.list.clear(); self.back.setEnabled(False)
         g=self.df.groupby("grupo",dropna=False).agg(produtos=("codigo_barras","count"),vendas=("quantidade_vendida","sum"),estoque=("quantidade_estoque","sum")).reset_index()
+        counts=self._counts(self.df,"grupo"); g["produtos"]=g["grupo"].map(counts).fillna(g["produtos"]); self._show_excel()
         g["_ord"] = g["grupo"].map(lambda x: normalize_text(x))
         g=g.sort_values("_ord",kind="stable")
         for i,r in g.iterrows():
@@ -60,6 +74,7 @@ class HierarchyExplorer(QDialog):
     def render_group(self,g):
         self.path=[("group",g)]; self.crumb.setText(f"Todos os grupos  ›  {g}"); self.title.setText(f"{g} • Subclasses"); self.list.clear(); self.back.setEnabled(True)
         d=self.df[self.df.grupo==g]; x=d.groupby("subclasse",dropna=False).agg(produtos=("codigo_barras","count"),vendas=("quantidade_vendida","sum"),estoque=("quantidade_estoque","sum")).reset_index()
+        counts=self._counts(d,"subclasse"); x["produtos"]=x["subclasse"].map(counts).fillna(x["produtos"]); self._show_excel(g)
         x["_nome"] = x["subclasse"].map(lambda v: "Sem subclasse" if str(v)=="nan" else str(v))
         x["_ord"] = x["_nome"].map(normalize_text); x=x.sort_values("_ord",kind="stable")
         for i,r in x.iterrows():
@@ -68,6 +83,13 @@ class HierarchyExplorer(QDialog):
     def render_sub(self,g,sub):
         self.path=[("group",g),("sub",sub)]; self.crumb.setText(f"Todos os grupos  ›  {g}  ›  {sub}"); self.title.setText(f"Produtos • {sub}"); self.list.clear()
         d=self.df[(self.df.grupo==g)&(self.df.subclasse==sub)].copy()
+        self._show_excel(g)
+        if is_unclassified(g) or is_unclassified(sub):
+            # Sem classificação: um card por código, com as lojas onde ele está.
+            for r in merge_by_barcode(d):
+                n=len(r["lojas"]); where=r["loja"] if n<=2 else f"{n} lojas"
+                self._add_card(str(r["descricao"]),f"{r['codigo_barras']}  •  {where}",f"{br_number(r['quantidade_estoque'],0)} em estoque  •  {br_number(r['quantidade_vendida'],0)} vendas",r,"product",_stable_color(str(r["descricao"])),"")
+            return
         d=sort_products(d)  # código de barras do menor para o maior (P → GG) e lojas na ordem oficial
         for i,(_,r) in enumerate(d.iterrows()):
             accent=_stable_color(str(r.descricao)); self._add_card(str(r.descricao),f"{r.codigo_barras}  •  {r.loja}",f"{br_number(r.quantidade_vendida,0)} vendas  •  {brl(r.valor_vendido)}",r.to_dict(),"product",accent,"")
@@ -82,8 +104,8 @@ class HierarchyExplorer(QDialog):
         elif len(self.path)==1: self.render_groups()
 
 class DashboardPage(QWidget):
-    def __init__(self,df,period,audit,parent=None,on_home=None,alert_store=None):
-        super().__init__(parent); self.df=df; self.period=period; self.audit=audit; self.alert_store=alert_store
+    def __init__(self,df,period,audit,parent=None,on_home=None,alert_store=None,catalog=None):
+        super().__init__(parent); self.df=df; self.period=period; self.audit=audit; self.alert_store=alert_store; self.catalog=catalog
         root=QVBoxLayout(self); root.setContentsMargins(28,18,28,22); root.setSpacing(12)
         head=QHBoxLayout(); brand=QVBoxLayout(); title=QLabel("MIX MODA INSIGHTS"); title.setObjectName("Title"); brand.addWidget(title); brand.addWidget(QLabel("Central executiva de estoque, vendas, faturamento e rotação por loja")); head.addLayout(brand); head.addStretch();
         if on_home:
@@ -92,6 +114,11 @@ class DashboardPage(QWidget):
         self.alert_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.alert_button.clicked.connect(self.open_stock_alerts)
         head.addWidget(self.alert_button)
+        self.unclassified_button=QPushButton(); self.unclassified_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.unclassified_button.setStyleSheet("QPushButton{background:#FFF7E0;color:#A35A00;border:1px solid #F3D28B;border-radius:12px;padding:10px 15px;font-weight:900;}"
+                                               "QPushButton:hover{background:#FFEFC2;border-color:#E8B24A;}")
+        self.unclassified_button.setToolTip("Lista os produtos sem classificação (um por código) e gera o Excel para cadastro.")
+        self.unclassified_button.clicked.connect(lambda: UnclassifiedDialog(self.current_df(),self.catalog,self).exec()); head.addWidget(self.unclassified_button)
         pdf=QPushButton("EXPORTAR PDF"); pdf.clicked.connect(self.export_pdf); head.addWidget(pdf); root.addLayout(head)
         filters=QFrame(); filters.setObjectName("Panel"); fbox=QVBoxLayout(filters); fbox.setContentsMargins(12,10,12,10); fbox.setSpacing(10); fl=QHBoxLayout(); fl.setSpacing(8); fbox.addLayout(fl)
         self.store=QComboBox(); self.store.addItem("Todas as lojas"); self.store.addItems(order_stores(df.loja.dropna().unique())); self.group=QComboBox(); self.group.addItem("Todos os grupos"); self.group.addItems(sorted(df.grupo.dropna().unique())); self.sub=QComboBox(); self.sub.addItem("Todas as subclasses"); self.status=StatusFilterBar(STATUS_OPTIONS); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código, grupo ou subclasse...")
@@ -143,6 +170,16 @@ class DashboardPage(QWidget):
             f"{count} produto(s) atingiram suas regras de estoque."
             if count else "Nenhum produto atingiu suas regras de estoque."
         )
+
+    def apply_catalog(self,catalog):
+        """O catálogo mudou: reaplica grupo/subclasse e redesenha (filtros e seleção ficam)."""
+        from core.matcher import reclassify
+        self.catalog=catalog; self.df,changed=reclassify(self.df,catalog)
+        if changed: self.refresh()
+
+    def refresh_unclassified_button(self,d):
+        n=len(merge_by_barcode(unclassified_rows(d)))
+        self.unclassified_button.setText(f"📋  SEM CLASSIFICAÇÃO  ·  {br_number(n,0)}"); self.unclassified_button.setVisible(bool(n))
 
     def open_stock_alerts(self):
         StockAlertsDialog(self._filtered_alerts(), self).exec()
@@ -209,7 +246,7 @@ class DashboardPage(QWidget):
         self.sub.setCurrentText(old_sub if old_sub in [self.sub.itemText(i) for i in range(self.sub.count())] else "Todas as subclasses"); self.sub.blockSignals(False)
         # Contagem de cada status com os outros filtros aplicados (sem o de status).
         self.status.set_counts(status_counts(self._apply_selection(filter_analysis(self.df,*self._base_filters(),"Todos"))))
-        d=self.current_df(); self.refresh_alert_button(); self.clear_body(); grid=QGridLayout(); grid.setHorizontalSpacing(12); grid.setVerticalSpacing(12)
+        d=self.current_df(); self.refresh_alert_button(); self.refresh_unclassified_button(d); self.clear_body(); grid=QGridLayout(); grid.setHorizontalSpacing(12); grid.setVerticalSpacing(12)
         for i,spec in enumerate(kpi_cards(d)):
             c=KpiCard(spec["label"],spec["value"],spec["hint"],spec["accent"],spec["emoji"],spec["tone"],spec["clickable"])
             if spec["clickable"]: c.clicked.connect(lambda name=spec["key"]:self.detail(name,d))
@@ -246,6 +283,7 @@ class DashboardPage(QWidget):
         l.addStretch(); return w
     def pivot_table(self,d):
         g=d.groupby("grupo",as_index=False).agg(produtos=("codigo_barras","count"),estoque=("quantidade_estoque","sum"),vendas=("quantidade_vendida","sum"),valor_estoque=("valor_estoque","sum"),faturamento=("valor_vendido","sum"),giro=("giro","mean")).sort_values("vendas",ascending=False)
+        counts={k:product_count(part) for k,part in d.groupby("grupo")}; g["produtos"]=g["grupo"].map(counts).fillna(g["produtos"])
         t=QTableWidget(len(g),7); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setMinimumHeight(max(225, 44 + len(g)*38)); t.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); t.setHorizontalHeaderLabels(["Grupo","Produtos","Estoque","Vendas","Valor estoque","Faturamento","Giro (%)"]); t.verticalHeader().setVisible(False); t.setSelectionBehavior(QTableWidget.SelectRows); t.setAlternatingRowColors(True); t.setSortingEnabled(False); rows=list(g.iterrows()); palette=["#EEF3FF","#E8FBF7","#FFF3E2","#F4EEFF","#FFEAF1"]
         for i,(_,r) in enumerate(rows):
             vals=[r.grupo,r.produtos,r.estoque,r.vendas,r.valor_estoque,r.faturamento,r.giro]
@@ -257,7 +295,7 @@ class DashboardPage(QWidget):
                 item=QTableWidgetItem(txt); item.setBackground(QColor(palette[i%len(palette)])); item.setForeground(QColor("#17326F")); t.setItem(i,j,item)
         t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.horizontalHeader().setStretchLastSection(True); t.cellClicked.connect(lambda rr,cc,rs=rows:self.open_group(rs,rr)); self.body.addWidget(t)
     def open_group(self,rows,r):
-        if 0<=r<len(rows): HierarchyExplorer(self.current_df(),str(rows[r][1]["grupo"]),self).exec()
+        if 0<=r<len(rows): HierarchyExplorer(self.current_df(),str(rows[r][1]["grupo"]),self,self.catalog).exec()
     def table_section(self,d,cols,height=140,accent="#2F5BEA",critical_mode=False):
         t=QTableWidget(len(d),len(cols)); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setMinimumHeight(max(height, 44 + len(d)*38)); t.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); t.setAlternatingRowColors(True); t.setSortingEnabled(False); t.setHorizontalHeaderLabels([c.replace("_"," ").title() for c in cols]); t.horizontalHeader().setStretchLastSection(True); t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.verticalHeader().setVisible(False); t.setSelectionBehavior(QTableWidget.SelectRows); rows=list(d.iterrows())
         t.setStyleSheet(f"QTableWidget{{border:1px solid {accent}55;border-radius:14px;gridline-color:#E9EEF5;alternate-background-color:#FAFCFF;}} QHeaderView::section{{background:{accent};color:white;border:none;padding:10px;font-weight:900;}}")

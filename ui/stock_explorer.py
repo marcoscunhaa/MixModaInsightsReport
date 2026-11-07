@@ -90,6 +90,11 @@ class StockExplorerPage(QWidget):
         new_button.setObjectName("AddStore")
         new_button.clicked.connect(self.new_product)
         head.addWidget(new_button)
+        import_button = QPushButton("⬆  IMPORTAR CLASSIFICAÇÕES")
+        import_button.setObjectName("Secondary")
+        import_button.setToolTip("Lê o Excel de produtos sem classificação preenchido e cadastra grupo e subclasse no catálogo.")
+        import_button.clicked.connect(self.import_classifications)
+        head.addWidget(import_button)
         self.back = QPushButton("← Voltar")
         self.back.setObjectName("Ghost")
         self.back.clicked.connect(self.go_back)
@@ -230,6 +235,13 @@ class StockExplorerPage(QWidget):
             self.render()
         else:
             self.on_home()
+
+    # ---------- importação do Excel de cadastro ----------
+    def import_classifications(self):
+        from ui.catalog_import import import_catalog_excel
+        if import_catalog_excel(self, self.catalog, self.catalog_path, self.on_catalog_changed):
+            self._fix_path()
+            self.render()
 
     # ---------- CRUD ----------
     def new_product(self):

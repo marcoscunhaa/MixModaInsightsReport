@@ -269,3 +269,35 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
         "vendas_sem_correspondencia_itens": unmatched_items,
     }
     return merged, audit
+
+
+def reclassify(frame, catalog):
+    """Reaplica a classificação atual do catálogo numa análise já gerada.
+
+    A análise guarda grupo/subclasse do momento em que foi gerada; depois de um
+    cadastro (Explorar estoque ou importação do Excel) ela ficaria desatualizada.
+    Usa a mesma regra do cruzamento: o código com uma única classificação no
+    catálogo é a referência. Códigos fora do catálogo (ou ambíguos) ficam como estão.
+    Retorna (novo frame, quantas linhas mudaram).
+    """
+    if frame is None or frame.empty:
+        return frame, 0
+    global_catalog = catalog_classification_frame(catalog)
+    if global_catalog.empty:
+        return frame, 0
+    linen = global_catalog.descricao_norm == normalize_text("LENÇOL CASAL BASICO")
+    global_catalog.loc[linen, ["grupo_ref", "subclasse_ref"]] = ["UTILIDADES", "COLCHA"]
+    by_code = _unique_classification(global_catalog, "codigo_barras").set_index("codigo_barras")
+    keys = frame.codigo_barras.map(normalize_barcode)
+    grupo = keys.map(by_code.grupo_ref).fillna(frame.grupo)
+    subclasse = keys.map(by_code.subclasse_ref).fillna(frame.subclasse)
+    linen_rows = frame.descricao.map(normalize_text) == normalize_text("LENÇOL CASAL BASICO")
+    grupo = grupo.where(~linen_rows, "UTILIDADES")
+    subclasse = subclasse.where(~linen_rows, "COLCHA")
+    changed = int(((grupo != frame.grupo) | (subclasse != frame.subclasse)).sum())
+    if not changed:
+        return frame, 0
+    out = frame.copy()
+    out["grupo"] = grupo
+    out["subclasse"] = subclasse
+    return out, changed

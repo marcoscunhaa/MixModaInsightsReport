@@ -90,3 +90,10 @@ Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflo
 ## PDF exportado
 
 - Depois de **Prioridades de estoque**, a página **Estoque parado** mostra os 20 produtos sem nenhuma venda no período com a maior quantidade em estoque (estoque, custo unitário e valor parado), com o total de produtos, unidades e valor parado no topo.
+
+## Produtos sem classificação
+- Na análise, o mesmo código de barras em várias lojas conta como **1 produto sem classificação** (explorador, tabela de grupos e botão do dashboard). O card do produto soma as lojas e mostra estoque, vendas e preço de cada uma.
+- **📋 SEM CLASSIFICAÇÃO** (dashboard) ou **⬇ EXCEL PARA CADASTRO** (explorador) baixam um Excel com uma aba por loja: código, descrição, estoque, preços e as colunas **GRUPO** e **SUBCLASSE**, em branco para o cliente preencher, com lista suspensa dos grupos e subclasses do catálogo.
+- Preenchido, o arquivo volta por **Explorar estoque › IMPORTAR CLASSIFICAÇÕES**: preencher em uma aba vale para todas as lojas do produto; o mesmo código com classificações diferentes é avisado e fica de fora.
+- A importação também aceita uma planilha montada à mão: basta ter, em qualquer aba, um cabeçalho (nas 15 primeiras linhas) com **Código de barras**, **Grupo** e **Subclasse**. **Descrição**, **Loja**, **Estoque** e **Preço de venda** são opcionais; sem a coluna Loja, o nome da aba é usado quando for uma loja da rede. Código que já está no catálogo tem a classificação atualizada; código novo é cadastrado.
+- Depois de qualquer mudança no catálogo (cadastro, edição ou importação), o dashboard aberto e a **última análise** passam a usar a classificação nova, sem precisar gerar a análise de novo.
