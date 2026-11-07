@@ -19,6 +19,7 @@ from exports.pdf_export import export_dashboard_pdf
 from ui.stock_alerts import StockAlertsDialog
 from ui.window_chrome import get_save_file, install_mac_window_chrome, show_message
 from core.unclassified import is_unclassified, merge_by_barcode, product_count, unclassified_rows
+from ui.unclassified_dialog import UnclassifiedDialog, export_unclassified_excel
 
 SUBCLASS_EMOJIS = ["👗","👚","👕","👖","👟","🥿","👜","💄","💍","🧸","🏠","🛏️","🍳","🧴","🧢","🩱","🩴","🎀","🧦","🧺"]
 
@@ -33,24 +34,6 @@ def _emoji(text, idx=0):
     for key,emo in rules:
         if key in t: return emo
     return SUBCLASS_EMOJIS[idx % len(SUBCLASS_EMOJIS)]
-
-
-def export_unclassified_excel(parent,df,catalog):
-    """Salva o Excel de produtos sem classificação (uma aba por loja)."""
-    from exports.unclassified_export import export_unclassified_xlsx
-    if unclassified_rows(df).empty:
-        show_message(parent,"information","Sem pendências","Nenhum produto sem classificação nesta análise."); return
-    p=get_save_file(parent,"Baixar Excel para cadastro","Produtos_sem_classificacao.xlsx","Excel (*.xlsx)","xlsx")
-    if not p: return
-    try:
-        total=export_unclassified_xlsx(p,df,catalog)
-    except PermissionError:
-        show_message(parent,"critical","Não foi possível salvar o Excel","O arquivo está aberto em outro programa. Feche-o ou escolha outro nome e tente de novo."); return
-    except Exception as error:
-        show_message(parent,"critical","Não foi possível gerar o Excel",f"{type(error).__name__}: {error}"); return
-    show_message(parent,"information","Excel gerado",
-                 f"{br_number(total,0)} produto(s) sem classificação exportados, uma aba por loja.\n\n"
-                 "Preencha GRUPO e SUBCLASSE e importe em Importar cadastro, na tela inicial.")
 
 
 class HierarchyExplorer(QDialog):
@@ -134,8 +117,8 @@ class DashboardPage(QWidget):
         self.unclassified_button=QPushButton(); self.unclassified_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.unclassified_button.setStyleSheet("QPushButton{background:#FFF7E0;color:#A35A00;border:1px solid #F3D28B;border-radius:12px;padding:10px 15px;font-weight:900;}"
                                                "QPushButton:hover{background:#FFEFC2;border-color:#E8B24A;}")
-        self.unclassified_button.setToolTip("Baixa um Excel (uma aba por loja) com os produtos sem classificação e o que é preciso para cadastrá-los.")
-        self.unclassified_button.clicked.connect(lambda: export_unclassified_excel(self,self.current_df(),self.catalog)); head.addWidget(self.unclassified_button)
+        self.unclassified_button.setToolTip("Lista os produtos sem classificação (um por código) e gera o Excel para cadastro.")
+        self.unclassified_button.clicked.connect(lambda: UnclassifiedDialog(self.current_df(),self.catalog,self).exec()); head.addWidget(self.unclassified_button)
         pdf=QPushButton("EXPORTAR PDF"); pdf.clicked.connect(self.export_pdf); head.addWidget(pdf); root.addLayout(head)
         filters=QFrame(); filters.setObjectName("Panel"); fbox=QVBoxLayout(filters); fbox.setContentsMargins(12,10,12,10); fbox.setSpacing(10); fl=QHBoxLayout(); fl.setSpacing(8); fbox.addLayout(fl)
         self.store=QComboBox(); self.store.addItem("Todas as lojas"); self.store.addItems(order_stores(df.loja.dropna().unique())); self.group=QComboBox(); self.group.addItem("Todos os grupos"); self.group.addItems(sorted(df.grupo.dropna().unique())); self.sub=QComboBox(); self.sub.addItem("Todas as subclasses"); self.status=StatusFilterBar(STATUS_OPTIONS); self.search=QLineEdit(); self.search.setPlaceholderText("Buscar produto, código, grupo ou subclasse...")
