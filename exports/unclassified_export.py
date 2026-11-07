@@ -74,7 +74,7 @@ def _guide_sheet(workbook, total, stores):
         ("", None, None),
         ("1. Em cada aba de loja, preencha as colunas laranja GRUPO e SUBCLASSE (há lista suspensa; a subclasse acompanha o grupo).", None, None),
         ("2. Um produto em várias lojas aparece em cada aba, mas é um produto só: preencher em uma aba já vale para todas.", None, None),
-        ("3. Salve o arquivo e, no app, use Importar cadastro na tela inicial (ou Explorar estoque › IMPORTAR CLASSIFICAÇÕES).", None, None),
+        ("3. Salve o arquivo e, no app, abra Explorar estoque › IMPORTAR CLASSIFICAÇÕES.", None, None),
         ("4. Linhas com GRUPO ou SUBCLASSE vazios são ignoradas. Pode importar aos poucos.", None, None),
     ]
     for i, (text, font, fill) in enumerate(lines, 1):
@@ -120,7 +120,7 @@ def export_unclassified_xlsx(path, df, catalog=None):
         sheet["A1"].alignment = Alignment(vertical="center")
         sheet.row_dimensions[1].height = 30
         sheet.merge_cells(f"A2:{letter}2")
-        sheet["A2"] = "Preencha GRUPO e SUBCLASSE (colunas laranja) e importe em Importar cadastro, na tela inicial."
+        sheet["A2"] = "Preencha GRUPO e SUBCLASSE (colunas laranja) e importe em Explorar estoque › Importar classificações."
         sheet["A2"].font = Font(name="Aptos", size=10, italic=True, color=MUTED)
 
         for c, title in enumerate(HEADERS, 1):

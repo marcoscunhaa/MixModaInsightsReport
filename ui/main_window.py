@@ -112,13 +112,7 @@ class MainWindow(QMainWindow):
             "CONFIGURAR ALERTAS", "#E85D8A",
         )
         self.alerts_card.clicked.connect(lambda: self.open_stock_alerts())
-        import_card = FeatureCard(
-            "📥", "Importar cadastro",
-            "Envie um Excel com código, grupo e subclasse e os produtos entram no catálogo automaticamente.",
-            "IMPORTAR EXCEL", "#E8742A",
-        )
-        import_card.clicked.connect(lambda: self.import_catalog())
-        for card in (analysis_card, stock_card, self.alerts_card, import_card):
+        for card in (analysis_card, stock_card, self.alerts_card):
             cards.addWidget(card, 1)
         layout.addLayout(cards)
         self.refresh_alerts_tag()
@@ -176,15 +170,13 @@ class MainWindow(QMainWindow):
             self.stock_explorer.reset()
         self.stack.setCurrentWidget(self.stock_explorer)
 
-    def import_catalog(self):
-        from ui.catalog_import import import_catalog_excel
-        if import_catalog_excel(self, self.catalog, self.catalog_path, self.catalog_changed) and self.stock_explorer is not None:
-            self.stock_explorer.reset()
-
     def catalog_changed(self):
         """O catálogo foi editado: a classificação usada nas próximas análises é refeita."""
         self.classification = classification_payload(self.catalog)
         self.refresh_footer()
+        # O dashboard aberto (inclusive a última análise) passa a mostrar a classificação nova.
+        if self.dashboard is not None:
+            self.dashboard.apply_catalog(self.catalog)
 
     def open_stock_alerts(self):
         try:
@@ -219,6 +211,9 @@ class MainWindow(QMainWindow):
     def _load_last_analysis(self):
         try:
             frame, period, audit, meta = self.last_analysis.load()
+            # A análise salva guarda a classificação da época; vale a do catálogo atual.
+            from core.matcher import reclassify
+            frame, _changed = reclassify(frame, self.catalog)
             self.show_dashboard(frame, period, audit, meta["id"])
         except LastAnalysisError as error:
             QApplication.restoreOverrideCursor()

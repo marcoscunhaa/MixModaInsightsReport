@@ -171,6 +171,12 @@ class DashboardPage(QWidget):
             if count else "Nenhum produto atingiu suas regras de estoque."
         )
 
+    def apply_catalog(self,catalog):
+        """O catálogo mudou: reaplica grupo/subclasse e redesenha (filtros e seleção ficam)."""
+        from core.matcher import reclassify
+        self.catalog=catalog; self.df,changed=reclassify(self.df,catalog)
+        if changed: self.refresh()
+
     def refresh_unclassified_button(self,d):
         n=len(merge_by_barcode(unclassified_rows(d)))
         self.unclassified_button.setText(f"📋  SEM CLASSIFICAÇÃO  ·  {br_number(n,0)}"); self.unclassified_button.setVisible(bool(n))

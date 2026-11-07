@@ -154,3 +154,26 @@ def test_hand_made_sheet_from_the_client_is_imported(tmp_path):
     empty = Workbook(); empty.active.append(["Nome", "Telefone"]); bad = tmp_path / "bad.xlsx"; empty.save(bad)
     with pytest.raises(ClassificationFileError):
         read_classification_xlsx(bad)
+
+
+def test_last_analysis_picks_up_new_classification_after_import(tmp_path):
+    from core.last_analysis import LastAnalysisStore
+    from core.matcher import reclassify
+    store = LastAnalysisStore(tmp_path)
+    store.save(frame(), ("2026-10-01", "2026-10-31"), {}, ["Sapiranga"], background=False)
+
+    catalog = copy.deepcopy(CATALOG)
+    apply_classifications(catalog, [{
+        "codigo_barras": "789001", "descricao": "SAIA JEANS CURTA", "grupo": "VESTUARIO FEMININO", "subclasse": "SAIA",
+        "lojas": [{"loja": "Sapiranga", "descricao": "SAIA JEANS CURTA", "quantidade_catalogo": 3, "valor": 10}],
+    }])
+
+    saved, *_ = store.load()
+    fresh, changed = reclassify(saved, catalog)
+    assert changed == 3  # as 3 lojas do código, inclusive a que tem zero à esquerda
+    saia = fresh[fresh.codigo_barras.str.lstrip("0") == "789001"]
+    assert set(saia.grupo) == {"VESTUARIO FEMININO"} and set(saia.subclasse) == {"SAIA"}
+    assert product_count(fresh[fresh.grupo == UNCLASSIFIED]) == 1  # sobra só o urso
+    # Sem mudança no catálogo, nada muda (e o frame original não é tocado).
+    assert reclassify(fresh, catalog)[1] == 0
+    assert set(saved.grupo) >= {UNCLASSIFIED}

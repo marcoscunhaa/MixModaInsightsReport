@@ -1,6 +1,6 @@
 """Importar cadastro: lê um Excel e grava grupo/subclasse no catálogo.
 
-Usado pelo card da tela inicial e pelo botão do Explorar estoque. Aceita o Excel
+Usado pelo botão IMPORTAR CLASSIFICAÇÕES do Explorar estoque. Aceita o Excel
 de produtos sem classificação gerado pelo app ou uma planilha com colunas
 equivalentes (código, descrição, grupo, subclasse, loja, estoque, preço).
 """
@@ -68,6 +68,6 @@ def import_catalog_excel(parent, catalog, catalog_path, on_changed=None):
         lines.append(f"\n{len(problems)} produto(s) ficaram de fora:")
         lines += problems[:12] + ([f"… e mais {len(problems) - 12}"] if len(problems) > 12 else [])
     if saved:
-        lines.append("\nGere a análise de novo para ver os produtos classificados no dashboard.")
+        lines.append("\nO dashboard e a última análise já mostram a classificação nova.")
     show_message(parent, "warning" if problems else "information", "Cadastro importado", "\n".join(lines))
     return saved

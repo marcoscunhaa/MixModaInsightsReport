@@ -54,7 +54,7 @@ def export_unclassified_excel(parent, df, catalog, open_after=True):
     if not (open_after and QDesktopServices.openUrl(QUrl.fromLocalFile(path))):
         show_message(parent, "information", "Excel gerado",
                      f"Arquivo salvo em:\n{path}\n\nPreencha GRUPO e SUBCLASSE e importe em "
-                     "Importar cadastro, na tela inicial.")
+                     "Explorar estoque › IMPORTAR CLASSIFICAÇÕES.")
     return path
 
 
