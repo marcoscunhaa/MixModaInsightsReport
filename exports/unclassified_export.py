@@ -34,10 +34,10 @@ LISTS_SHEET = "Listas"
 HEADER_ROW = 4
 HEADERS = [
     "Código de barras", "Descrição", "Loja", "Também em", "Estoque", "Vendas no período",
-    "Preço de compra", "Preço de venda", "Grupo sugerido", "Subclasse sugerida", "Confiança",
+    "Preço de compra", "Preço de venda", "Grupo sugerido", "Subclasse sugerida",
     "GRUPO", "SUBCLASSE",
 ]
-WIDTHS = [20, 42, 17, 26, 10, 11, 13, 13, 24, 24, 11, 26, 26]
+WIDTHS = [20, 42, 17, 26, 10, 11, 13, 13, 24, 24, 26, 26]
 COL = {name: i + 1 for i, name in enumerate(HEADERS)}
 
 
@@ -73,9 +73,9 @@ def _guide_sheet(workbook, total, stores):
         (f"{total} produto(s) sem classificação • lojas: {', '.join(stores)}", Font(name="Aptos", size=11, bold=True, color=INK), None),
         ("", None, None),
         ("1. Em cada aba de loja, preencha as colunas laranja GRUPO e SUBCLASSE (há lista suspensa; a subclasse acompanha o grupo).", None, None),
-        ("2. Quando a confiança da sugestão é alta, GRUPO e SUBCLASSE já vêm preenchidos: só confira.", None, None),
+        ("2. Quando a sugestão é muito parecida com um produto já cadastrado, GRUPO e SUBCLASSE já vêm preenchidos: só confira.", None, None),
         ("3. Um produto em várias lojas aparece em cada aba, mas é um produto só: preencher em uma aba já vale para todas.", None, None),
-        ("4. Salve o arquivo e, no app, abra Explorar estoque › IMPORTAR CLASSIFICAÇÕES.", None, None),
+        ("4. Salve o arquivo e, no app, use Importar cadastro na tela inicial (ou Explorar estoque › IMPORTAR CLASSIFICAÇÕES).", None, None),
         ("5. Linhas com GRUPO ou SUBCLASSE vazios são ignoradas. Pode importar aos poucos.", None, None),
     ]
     for i, (text, font, fill) in enumerate(lines, 1):
@@ -123,7 +123,7 @@ def export_unclassified_xlsx(path, df, catalog=None):
         sheet["A1"].alignment = Alignment(vertical="center")
         sheet.row_dimensions[1].height = 30
         sheet.merge_cells(f"A2:{letter}2")
-        sheet["A2"] = "Preencha GRUPO e SUBCLASSE (colunas laranja) e importe em Explorar estoque › Importar classificações."
+        sheet["A2"] = "Preencha GRUPO e SUBCLASSE (colunas laranja) e importe em Importar cadastro, na tela inicial."
         sheet["A2"].font = Font(name="Aptos", size=10, italic=True, color=MUTED)
 
         for c, title in enumerate(HEADERS, 1):
@@ -143,21 +143,20 @@ def export_unclassified_xlsx(path, df, catalog=None):
                 str(product["codigo_barras"]), entry["descricao"], store, others or "—",
                 entry["quantidade_estoque"], entry["quantidade_vendida"],
                 entry["preco_compra"], entry["preco_venda"],
-                hint[0] if hint else "", hint[1] if hint else "", hint[2] if hint else None,
+                hint[0] if hint else "", hint[1] if hint else "",
                 hint[0] if auto else "", hint[1] if auto else "",
             ]
             for c, value in enumerate(values, 1):
                 cell = sheet.cell(r, c, value)
                 cell.font = Font(name="Aptos", size=10, color=INK)
                 cell.fill = PatternFill("solid", fgColor=FILL_ME if c >= COL["GRUPO"] else (WHITE if r % 2 else PALE))
-                cell.alignment = Alignment(horizontal="center" if c in (5, 6, 7, 8, 11) else "left", vertical="center")
+                cell.alignment = Alignment(horizontal="center" if c in (5, 6, 7, 8) else "left", vertical="center")
                 cell.border = Border(bottom=Side(style="hair", color=LINE))
             sheet.cell(r, 1).number_format = "@"
             for c in (COL["Preço de compra"], COL["Preço de venda"]):
                 sheet.cell(r, c).number_format = '"R$" #,##0.00'
             sheet.cell(r, COL["Estoque"]).number_format = "0.##"
             sheet.cell(r, COL["Vendas no período"]).number_format = "0.##"
-            sheet.cell(r, COL["Confiança"]).number_format = "0%"
             for c in (COL["GRUPO"], COL["SUBCLASSE"]):
                 sheet.cell(r, c).font = Font(name="Aptos", size=10, bold=True, color=INK)
 
@@ -206,15 +205,48 @@ def export_unclassified_xlsx(path, df, catalog=None):
 
 
 class ClassificationFileError(ValueError):
-    """O arquivo não é o Excel de produtos sem classificação."""
+    """O arquivo não tem as colunas mínimas para cadastrar (código, grupo e subclasse)."""
+
+
+# Nomes de coluna aceitos (sem acento, maiúsculas). Vale para o Excel gerado pelo
+# app e para planilhas montadas à mão, com o cabeçalho em qualquer uma das 15 primeiras linhas.
+COLUMN_ALIASES = {
+    "codigo": ("CODIGO DE BARRAS", "CODIGO BARRAS", "COD BARRAS", "COD. BARRAS", "CODIGO", "COD", "EAN", "GTIN"),
+    "descricao": ("DESCRICAO", "DESCRICAO DO PRODUTO", "PRODUTO", "NOME", "NOME DO PRODUTO"),
+    "grupo": ("GRUPO",),
+    "subclasse": ("SUBCLASSE", "SUB CLASSE", "SUB-CLASSE", "CLASSE"),
+    "loja": ("LOJA", "FILIAL", "UNIDADE"),
+    "estoque": ("ESTOQUE", "ESTOQUE ATUAL", "QUANTIDADE", "QTD", "QTDE", "SALDO"),
+    "preco": ("PRECO DE VENDA", "PRECO VENDA", "PRECO", "VALOR", "VALOR DE VENDA", "PRECO UNITARIO"),
+}
+_ALIAS_TO_FIELD = {alias: field for field, aliases in COLUMN_ALIASES.items() for alias in aliases}
+
+
+def _find_header(rows):
+    """(número da linha, {campo: coluna}) do primeiro cabeçalho com código, grupo e subclasse."""
+    for number, values in enumerate(rows, 1):
+        columns = {}
+        for i, value in enumerate(values or ()):
+            field = _ALIAS_TO_FIELD.get(normalize_text(value))
+            if field and field not in columns:
+                columns[field] = i
+        if {"codigo", "grupo", "subclasse"} <= columns.keys():
+            return number, columns
+    return None, None
+
+
+def _sheet_store(title):
+    """Nome da aba como loja, quando é uma das lojas da rede (ex.: aba "Palmeiras")."""
+    from core.stores import STORES, store_rank
+    return STORES[store_rank(title)] if store_rank(title) < len(STORES) else ""
 
 
 def read_classification_xlsx(path):
-    """Lê o Excel preenchido.
+    """Lê um Excel de cadastro: o gerado pelo app ou uma planilha com colunas equivalentes.
 
-    Retorna (itens, avisos). Cada item é um produto único com grupo/subclasse e as
-    lojas em que aparece (descrição, estoque e preço de cada aba). O mesmo código
-    classificado de formas diferentes em abas diferentes vira aviso e fica de fora.
+    Retorna (itens, avisos). Cada item é um produto único (por código) com grupo,
+    subclasse e as lojas em que aparece. A loja vem da coluna Loja ou, sem ela, do
+    nome da aba. O mesmo código com classificações diferentes vira aviso e fica de fora.
     """
     workbook = load_workbook(Path(path), data_only=True, read_only=True)
     found_sheet = False
@@ -222,38 +254,40 @@ def read_classification_xlsx(path):
     for sheet in workbook.worksheets:
         if sheet.title == LISTS_SHEET:
             continue
-        header = [str(c).strip() if c is not None else "" for c in next(
-            sheet.iter_rows(min_row=HEADER_ROW, max_row=HEADER_ROW, values_only=True), ())]
-        if "Código de barras" not in header or "GRUPO" not in header or "SUBCLASSE" not in header:
+        top = list(sheet.iter_rows(min_row=1, max_row=15, values_only=True))
+        header_row, cols = _find_header(top)
+        if header_row is None:
             continue
         found_sheet = True
-        idx = {name: header.index(name) for name in HEADERS if name in header}
-        for values in sheet.iter_rows(min_row=HEADER_ROW + 1, values_only=True):
-            def get(name):
-                i = idx.get(name)
+        sheet_store = _sheet_store(sheet.title)
+        for values in sheet.iter_rows(min_row=header_row + 1, values_only=True):
+            def get(field):
+                i = cols.get(field)
                 return values[i] if i is not None and i < len(values) else None
-            raw_code = get("Código de barras")
+            raw_code = get("codigo")
             if raw_code is None or not normalize_barcode(raw_code).strip("0"):
                 continue
             code = str(int(raw_code)) if isinstance(raw_code, float) and raw_code.is_integer() else str(raw_code).strip()
-            key = normalize_barcode(code)
-            item = products.setdefault(key, {"codigo_barras": code, "descricao": "", "classes": {}, "lojas": {}})
-            descricao = str(get("Descrição") or "").strip()
+            item = products.setdefault(normalize_barcode(code), {"codigo_barras": code, "descricao": "", "classes": {}, "lojas": {}})
+            descricao = " ".join(str(get("descricao") or "").split())
             item["descricao"] = item["descricao"] or descricao
-            loja = str(get("Loja") or sheet.title).strip()
-            item["lojas"].setdefault(normalize_text(loja), {
-                "loja": loja, "descricao": descricao,
-                "quantidade_catalogo": to_number(get("Estoque")),
-                "valor": to_number(get("Preço de venda")),
-            })
-            grupo = " ".join(str(get("GRUPO") or "").split()).upper()
-            sub = " ".join(str(get("SUBCLASSE") or "").split()).upper()
+            loja = str(get("loja") or "").strip() or sheet_store
+            if loja:
+                item["lojas"].setdefault(normalize_text(loja), {
+                    "loja": loja, "descricao": descricao,
+                    "quantidade_catalogo": to_number(get("estoque")),
+                    "valor": to_number(get("preco")),
+                })
+            grupo = " ".join(str(get("grupo") or "").split()).upper()
+            sub = " ".join(str(get("subclasse") or "").split()).upper()
             if grupo and sub:
-                item["classes"].setdefault((grupo, sub), []).append(loja)
+                item["classes"].setdefault((grupo, sub), []).append(loja or sheet.title)
     workbook.close()
     if not found_sheet:
         raise ClassificationFileError(
-            "Este arquivo não tem as colunas GRUPO e SUBCLASSE do Excel de produtos sem classificação.")
+            "Não encontrei as colunas de código de barras, GRUPO e SUBCLASSE em nenhuma aba.\n\n"
+            "Use o Excel gerado pelo app ou uma planilha com essas colunas (Descrição, Loja, "
+            "Estoque e Preço de venda são opcionais).")
     items, warnings = [], []
     for item in sorted(products.values(), key=lambda p: barcode_sort_key(p["codigo_barras"])):
         classes = item["classes"]
@@ -261,7 +295,7 @@ def read_classification_xlsx(path):
             continue
         if len(classes) > 1:
             options = "; ".join(f"{g} › {s} ({', '.join(l)})" for (g, s), l in classes.items())
-            warnings.append(f"{item['codigo_barras']} – {item['descricao']}: classificações diferentes entre lojas ({options}).")
+            warnings.append(f"{item['codigo_barras']} – {item['descricao']}: classificações diferentes ({options}).")
             continue
         (grupo, sub), = classes.keys()
         items.append({

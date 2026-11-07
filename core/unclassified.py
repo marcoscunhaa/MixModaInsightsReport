@@ -220,6 +220,8 @@ def apply_classifications(catalog, items, editor=None):
                 editor.update_product(catalog, existing["codigo_barras"], data)
                 summary["atualizados"] += 1
             else:
+                if not lojas:
+                    raise ValueError("sem loja: preencha a coluna Loja ou dê à aba o nome da loja.")
                 data = {
                     "codigo_barras": code, "descricao": item.get("descricao"),
                     "grupo": item["grupo"], "subclasse": item["subclasse"],

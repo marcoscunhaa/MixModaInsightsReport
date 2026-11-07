@@ -50,7 +50,7 @@ def export_unclassified_excel(parent,df,catalog):
         show_message(parent,"critical","Não foi possível gerar o Excel",f"{type(error).__name__}: {error}"); return
     show_message(parent,"information","Excel gerado",
                  f"{br_number(total,0)} produto(s) sem classificação exportados, uma aba por loja.\n\n"
-                 "Preencha GRUPO e SUBCLASSE e importe em Explorar estoque › Importar classificações.")
+                 "Preencha GRUPO e SUBCLASSE e importe em Importar cadastro, na tela inicial.")
 
 
 class HierarchyExplorer(QDialog):

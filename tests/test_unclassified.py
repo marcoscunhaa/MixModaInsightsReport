@@ -68,7 +68,8 @@ def test_excel_has_one_tab_per_store_and_round_trips(tmp_path):
     assert [sap.cell(r, 1).value for r in (5, 6)] == ["789001", "789002"]
     assert sap.cell(5, 4).value == "Palmeiras, pedras"
     # Classifica o urso só na aba Sapiranga e a saia (já sugerida) fica como veio.
-    sap.cell(6, 12, "brinquedo"); sap.cell(6, 13, "pelucia")
+    assert "Confiança" not in [c.value for c in sap[4]]
+    sap.cell(6, 11, "brinquedo"); sap.cell(6, 12, "pelucia")
     wb.save(path)
 
     items, warnings = read_classification_xlsx(path)
@@ -90,8 +91,8 @@ def test_conflicting_classification_between_tabs_is_reported(tmp_path):
     path = tmp_path / "x.xlsx"
     export_unclassified_xlsx(path, frame(), CATALOG)
     wb = load_workbook(path)
-    wb["Sapiranga"].cell(5, 12, "VESTUARIO FEMININO"); wb["Sapiranga"].cell(5, 13, "SAIA")
-    wb["Palmeiras"].cell(5, 12, "UTILIDADES"); wb["Palmeiras"].cell(5, 13, "COLCHA")
+    wb["Sapiranga"].cell(5, 11, "VESTUARIO FEMININO"); wb["Sapiranga"].cell(5, 12, "SAIA")
+    wb["Palmeiras"].cell(5, 11, "UTILIDADES"); wb["Palmeiras"].cell(5, 12, "COLCHA")
     wb.save(path)
     items, warnings = read_classification_xlsx(path)
     assert "789001" not in {i["codigo_barras"] for i in items}
@@ -116,3 +117,38 @@ def test_real_catalog_suggester_builds():
     catalog = json.loads(path.read_text(encoding="utf-8"))
     hint = ClassificationSuggester(catalog).suggest("LENÇOL CASAL BASICO")
     assert hint is not None
+
+
+def test_hand_made_sheet_from_the_client_is_imported(tmp_path):
+    from openpyxl import Workbook
+    import pytest
+    from exports.unclassified_export import ClassificationFileError
+    wb = Workbook()
+    ws = wb.active; ws.title = "Palmeiras"  # sem coluna Loja: a aba diz a loja
+    ws.append(["Planilha do cliente"]); ws.append([])
+    ws.append(["Cód. Barras", "Produto", "Grupo", "Sub Classe", "Qtd", "Preço"])
+    ws.append([7891234567895, "MOCHILA ESCOLAR", "acessórios pessoal", "mochila", 4, "89,90"])
+    ws.append([222, "URSO PELUCIA GRANDE", "BRINQUEDO", "PELUCIA", 2, 39.9])
+    ws.append([333, "SEM GRUPO AINDA", "", "", 1, 10])
+    other = wb.create_sheet("Resumo")
+    other.append(["Código de barras", "Descrição", "Grupo", "Subclasse"])  # aba sem loja
+    other.append(["444", "TOALHA", "UTILIDADES", "TOALHA"])
+    path = tmp_path / "cliente.xlsx"; wb.save(path)
+
+    items, warnings = read_classification_xlsx(path)
+    assert warnings == []
+    by_code = {i["codigo_barras"]: i for i in items}
+    assert set(by_code) == {"7891234567895", "222", "444"}
+    mochila = by_code["7891234567895"]
+    assert (mochila["grupo"], mochila["subclasse"]) == ("ACESSÓRIOS PESSOAL", "MOCHILA")
+    assert mochila["lojas"] == [{"loja": "Palmeiras", "descricao": "MOCHILA ESCOLAR", "quantidade_catalogo": 4.0, "valor": 89.9}]
+
+    catalog = copy.deepcopy(CATALOG)
+    summary = apply_classifications(catalog, items)
+    assert summary["cadastrados"] == 1 and summary["atualizados"] == 1
+    assert len(summary["erros"]) == 1 and "444" in summary["erros"][0] and "sem loja" in summary["erros"][0]
+    assert ce.find_product(catalog, "7891234567895")["lojas"][0]["loja"] == "Palmeiras"
+
+    empty = Workbook(); empty.active.append(["Nome", "Telefone"]); bad = tmp_path / "bad.xlsx"; empty.save(bad)
+    with pytest.raises(ClassificationFileError):
+        read_classification_xlsx(bad)
