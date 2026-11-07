@@ -71,7 +71,7 @@ class ProductModal(QDialog):
             metrics.addWidget(box,i//3,i%3)
         bl.addLayout(metrics)
         per_store=[e for e in (row.get("por_loja") or []) if isinstance(e,dict)]
-        if len(per_store)>1:
+        if per_store:
             bl.addWidget(self._stores_section(per_store))
 
         section=QFrame(); section.setObjectName("section"); sl=QVBoxLayout(section); sl.setContentsMargins(16,15,16,16); sl.setSpacing(8)
@@ -94,31 +94,22 @@ class ProductModal(QDialog):
 
         bottom=QHBoxLayout(); bottom.addStretch(1); b=QPushButton("Fechar"); b.setObjectName("close"); b.clicked.connect(self.accept); bottom.addWidget(b); root.addLayout(bottom)
 
-    STATUS_COLORS={"CRÍTICO":("#FFF0F2","#D9284B"),"BAIXO":("#FFF5D9","#B77900"),"SEM ESTOQUE":("#FFE4E8","#B91C3A"),"NEGATIVO":("#7F1D1D","#FFFFFF"),
-                   "NORMAL":("#E8FAF5","#087F6A"),"EXCESSO":("#EEF2FF","#4C5BD4"),"SEM VENDA":("#F1F4F8","#5F6D82")}
-
     def _stores_section(self,entries):
         """Produto sem classificação juntado entre lojas: onde ele está e quanto há em cada uma."""
         section=QFrame(); section.setObjectName("section"); sl=QVBoxLayout(section); sl.setContentsMargins(16,14,16,14); sl.setSpacing(6)
         n=len(entries)
         st=QLabel(f"PRESENTE EM {n} LOJA{'S' if n!=1 else ''}"); st.setObjectName("sectionTitle"); sl.addWidget(st)
-        hint=QLabel("O mesmo produto em cada loja, na ordem das lojas. Os números acima somam todas; o status é o mais grave entre elas. Para ver uma loja só, filtre a loja no dashboard.")
+        hint=QLabel("Conta como 1 produto sem classificação: o cadastro vale para todas as lojas. Os números acima somam as lojas.")
         hint.setStyleSheet("color:#7A8498;font-size:11px;"); hint.setWordWrap(True); sl.addWidget(hint)
         grid=QGridLayout(); grid.setHorizontalSpacing(18); grid.setVerticalSpacing(6)
-        for col,text in enumerate(("LOJA","DESCRIÇÃO NA LOJA","ESTOQUE","VENDAS","FATURAMENTO","PREÇO DE VENDA","STATUS")):
+        for col,text in enumerate(("LOJA","DESCRIÇÃO NA LOJA","ESTOQUE","VENDAS","PREÇO DE VENDA")):
             h=QLabel(text); h.setObjectName("metricLabel"); grid.addWidget(h,0,col)
         for i,e in enumerate(entries,1):
             cells=(str(e.get("loja","")),str(e.get("descricao","")),br_number(e.get("quantidade_estoque",0),0),
-                   br_number(e.get("quantidade_vendida",0),0),brl(e.get("valor_vendido",0)),brl(e.get("preco_venda",0)),str(e.get("status_estoque","") or "—"))
+                   br_number(e.get("quantidade_vendida",0),0),brl(e.get("preco_venda",0)))
             for col,text in enumerate(cells):
-                x=QLabel(text); x.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-                if col==6:
-                    bg,fg=self.STATUS_COLORS.get(text.upper(),("#F1F4F8","#5F6D82"))
-                    x.setStyleSheet(f"background:{bg};color:{fg};border-radius:8px;padding:2px 8px;font-size:10px;font-weight:900;")
-                else:
-                    color="#7C3AED" if col==0 else "#B91C3A" if col==2 and e.get("quantidade_estoque",0)<0 else "#24324A"
-                    x.setStyleSheet(f"color:{color};font-size:12px;font-weight:{850 if col==0 else 700};")
-                grid.addWidget(x,i,col)
+                x=QLabel(text); x.setStyleSheet(f"color:{'#7C3AED' if col==0 else '#24324A'};font-size:12px;font-weight:{850 if col==0 else 700};")
+                x.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse); grid.addWidget(x,i,col)
         grid.setColumnStretch(1,1); sl.addLayout(grid)
         return section
 

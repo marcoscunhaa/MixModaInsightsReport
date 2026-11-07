@@ -9,9 +9,20 @@ catálogo (descrição parecida) e aplica de volta no catálogo o que foi
 preenchido no Excel. Não depende de Qt.
 """
 import difflib
-from utils.normalization import normalize_barcode, normalize_text
+from collections import Counter
+
+import pandas as pd
+
+from core.stores import order_stores, store_sort_key
+from utils.normalization import barcode_sort_key, normalize_barcode, normalize_text
 
 UNCLASSIFIED = "SEM CLASSIFICAÇÃO"
+
+# Mesma prioridade dos produtos críticos: o status mais grave entre as lojas vale para o produto.
+_STATUS_SEVERITY = ["NEGATIVO", "SEM ESTOQUE", "CRÍTICO", "BAIXO", "SEM VENDA", "EXCESSO", "NORMAL"]
+
+# Pontuação mínima para o Excel já trazer a sugestão nas colunas a preencher.
+AUTO_FILL_SCORE = 0.80
 
 
 def is_unclassified(value):
@@ -26,8 +37,85 @@ def unclassified_rows(df):
     return df[mask]
 
 
-# Um produto por código vale para toda a análise; ficam aqui por compatibilidade.
-from core.analyzer import merge_by_barcode, product_count  # noqa: E402,F401
+def _num(value):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return value if value == value else 0.0
+
+
+def merge_by_barcode(df):
+    """Um registro por código de barras, somando as lojas.
+
+    Cada registro traz `lojas` (ordem oficial) e `por_loja` com estoque, vendas
+    e descrição de cada loja; `loja` vira o texto "Loja A, Loja B" para o card.
+    """
+    if df.empty:
+        return []
+    out = []
+    keys = df.codigo_barras.map(normalize_barcode)
+    for _code, part in df.groupby(keys, sort=False):
+        part = part.copy()
+        part["_ordem"] = part.loja.map(store_sort_key)
+        part = part.sort_values("_ordem", kind="stable")
+        first = part.iloc[0].to_dict()
+        first.pop("_ordem", None)
+        stores = order_stores(part.loja.dropna().astype(str).unique())
+        estoque = float(part.quantidade_estoque.map(_num).sum())
+        vendas = float(part.quantidade_vendida.map(_num).sum())
+        faturamento = float(part.valor_vendido.map(_num).sum()) if "valor_vendido" in part else 0.0
+        valor_estoque = float(part.valor_estoque.map(_num).sum()) if "valor_estoque" in part else 0.0
+        compra = part.preco_compra.map(_num) if "preco_compra" in part else pd.Series([0.0])
+        venda = part.preco_venda.map(_num) if "preco_venda" in part else pd.Series([0.0])
+        preco_compra = float(compra[compra > 0].mean()) if (compra > 0).any() else 0.0
+        preco_venda = faturamento / vendas if vendas > 0 and faturamento > 0 else (
+            float(venda[venda > 0].mean()) if (venda > 0).any() else 0.0)
+        statuses = [str(s) for s in part.get("status_estoque", pd.Series(dtype=str)).dropna()]
+        status = min(statuses, key=lambda s: _STATUS_SEVERITY.index(s) if s in _STATUS_SEVERITY else 99) if statuses else "—"
+        descricao = Counter(part.descricao.astype(str)).most_common(1)[0][0]
+        first.update({
+            "codigo_barras": str(first.get("codigo_barras", "")),
+            "descricao": descricao,
+            "loja": ", ".join(stores),
+            "lojas": stores,
+            "quantidade_estoque": estoque,
+            "quantidade_vendida": vendas,
+            "valor_vendido": faturamento,
+            "valor_estoque": valor_estoque,
+            "preco_compra": preco_compra,
+            "preco_venda": preco_venda,
+            "margem_unitaria": preco_venda - preco_compra,
+            "margem_percentual": (preco_venda - preco_compra) / preco_venda * 100 if preco_venda else 0.0,
+            "giro": vendas / (vendas + estoque) * 100 if (vendas + estoque) > 0 else 0.0,
+            "status_estoque": status,
+            # Vários preços por loja não somam entre lojas: o card mostra os totais.
+            "precos_venda": [],
+            "preco_venda_atual": None,
+            "por_loja": [
+                {
+                    "loja": str(r.loja),
+                    "descricao": str(r.descricao),
+                    "quantidade_estoque": _num(r.quantidade_estoque),
+                    "quantidade_vendida": _num(r.quantidade_vendida),
+                    "preco_compra": _num(getattr(r, "preco_compra", 0)),
+                    "preco_venda": _num(getattr(r, "preco_venda", 0)),
+                    "status_estoque": str(getattr(r, "status_estoque", "")),
+                }
+                for r in part.itertuples(index=False)
+            ],
+        })
+        out.append(first)
+    return sorted(out, key=lambda r: barcode_sort_key(r["codigo_barras"]))
+
+
+def product_count(df):
+    """Quantos produtos há em `df`: os sem classificação contam uma vez por código."""
+    if df.empty:
+        return 0
+    loose = unclassified_rows(df)
+    classified = len(df) - len(loose)
+    return int(classified + loose.codigo_barras.map(normalize_barcode).nunique())
 
 
 # ---------- sugestão de classificação ----------
