@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 from core import catalog_editor as ce
 from core.stores import STORES, store_sort_key
 from ui.explorer_cards import ExplorerCard, _stable_color
-from ui.window_chrome import confirm_action, install_mac_window_chrome, show_message
+from ui.window_chrome import confirm_action, get_open_file, install_mac_window_chrome, show_message
 from utils.formatting import br_number
 from utils.normalization import barcode_sort_key, normalize_barcode, normalize_text
 
@@ -90,6 +90,11 @@ class StockExplorerPage(QWidget):
         new_button.setObjectName("AddStore")
         new_button.clicked.connect(self.new_product)
         head.addWidget(new_button)
+        import_button = QPushButton("⬆  IMPORTAR CLASSIFICAÇÕES")
+        import_button.setObjectName("Secondary")
+        import_button.setToolTip("Lê o Excel de produtos sem classificação preenchido e cadastra grupo e subclasse no catálogo.")
+        import_button.clicked.connect(self.import_classifications)
+        head.addWidget(import_button)
         self.back = QPushButton("← Voltar")
         self.back.setObjectName("Ghost")
         self.back.clicked.connect(self.go_back)
@@ -230,6 +235,50 @@ class StockExplorerPage(QWidget):
             self.render()
         else:
             self.on_home()
+
+    # ---------- importação do Excel de produtos sem classificação ----------
+    def import_classifications(self):
+        from core.unclassified import apply_classifications
+        from exports.unclassified_export import ClassificationFileError, read_classification_xlsx
+        path = get_open_file(self, "Importar classificações", "Excel (*.xlsx)")
+        if not path:
+            return
+        try:
+            items, warnings = read_classification_xlsx(path)
+        except ClassificationFileError as error:
+            show_message(self, "warning", "Arquivo não reconhecido", str(error))
+            return
+        except Exception as error:
+            show_message(self, "critical", "Não foi possível ler o Excel", f"{type(error).__name__}: {error}")
+            return
+        if not items:
+            extra = "\n\n" + "\n".join(warnings[:10]) if warnings else ""
+            show_message(self, "information", "Nada para importar",
+                         "Nenhuma linha com GRUPO e SUBCLASSE preenchidos." + extra)
+            return
+        stores = {e["loja"] for i in items for e in i["lojas"]}
+        if not confirm_action(
+            self, "Importar classificações",
+            f"{br_number(len(items), 0)} produto(s) serão classificados no catálogo "
+            f"({br_number(len(stores), 0)} loja(s)).", "Importar",
+        ):
+            return
+        summary = {}
+        try:
+            self.commit(lambda catalog: summary.update(apply_classifications(catalog, items)))
+        except Exception as error:
+            show_message(self, "critical", "Não foi possível salvar o catálogo", f"{type(error).__name__}: {error}")
+            return
+        self._fix_path()
+        self.render()
+        lines = [f"{br_number(summary.get('cadastrados', 0), 0)} produto(s) cadastrados e "
+                 f"{br_number(summary.get('atualizados', 0), 0)} atualizados."]
+        problems = summary.get("erros", []) + warnings
+        if problems:
+            lines.append(f"\n{len(problems)} linha(s) ficaram de fora:")
+            lines += problems[:12] + ([f"… e mais {len(problems) - 12}"] if len(problems) > 12 else [])
+        lines.append("\nGere a análise de novo para ver os produtos já classificados no dashboard.")
+        show_message(self, "warning" if problems else "information", "Classificações importadas", "\n".join(lines))
 
     # ---------- CRUD ----------
     def new_product(self):

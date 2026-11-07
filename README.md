@@ -90,3 +90,8 @@ Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflo
 ## PDF exportado
 
 - Depois de **Prioridades de estoque**, a página **Estoque parado** mostra os 20 produtos sem nenhuma venda no período com a maior quantidade em estoque (estoque, custo unitário e valor parado), com o total de produtos, unidades e valor parado no topo.
+
+## Produtos sem classificação
+- Na análise, o mesmo código de barras em várias lojas conta como **1 produto sem classificação** (explorador, tabela de grupos e botão do dashboard). O card do produto soma as lojas e mostra estoque, vendas e preço de cada uma.
+- **📋 SEM CLASSIFICAÇÃO** (dashboard) ou **⬇ EXCEL PARA CADASTRO** (explorador) baixam um Excel com uma aba por loja: código, descrição, estoque, preços, sugestão de grupo/subclasse (pela descrição mais parecida no catálogo) e as colunas **GRUPO** e **SUBCLASSE** a preencher, com lista suspensa. Sugestões com confiança ≥ 80% já vêm preenchidas.
+- Preenchido, o arquivo volta em **Explorar estoque › IMPORTAR CLASSIFICAÇÕES**: preencher em uma aba vale para todas as lojas do produto; o mesmo código com classificações diferentes entre abas é avisado e fica de fora.

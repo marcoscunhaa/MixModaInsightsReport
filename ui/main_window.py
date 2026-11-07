@@ -235,6 +235,7 @@ class MainWindow(QMainWindow):
             audit,
             on_home=self.open_home,
             alert_store=self.alert_store,
+            catalog=self.catalog,
         )
         # Descarta o dashboard anterior: cada um carrega vários gráficos e,
         # sem isso, a memória cresce a cada análise gerada.
