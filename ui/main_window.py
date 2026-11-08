@@ -23,6 +23,7 @@ from ui.widgets import FeatureCard, LastAnalysisCard
 from core.stores import STORES
 from ui.window_chrome import install_mac_window_chrome, show_message
 from ui.styles import APP_QSS
+from ui.ui_kit import BRAND_RED, brand_bar, brand_eyebrow, brand_html
 from utils.formatting import br_number
 
 
@@ -69,12 +70,13 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(80, 64, 80, 48)
         layout.setSpacing(16)
 
-        badge = QLabel("MIX MODA  •  INTELLIGENCE")
-        badge.setStyleSheet("color:#2854D9;font-weight:900;font-size:12px;letter-spacing:2px;")
-        layout.addWidget(badge)
-        title = QLabel("MIX MODA INSIGHTS")
+        # Marca Mix Moda: vermelho do letreiro no nome e a faixa amarelo → vermelho da fachada.
+        layout.addWidget(brand_eyebrow("INTELLIGENCE"))
+        title = QLabel(brand_html("INSIGHTS"))
+        title.setTextFormat(Qt.TextFormat.RichText)
         title.setObjectName("Title")
         layout.addWidget(title)
+        layout.addWidget(brand_bar(120, 5))
         subtitle = QLabel("Uma central executiva para entender estoque, vendas, giro, ruptura e performance por loja.")
         subtitle.setObjectName("Subtitle")
         layout.addWidget(subtitle)
@@ -133,7 +135,8 @@ class MainWindow(QMainWindow):
         layout.addLayout(chips)
         layout.addStretch()
 
-        footer = QLabel("Catálogo oficial Mix Moda")
+        footer = QLabel(f"Catálogo oficial <span style='color:{BRAND_RED};font-weight:800;'>Mix Moda</span>")
+        footer.setTextFormat(Qt.TextFormat.RichText)
         footer.setObjectName("Muted")
         layout.addWidget(footer)
         self.refresh_footer()

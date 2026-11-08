@@ -8,6 +8,43 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
+# Cores da marca Mix Moda (fachada amarela com letreiro vermelho), em tons um pouco
+# mais profundos para ficarem elegantes sobre o fundo claro do app. O amarelo puro
+# não tem contraste para texto em fundo branco: ele entra em faixas, degradês e
+# detalhes; os textos da marca usam o vermelho (ou o dourado escuro).
+BRAND_RED = "#D3203B"
+BRAND_RED_DARK = "#A8162E"
+BRAND_YELLOW = "#FFC20E"
+BRAND_GOLD = "#B57E00"
+BRAND_GRADIENT = f"qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 {BRAND_YELLOW},stop:1 {BRAND_RED})"
+BRAND_GRADIENT_DIAGONAL = f"qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #FFB81C,stop:1 {BRAND_RED})"
+
+
+def brand_html(suffix="", suffix_color="#102A56"):
+    """'MIX MODA' em vermelho da marca, seguido de um complemento (ex.: INSIGHTS) em azul-marinho."""
+    extra = f"&nbsp;<span style='color:{suffix_color};'>{suffix}</span>" if suffix else ""
+    return f"<span style='color:{BRAND_RED};'>MIX MODA</span>{extra}"
+
+
+def brand_eyebrow(text):
+    """Linha pequena acima dos títulos: 'MIX MODA' em vermelho, ponto dourado e o complemento."""
+    label = QLabel(
+        f"<span style='color:{BRAND_RED};'>MIX MODA</span>"
+        f"<span style='color:{BRAND_YELLOW};'>&nbsp;&nbsp;●&nbsp;&nbsp;</span>"
+        f"<span style='color:#7A879D;'>{text}</span>"
+    )
+    label.setTextFormat(Qt.TextFormat.RichText)
+    label.setStyleSheet("font-size:11px;font-weight:900;letter-spacing:1.5px;background:transparent;")
+    return label
+
+
+def brand_bar(width=96, height=4):
+    """Faixa curta amarelo → vermelho, assinatura visual da marca sob os títulos."""
+    bar = QFrame()
+    bar.setFixedSize(width, height)
+    bar.setStyleSheet(f"background:{BRAND_GRADIENT};border:none;border-radius:{height // 2}px;")
+    return bar
+
 
 def button(text, kind="", tooltip="", on_click=None):
     """Botão com a hierarquia do app: "", Primary, Secondary, Success, Ghost, Link, Danger."""

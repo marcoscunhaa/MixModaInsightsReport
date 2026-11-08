@@ -162,6 +162,13 @@ def _install_window_mover():
     app.installEventFilter(app._mix_window_mover)
 
 
+def _branded_title(text):
+    """Título da janela com "Mix Moda" no amarelo da fachada (legível sobre a barra escura)."""
+    import html
+    safe = html.escape(str(text or ""))
+    return safe.replace("Mix Moda", "<span style='color:#FFC20E;'>Mix Moda</span>")
+
+
 class _MacTitleBar(QFrame):
     def __init__(self, window):
         super().__init__(window)
@@ -189,7 +196,8 @@ class _MacTitleBar(QFrame):
         row.addSpacing(58)
         row.addStretch(1)
 
-        title = QLabel(window.windowTitle())
+        title = QLabel(_branded_title(window.windowTitle()))
+        title.setTextFormat(Qt.TextFormat.RichText)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         row.addWidget(title)

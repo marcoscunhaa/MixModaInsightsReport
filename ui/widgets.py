@@ -273,8 +273,8 @@ class LastAnalysisCard(QFrame):
     """
     clicked = Signal()
 
-    ACCENT = "#F97316"
-    ACCENT_2 = "#EC4899"
+    ACCENT = "#E8A600"
+    ACCENT_2 = "#D3203B"
     STATS = (
         ("produtos", "📦", "PRODUTOS", "#2F5BEA"),
         ("faturamento", "💰", "FATURAMENTO", "#08A88F"),
@@ -283,28 +283,28 @@ class LastAnalysisCard(QFrame):
 
     _STYLE = (
         "QFrame#ResumeCard{background:#FFFFFF;border:1px solid #DCE6F3;border-radius:22px;}"
-        "QFrame#ResumeCard:hover, QFrame#ResumeCard:focus{background:#FFFCFA;border:1px solid #F97316;}"
+        "QFrame#ResumeCard:hover, QFrame#ResumeCard:focus{background:#FFFDF6;border:1px solid #E8B23A;}"
         "QFrame#ResumeCard[empty=\"true\"], QFrame#ResumeCard[empty=\"true\"]:hover"
         "{background:#FFFFFF;border:1px dashed #C9D5EA;}"
         "QFrame#ResumeCard QLabel{background:transparent;border:none;}"
         "QFrame#ResumeCard QWidget#ResumeStats{background:transparent;}"
         "QFrame#ResumeCard QLabel#ResumeIcon{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-        "stop:0 #F97316,stop:1 #EC4899);border-radius:16px;font-size:26px;}"
-        "QFrame#ResumeCard[empty=\"true\"] QLabel#ResumeIcon{background:rgba(249,115,22,0.12);}"
-        "QFrame#ResumeCard QLabel#ResumeEyebrow{color:#F97316;font-size:11px;font-weight:900;letter-spacing:1.5px;}"
-        "QFrame#ResumeCard QLabel#ResumeWhen{color:#C2410C;background:rgba(249,115,22,0.12);border-radius:9px;"
+        "stop:0 #FFB81C,stop:1 #D3203B);border-radius:16px;font-size:26px;}"
+        "QFrame#ResumeCard[empty=\"true\"] QLabel#ResumeIcon{background:rgba(255,194,14,0.18);}"
+        "QFrame#ResumeCard QLabel#ResumeEyebrow{color:#D3203B;font-size:11px;font-weight:900;letter-spacing:1.5px;}"
+        "QFrame#ResumeCard QLabel#ResumeWhen{color:#8A5A00;background:rgba(255,194,14,0.20);border-radius:9px;"
         "padding:3px 10px;font-size:10px;font-weight:900;}"
         "QFrame#ResumeCard QLabel#ResumeTitle{color:#12213D;font-size:19px;font-weight:900;}"
         "QFrame#ResumeCard[empty=\"true\"] QLabel#ResumeTitle{font-size:16px;}"
         "QFrame#ResumeCard QLabel#ResumeText{color:#66758F;font-size:12px;}"
         "QFrame#ResumeCard QLabel#ResumeStore{color:#40516E;background:#F4F7FC;border:1px solid #DCE6F3;"
         "border-radius:11px;padding:4px 11px;font-size:11px;font-weight:800;}"
-        "QPushButton#ResumeOpen{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #F97316,stop:1 #EC4899);"
+        "QPushButton#ResumeOpen{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #F2A900,stop:1 #D3203B);"
         "color:#FFFFFF;border:none;border-radius:14px;padding:14px 24px;font-size:12px;font-weight:900;"
         "letter-spacing:0.6px;}"
-        "QPushButton#ResumeOpen:hover{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #EA580C,stop:1 #DB2777);}"
-        "QPushButton#ResumeOpen:pressed{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #C2410C,stop:1 #BE185D);}"
-        "QPushButton#ResumeOpen:disabled{background:#FBC9A6;color:#FFFFFF;}"
+        "QPushButton#ResumeOpen:hover{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #DE9A00,stop:1 #B81B33);}"
+        "QPushButton#ResumeOpen:pressed{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #C28700,stop:1 #A8162E);}"
+        "QPushButton#ResumeOpen:disabled{background:#F1D7A0;color:#FFFFFF;}"
     )
 
     def __init__(self, parent=None):

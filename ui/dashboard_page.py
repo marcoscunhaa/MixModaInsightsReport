@@ -20,7 +20,7 @@ from ui.stock_alerts import StockAlertsDialog
 from ui.window_chrome import get_save_file, install_mac_window_chrome, show_message
 from core.unclassified import is_unclassified, merge_by_barcode, product_count, unclassified_rows
 from ui.unclassified_dialog import UnclassifiedDialog, export_unclassified_excel
-from ui.ui_kit import button, section_header
+from ui.ui_kit import BRAND_GRADIENT_DIAGONAL, brand_bar, brand_eyebrow, button, section_header
 
 # Títulos de coluna em português claro (as tabelas usam os nomes internos das colunas).
 COLUMN_LABELS = {
@@ -208,15 +208,33 @@ class DashboardPage(QWidget):
     def __init__(self,df,period,audit,parent=None,on_home=None,alert_store=None,catalog=None):
         super().__init__(parent); self.df=df; self.period=period; self.audit=audit; self.alert_store=alert_store; self.catalog=catalog
         root=QVBoxLayout(self); root.setContentsMargins(28,18,28,22); root.setSpacing(12)
-        # Cabeçalho: voltar à esquerda, qual análise é esta no meio, avisos e a ação principal à direita.
-        head=QHBoxLayout(); head.setSpacing(12)
+        # Cabeçalho em cartão com as cores da Mix Moda: voltar à esquerda, qual análise é esta
+        # (período e lojas) no meio, avisos e a ação principal à direita.
+        hero=QFrame(); hero.setObjectName("DashHero")
+        hero.setStyleSheet(
+            "QFrame#DashHero{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #FFF8E7,stop:0.38 #FFFFFF,stop:1 #FFFFFF);"
+            "border:1px solid #EFE2C4;border-radius:20px;}"
+            "QFrame#DashHero QLabel{background:transparent;border:none;}"
+            f"QFrame#DashHero QLabel#HeroIcon{{background:{BRAND_GRADIENT_DIAGONAL};border-radius:16px;font-size:24px;}}"
+            "QFrame#DashHero QLabel#HeroTitle{color:#12213D;font-size:24px;font-weight:900;}"
+            "QFrame#DashHero QLabel#HeroStore{background:#FFFFFF;border:1px solid #EFE2C4;border-radius:11px;"
+            "padding:4px 11px;color:#5A4A2A;font-size:11px;font-weight:800;}"
+        )
+        head=QHBoxLayout(hero); head.setContentsMargins(18,16,18,16); head.setSpacing(14)
         if on_home:
-            home_button=button("← Início","Ghost","Voltar para a tela inicial",on_home); head.addWidget(home_button,0,Qt.AlignmentFlag.AlignVCenter); head.addSpacing(6)
-        brand=QVBoxLayout(); brand.setSpacing(2)
-        eyebrow=QLabel("MIX MODA INSIGHTS  •  DASHBOARD"); eyebrow.setObjectName("Eyebrow"); brand.addWidget(eyebrow)
-        title=QLabel(self._period_title()); title.setObjectName("PageTitle"); brand.addWidget(title)
+            home_button=button("← Início","Ghost","Voltar para a tela inicial",on_home); head.addWidget(home_button,0,Qt.AlignmentFlag.AlignVCenter)
+        icon=QLabel("📊"); icon.setObjectName("HeroIcon"); icon.setFixedSize(56,56); icon.setAlignment(Qt.AlignmentFlag.AlignCenter); head.addWidget(icon,0,Qt.AlignmentFlag.AlignVCenter)
+        brand=QVBoxLayout(); brand.setSpacing(5)
+        brand.addWidget(brand_eyebrow("INSIGHTS  •  DASHBOARD"))
+        title=QLabel(self._period_title()); title.setObjectName("HeroTitle"); brand.addWidget(title)
+        brand.addWidget(brand_bar(88,4))
         stores=order_stores(df.loja.dropna().unique()) if "loja" in df else []
-        sub=QLabel(("🏬  "+"  ·  ".join(stores)) if len(stores) else "Estoque, vendas, faturamento e giro por loja"); sub.setObjectName("Subtitle"); sub.setWordWrap(True); brand.addWidget(sub)
+        chips=QHBoxLayout(); chips.setSpacing(6)
+        for store in stores:
+            chip=QLabel(f"🏬  {store}"); chip.setObjectName("HeroStore"); chips.addWidget(chip)
+        if not len(stores):
+            chip=QLabel("Estoque, vendas, faturamento e giro por loja"); chip.setObjectName("Subtitle"); chips.addWidget(chip)
+        chips.addStretch(); brand.addLayout(chips)
         head.addLayout(brand,1)
         self.alert_button=QPushButton()
         self.alert_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -227,7 +245,7 @@ class DashboardPage(QWidget):
                                                "QPushButton:hover{background:#FFEFC2;border-color:#E8B24A;}")
         self.unclassified_button.setToolTip("Produtos sem grupo ou subclasse no catálogo.\nAbre a lista (um por código) e gera o Excel para cadastro.")
         self.unclassified_button.clicked.connect(lambda: UnclassifiedDialog(self.current_df(),self.catalog,self).exec()); head.addWidget(self.unclassified_button,0,Qt.AlignmentFlag.AlignVCenter)
-        pdf=button("📄  Exportar PDF","Primary","Gera um relatório em PDF com o que está filtrado na tela.",self.export_pdf); head.addWidget(pdf,0,Qt.AlignmentFlag.AlignVCenter); root.addLayout(head)
+        pdf=button("📄  Exportar PDF","Primary","Gera um relatório em PDF com o que está filtrado na tela.",self.export_pdf); head.addWidget(pdf,0,Qt.AlignmentFlag.AlignVCenter); root.addWidget(hero)
         filters=QFrame(); filters.setObjectName("Panel"); fbox=QVBoxLayout(filters); fbox.setContentsMargins(16,12,16,12); fbox.setSpacing(10)
         ftop=QHBoxLayout(); ftop.setSpacing(8); fcap=QLabel("🔎  FILTROS"); fcap.setObjectName("FieldLabel"); ftop.addWidget(fcap)
         fhint=QLabel("Tudo abaixo — números, gráficos e tabelas — segue o que você escolher aqui."); fhint.setObjectName("SectionHint"); ftop.addWidget(fhint,1)
