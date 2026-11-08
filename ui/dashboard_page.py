@@ -45,55 +45,121 @@ def _emoji(text, idx=0):
     return SUBCLASS_EMOJIS[idx % len(SUBCLASS_EMOJIS)]
 
 
-class HierarchyExplorer(QDialog):
-    def __init__(self, df, start_group=None, parent=None, catalog=None):
-        super().__init__(parent); self.df=df.copy(); self.path=[]; self.catalog=catalog
-        self.setWindowTitle("Explorador de Produtos • Mix Moda Insights"); self.resize(1180,720)
-        root=QVBoxLayout(self); root.setContentsMargins(12,8,12,12); root.setSpacing(12); install_mac_window_chrome(self,root)
+class _AutoHeightCardGrid(QListWidget):
+    """Grade de cards que cresce até mostrar todos os cards (a rolagem fica com o dashboard)."""
+
+    GRID=QSize(350,116)
+
+    def __init__(self,parent=None):
+        super().__init__(parent)
+        self.setObjectName("CardGrid"); self.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.setMovement(QListWidget.Movement.Static); self.setViewMode(QListWidget.ViewMode.IconMode)
+        self.setResizeMode(QListWidget.ResizeMode.Adjust); self.setSpacing(10); self.setGridSize(self.GRID)
+        self.setUniformItemSizes(False); self.setWrapping(True)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+    def fit_height(self):
+        columns=max(1,self.viewport().width()//self.GRID.width())
+        rows=max(1,-(-self.count()//columns))
+        self.setFixedHeight(rows*self.GRID.height()+2*self.frameWidth()+12)
+
+    def resizeEvent(self,event):
+        super().resizeEvent(event); self.fit_height()
+
+
+class HierarchyBrowser(QFrame):
+    """Cards navegáveis Grupo › Subclasse › Produto.
+
+    `inline=True` é o modo do dashboard: fica dentro da página, cresce até mostrar
+    todos os cards e "← Voltar" só aparece depois de entrar num grupo. No modo
+    janela (explorador em diálogo) a lista rola sozinha.
+    """
+
+    def __init__(self, df, catalog=None, start_group=None, inline=False, parent=None, on_path=None):
+        super().__init__(parent); self.setObjectName("PanelBody")
+        self.df=df.copy(); self.path=[]; self.catalog=catalog; self.inline=inline; self.on_path=on_path
+        root=QVBoxLayout(self); root.setContentsMargins(0,0,0,0); root.setSpacing(10)
         head=QHBoxLayout(); head.setSpacing(12)
         self.back=button("← Voltar","Ghost","Voltar um nível"); self.back.clicked.connect(self.go_back); head.addWidget(self.back,0,Qt.AlignmentFlag.AlignVCenter)
-        titlebox=QVBoxLayout(); titlebox.setSpacing(2); self.title=QLabel("Explorador de catálogo"); self.title.setObjectName("PageTitle"); titlebox.addWidget(self.title)
+        titlebox=QVBoxLayout(); titlebox.setSpacing(2); self.title=QLabel("Explorador de catálogo"); self.title.setObjectName("SectionTitle" if inline else "PageTitle"); titlebox.addWidget(self.title)
         self.crumb=QLabel(""); self.crumb.setObjectName("Crumb"); titlebox.addWidget(self.crumb); head.addLayout(titlebox); head.addStretch()
         self.excel=QPushButton("⬇  Excel para cadastro"); self.excel.setObjectName("AddStore"); self.excel.setCursor(Qt.CursorShape.PointingHandCursor)
         self.excel.setToolTip("Baixa os produtos sem classificação, uma aba por loja, com sugestão de grupo e subclasse."); self.excel.clicked.connect(lambda: export_unclassified_excel(self,self.df,self.catalog)); head.addWidget(self.excel)
         root.addLayout(head)
-        tip=QLabel("Clique num card para abrir  •  Grupo › Subclasse › Produto"); tip.setObjectName("SectionHint"); root.addWidget(tip)
-        self.list=QListWidget(); self.list.setObjectName("CardGrid"); self.list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection); self.list.setMovement(QListWidget.Movement.Static); self.list.setViewMode(QListWidget.IconMode); self.list.setResizeMode(QListWidget.Adjust); self.list.setSpacing(10); self.list.setGridSize(QSize(350,116)); self.list.setUniformItemSizes(False); self.list.itemClicked.connect(self.open_item); root.addWidget(self.list,1)
+        self.tip=QLabel(); self.tip.setObjectName("SectionHint"); root.addWidget(self.tip)
+        if inline:
+            self.list=_AutoHeightCardGrid()
+        else:
+            self.list=QListWidget(); self.list.setObjectName("CardGrid"); self.list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection); self.list.setMovement(QListWidget.Movement.Static); self.list.setViewMode(QListWidget.ViewMode.IconMode); self.list.setResizeMode(QListWidget.ResizeMode.Adjust); self.list.setSpacing(10); self.list.setGridSize(QSize(350,116)); self.list.setUniformItemSizes(False)
+        self.list.itemClicked.connect(self.open_item); root.addWidget(self.list,0 if inline else 1)
+        self.empty=QLabel("Nenhum produto com os filtros atuais."); self.empty.setObjectName("Muted"); self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter); self.empty.setStyleSheet("padding:24px;"); self.empty.hide(); root.addWidget(self.empty)
         self.render_group(start_group) if start_group else self.render_groups()
 
+    # ---------- montagem ----------
     def _show_excel(self,group=None):
         # Só faz sentido onde há produto sem classificação.
         self.excel.setVisible(group is not None and is_unclassified(group) and not unclassified_rows(self.df).empty)
+
+    def _begin(self,path,title,crumb,tip):
+        self.path=path; self.title.setText(title); self.crumb.setText(crumb); self.tip.setText(tip); self.list.clear()
+        if self.inline: self.back.setVisible(bool(path))
+        else: self.back.setEnabled(bool(path))
+        if self.on_path: self.on_path(list(path))
+
+    def _finish(self):
+        self.empty.setVisible(self.list.count()==0); self.list.setVisible(self.list.count()>0)
+        if self.inline: self.list.fit_height()
 
     @staticmethod
     def _counts(d,key):
         """Produtos por `key`; os sem classificação contam uma vez por código (não uma por loja)."""
         return {k:product_count(part) for k,part in d.groupby(key,dropna=False)}
 
-    def _add_card(self,title,subtitle,value,key,kind,accent,emoji):
-        item=QListWidgetItem(); item.setData(Qt.UserRole,(kind,key)); item.setSizeHint(QSize(340,104)); self.list.addItem(item)
-        self.list.setItemWidget(item, ExplorerCard(emoji,title,subtitle,value,accent,flat=True,copyable_subtitle=(kind=="product")))
+    def _add_card(self,title,subtitle,value,key,kind,accent,emoji,tooltip=""):
+        item=QListWidgetItem(); item.setData(Qt.ItemDataRole.UserRole,(kind,key)); item.setSizeHint(QSize(340,104)); self.list.addItem(item)
+        card=ExplorerCard(emoji,title,subtitle,value,accent,flat=True,copyable_subtitle=(kind=="product"))
+        if tooltip: card.setToolTip(tooltip)
+        self.list.setItemWidget(item,card)
+
+    @staticmethod
+    def _summary(d,key):
+        out=d.groupby(key,dropna=False).agg(produtos=("codigo_barras","count"),vendas=("quantidade_vendida","sum"),estoque=("quantidade_estoque","sum"),
+                                            valor_estoque=("valor_estoque","sum"),faturamento=("valor_vendido","sum"),giro=("giro","mean")).reset_index()
+        return out
+
+    @staticmethod
+    def _tip(r):
+        return (f"Estoque: {br_number(r.estoque,0)} un.  •  Valor em estoque: {brl(r.valor_estoque)}\n"
+                f"Vendas: {br_number(r.vendas,0)} un.  •  Faturamento: {brl(r.faturamento)}\n"
+                f"Giro médio: {br_number(r.giro,1)}%\n\nClique para abrir")
 
     def render_groups(self):
-        self.path=[]; self.crumb.setText("Todos os grupos"); self.title.setText("Explorador • Grupos"); self.list.clear(); self.back.setEnabled(False)
-        g=self.df.groupby("grupo",dropna=False).agg(produtos=("codigo_barras","count"),vendas=("quantidade_vendida","sum"),estoque=("quantidade_estoque","sum")).reset_index()
-        counts=self._counts(self.df,"grupo"); g["produtos"]=g["grupo"].map(counts).fillna(g["produtos"]); self._show_excel()
-        g["_ord"] = g["grupo"].map(lambda x: normalize_text(x))
-        g=g.sort_values("_ord",kind="stable")
-        for i,r in g.iterrows():
-            name=str(r.grupo); self._add_card(name,f"{br_number(r.produtos,0)} produtos",f"{br_number(r.vendas,0)} vendas",name,"group",_stable_color(name),"")
+        self._begin([],"Explorar por grupo" if self.inline else "Explorador • Grupos","Todos os grupos",
+                    "Clique num grupo para ver as subclasses e, depois, os produtos.")
+        g=self._summary(self.df,"grupo"); counts=self._counts(self.df,"grupo"); g["produtos"]=g["grupo"].map(counts).fillna(g["produtos"]); self._show_excel()
+        g["_ord"]=g["grupo"].map(lambda x: normalize_text(x)); g=g.sort_values("_ord",kind="stable")
+        for _,r in g.iterrows():
+            name=str(r.grupo)
+            self._add_card(name,f"{br_number(r.produtos,0)} produtos  •  {br_number(r.estoque,0)} em estoque",
+                           f"{br_number(r.vendas,0)} vendas  •  {brl(r.faturamento,0)}",name,"group",_stable_color(name),"",self._tip(r))
+        self._finish()
 
     def render_group(self,g):
-        self.path=[("group",g)]; self.crumb.setText(f"Todos os grupos  ›  {g}"); self.title.setText(f"{g} • Subclasses"); self.list.clear(); self.back.setEnabled(True)
-        d=self.df[self.df.grupo==g]; x=d.groupby("subclasse",dropna=False).agg(produtos=("codigo_barras","count"),vendas=("quantidade_vendida","sum"),estoque=("quantidade_estoque","sum")).reset_index()
+        self._begin([("group",g)],f"{g} • Subclasses",f"Todos os grupos  ›  {g}","Clique numa subclasse para ver os produtos.")
+        d=self.df[self.df.grupo==g]; x=self._summary(d,"subclasse")
         counts=self._counts(d,"subclasse"); x["produtos"]=x["subclasse"].map(counts).fillna(x["produtos"]); self._show_excel(g)
-        x["_nome"] = x["subclasse"].map(lambda v: "Sem subclasse" if str(v)=="nan" else str(v))
-        x["_ord"] = x["_nome"].map(normalize_text); x=x.sort_values("_ord",kind="stable")
-        for i,r in x.iterrows():
-            sub=r["_nome"]; self._add_card(sub,f"{br_number(r.produtos,0)} produtos",f"{br_number(r.vendas,0)} vendas  •  {br_number(r.estoque,0)} em estoque",sub,"sub",_stable_color(sub),"")
+        x["_nome"]=x["subclasse"].map(lambda v: "Sem subclasse" if str(v)=="nan" else str(v))
+        x["_ord"]=x["_nome"].map(normalize_text); x=x.sort_values("_ord",kind="stable")
+        for _,r in x.iterrows():
+            sub=r["_nome"]
+            self._add_card(sub,f"{br_number(r.produtos,0)} produtos  •  {br_number(r.estoque,0)} em estoque",
+                           f"{br_number(r.vendas,0)} vendas  •  {brl(r.faturamento,0)}",sub,"sub",_stable_color(sub),"",self._tip(r))
+        self._finish()
 
     def render_sub(self,g,sub):
-        self.path=[("group",g),("sub",sub)]; self.crumb.setText(f"Todos os grupos  ›  {g}  ›  {sub}"); self.title.setText(f"Produtos • {sub}"); self.list.clear()
+        self._begin([("group",g),("sub",sub)],f"Produtos • {sub}",f"Todos os grupos  ›  {g}  ›  {sub}",
+                    "Clique num produto para ver todos os detalhes  •  Dois cliques no código para copiar.")
         d=self.df[(self.df.grupo==g)&(self.df.subclasse==sub)].copy()
         self._show_excel(g)
         if is_unclassified(g) or is_unclassified(sub):
@@ -101,19 +167,42 @@ class HierarchyExplorer(QDialog):
             for r in merge_by_barcode(d):
                 n=len(r["lojas"]); where=r["loja"] if n<=2 else f"{n} lojas"
                 self._add_card(str(r["descricao"]),f"{r['codigo_barras']}  •  {where}",f"{br_number(r['quantidade_estoque'],0)} em estoque  •  {br_number(r['quantidade_vendida'],0)} vendas",r,"product",_stable_color(str(r["descricao"])),"")
-            return
+            self._finish(); return
         d=sort_products(d)  # código de barras do menor para o maior (P → GG) e lojas na ordem oficial
-        for i,(_,r) in enumerate(d.iterrows()):
+        for _,r in d.iterrows():
             accent=_stable_color(str(r.descricao)); self._add_card(str(r.descricao),f"{r.codigo_barras}  •  {r.loja}",f"{br_number(r.quantidade_vendida,0)} vendas  •  {brl(r.valor_vendido)}",r.to_dict(),"product",accent,"")
+        self._finish()
 
+    def restore(self,path):
+        """Volta ao nível em que o usuário estava, se ele ainda existir com os filtros atuais."""
+        groups=set(self.df.grupo.dropna().astype(str))
+        if path and str(path[0][1]) in groups:
+            g=path[0][1]
+            if len(path)==2 and ((self.df.grupo==g)&(self.df.subclasse==path[1][1])).any(): self.render_sub(g,path[1][1])
+            else: self.render_group(g)
+
+    # ---------- navegação ----------
     def open_item(self,item):
-        kind,key=item.data(Qt.UserRole)
+        kind,key=item.data(Qt.ItemDataRole.UserRole)
         if kind=="group": self.render_group(key)
         elif kind=="sub": self.render_sub(self.path[0][1],key)
         elif kind=="product": ProductModal(key,self).exec()
+
     def go_back(self):
         if len(self.path)==2: self.render_group(self.path[0][1])
         elif len(self.path)==1: self.render_groups()
+
+
+class HierarchyExplorer(QDialog):
+    """O mesmo explorador numa janela própria."""
+
+    def __init__(self, df, start_group=None, parent=None, catalog=None):
+        super().__init__(parent)
+        self.setWindowTitle("Explorador de Produtos • Mix Moda Insights"); self.resize(1180,720)
+        root=QVBoxLayout(self); root.setContentsMargins(12,8,12,12); root.setSpacing(12); install_mac_window_chrome(self,root)
+        self.browser=HierarchyBrowser(df,catalog,start_group,inline=False,parent=self); root.addWidget(self.browser,1)
+        self.list=self.browser.list
+
 
 class DashboardPage(QWidget):
     def __init__(self,df,period,audit,parent=None,on_home=None,alert_store=None,catalog=None):
@@ -305,7 +394,7 @@ class DashboardPage(QWidget):
         charts=QGridLayout(); charts.setSpacing(12)
         for i,k in enumerate(["grupo_valor_3d","grupo_pizza","vendas_3d","rotacao","status","estoque_x_vendas"]): charts.addWidget(self.chart_panel(make_chart(k,d)),i//2,i%2)
         self.body.addLayout(charts)
-        self.body.addWidget(section_header("EXPLORAR POR GRUPO","Clique num grupo para navegar por subclasse e chegar até o produto.")); self.pivot_table(d)
+        self.body.addWidget(self.group_browser(d))
         self.body.addWidget(section_header("PRODUTOS MAIS VENDIDOS",CLICK_HINT)); self.table_section(top_sold(d,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_vendida","valor_vendido","giro"],150,"#2F5BEA")
         self.body.addWidget(section_header("ESTOQUE PARADO  •  DINHEIRO PARADO EM PRODUTO","Produtos com estoque e pouca ou nenhuma venda. "+CLICK_HINT)); self.table_section(stagnant(d,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_estoque","valor_estoque"],150,"#FF9F43")
         self.body.addWidget(section_header("PRODUTOS CRÍTICOS","Produtos com estoque baixo, zerado ou negativo. "+CLICK_HINT)); self.table_section(critical(d,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_estoque","quantidade_vendida","status_estoque"],160,"#E94B5F",critical_mode=True)
@@ -336,21 +425,13 @@ class DashboardPage(QWidget):
         w=QWidget(); w.setObjectName("PanelBody"); l=QVBoxLayout(w); l.setContentsMargins(0,6,0,0); l.setSpacing(8); x=d.groupby("loja",as_index=False).agg(vendas=("quantidade_vendida","sum"),faturamento=("valor_vendido","sum")).sort_values("vendas",ascending=False).head(5)
         for i,(_,r) in enumerate(x.iterrows()): c=RankCard(str(i+1),r.loja,r.vendas,["#2854D9","#16B8C8","#0F9D8A","#7C6FE6","#E85D8A"][i%5],r.faturamento); l.addWidget(c)
         l.addStretch(); return w
-    def pivot_table(self,d):
-        g=d.groupby("grupo",as_index=False).agg(produtos=("codigo_barras","count"),estoque=("quantidade_estoque","sum"),vendas=("quantidade_vendida","sum"),valor_estoque=("valor_estoque","sum"),faturamento=("valor_vendido","sum"),giro=("giro","mean")).sort_values("vendas",ascending=False)
-        counts={k:product_count(part) for k,part in d.groupby("grupo")}; g["produtos"]=g["grupo"].map(counts).fillna(g["produtos"])
-        t=QTableWidget(len(g),7); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setMinimumHeight(max(225, 44 + len(g)*38)); t.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); t.setHorizontalHeaderLabels(["Grupo","Produtos","Estoque","Vendas","Valor estoque","Faturamento","Giro (%)"]); t.verticalHeader().setVisible(False); t.setSelectionBehavior(QTableWidget.SelectRows); t.setAlternatingRowColors(True); t.setSortingEnabled(False); rows=list(g.iterrows()); palette=["#EEF3FF","#E8FBF7","#FFF3E2","#F4EEFF","#FFEAF1"]
-        for i,(_,r) in enumerate(rows):
-            vals=[r.grupo,r.produtos,r.estoque,r.vendas,r.valor_estoque,r.faturamento,r.giro]
-            for j,v in enumerate(vals):
-                if j in (4,5): txt=brl(v)
-                elif j==6: txt=f"{v:.1f}%"
-                elif isinstance(v,float): txt=br_number(v,0)
-                else: txt=str(v)
-                item=QTableWidgetItem(txt); item.setBackground(QColor(palette[i%len(palette)])); item.setForeground(QColor("#17326F")); t.setItem(i,j,item)
-        t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.horizontalHeader().setStretchLastSection(True); t.viewport().setCursor(Qt.CursorShape.PointingHandCursor); t.setToolTip("Clique num grupo para abrir"); t.cellClicked.connect(lambda rr,cc,rs=rows:self.open_group(rs,rr)); self.body.addWidget(t)
-    def open_group(self,rows,r):
-        if 0<=r<len(rows): HierarchyExplorer(self.current_df(),str(rows[r][1]["grupo"]),self,self.catalog).exec()
+    def group_browser(self,d):
+        """Explorar por grupo direto no dashboard, em cards (Grupo › Subclasse › Produto)."""
+        f=QFrame(); f.setObjectName("Panel"); l=QVBoxLayout(f); l.setContentsMargins(16,14,16,14)
+        saved=list(getattr(self,"_browser_path",[]))  # lido antes: montar a grade já avisa o caminho inicial
+        browser=HierarchyBrowser(d,self.catalog,inline=True,parent=f,on_path=lambda path:setattr(self,"_browser_path",path))
+        browser.restore(saved)  # filtros mudaram: continua no mesmo grupo/subclasse
+        l.addWidget(browser); return f
     def table_section(self,d,cols,height=140,accent="#2F5BEA",critical_mode=False):
         t=QTableWidget(len(d),len(cols)); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setMinimumHeight(max(height, 44 + len(d)*38)); t.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); t.setAlternatingRowColors(True); t.setSortingEnabled(False); t.setHorizontalHeaderLabels([COLUMN_LABELS.get(c,c.replace("_"," ").title()) for c in cols]); t.horizontalHeader().setStretchLastSection(True); t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.verticalHeader().setVisible(False); t.setSelectionBehavior(QTableWidget.SelectRows); rows=list(d.iterrows())
         t.setStyleSheet(f"QTableWidget{{border:1px solid {accent}55;border-radius:14px;gridline-color:#E9EEF5;alternate-background-color:#FAFCFF;}} QHeaderView::section{{background:{accent};color:white;border:none;padding:10px;font-weight:900;}}")
