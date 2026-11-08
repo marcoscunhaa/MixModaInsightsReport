@@ -15,6 +15,16 @@ def app():
     return QApplication.instance() or QApplication([])
 
 
+@pytest.fixture
+def made(app):
+    """Widgets criados no teste são apagados no fim (sem isso o Qt quebra ao fechar o pytest)."""
+    widgets = []
+    yield widgets.append
+    for widget in widgets:
+        widget.deleteLater()
+    app.processEvents()
+
+
 def frame():
     return pd.DataFrame({
         "codigo_barras": ["1", "2", "3"],
@@ -30,10 +40,11 @@ def frame():
     })
 
 
-def test_browser_navigates_and_goes_back(app):
+def test_browser_navigates_and_goes_back(app, made):
     from ui.dashboard_page import HierarchyBrowser
     paths = []
     browser = HierarchyBrowser(frame(), inline=True, on_path=paths.append)
+    made(browser)
     assert browser.list.count() == 2 and browser.back.isHidden()
     browser.open_item(browser.list.item(1))  # grupos em ordem alfabética: VESTUARIO FEMININO
     assert browser.path == [("group", "VESTUARIO FEMININO")] and browser.list.count() == 1
@@ -45,11 +56,13 @@ def test_browser_navigates_and_goes_back(app):
     assert paths[-1] == []
 
 
-def test_dashboard_keeps_group_when_filters_change(app):
+def test_dashboard_keeps_group_when_filters_change(app, made):
     from ui.dashboard_page import HierarchyBrowser
     browser = HierarchyBrowser(frame(), inline=True)
+    made(browser)
     browser.restore([("group", "MIX COSMÉTICOS")])
     assert browser.path == [("group", "MIX COSMÉTICOS")]
     fresh = HierarchyBrowser(frame(), inline=True)
+    made(fresh)
     fresh.restore([("group", "NÃO EXISTE")])  # grupo sumiu com o filtro: fica na lista de grupos
     assert fresh.path == [] and fresh.list.count() == 2
