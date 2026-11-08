@@ -54,7 +54,7 @@ def export_unclassified_excel(parent, df, catalog, open_after=True):
     if not (open_after and QDesktopServices.openUrl(QUrl.fromLocalFile(path))):
         show_message(parent, "information", "Excel gerado",
                      f"Arquivo salvo em:\n{path}\n\nPreencha GRUPO e SUBCLASSE e importe em "
-                     "Explorar estoque › IMPORTAR CLASSIFICAÇÕES.")
+                     "Explorar estoque › Importar planilha de classificação.")
     return path
 
 
@@ -113,7 +113,7 @@ class UnclassifiedDialog(QDialog):
         self.store.addItem("Todas as lojas")
         self.store.addItems(stores)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Buscar produto ou código...")
+        self.search.setPlaceholderText("🔍  Buscar produto ou código...")
         self.search.setClearButtonEnabled(True)
         filters.addWidget(self.store)
         filters.addWidget(self.search, 1)
@@ -137,7 +137,7 @@ class UnclassifiedDialog(QDialog):
         make_barcode_copyable(self.table, 1)
         self.table.cellClicked.connect(self.open_product)
         layout.addWidget(self.table, 1)
-        self.empty = QLabel("Tudo classificado")
+        self.empty = QLabel("✅  Tudo classificado")
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty.setStyleSheet("color:#16836D;font-size:18px;font-weight:900;padding:28px;")
         layout.addWidget(self.empty)
@@ -147,7 +147,7 @@ class UnclassifiedDialog(QDialog):
         self.count = QLabel()
         self.count.setObjectName("muted")
         footer.addWidget(self.count, 1)
-        excel = QPushButton("📊  ABRIR EXCEL PARA CADASTRO")
+        excel = QPushButton("📊  Gerar Excel para cadastro")
         excel.setEnabled(bool(self.products))
         excel.setCursor(Qt.CursorShape.PointingHandCursor)
         excel.setToolTip("Gera um Excel com uma aba por loja, sugestão de grupo/subclasse e colunas para preencher, e abre o arquivo.")
@@ -158,8 +158,9 @@ class UnclassifiedDialog(QDialog):
         )
         excel.clicked.connect(lambda: export_unclassified_excel(self, self.df, self.catalog))
         footer.addWidget(excel)
-        close = QPushButton("FECHAR")
+        close = QPushButton("Fechar")
         close.setObjectName("Ghost")
+        close.setCursor(Qt.CursorShape.PointingHandCursor)
         close.clicked.connect(self.accept)
         footer.addWidget(close)
         root.addLayout(footer)
