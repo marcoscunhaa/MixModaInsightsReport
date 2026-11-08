@@ -58,7 +58,7 @@ Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflo
 ## Explorar estoque (cadastro, edição e exclusão)
 
 - No menu inicial, **EXPLORAR ESTOQUE** abre os produtos do catálogo em cards: **Grupo → Subclasse → Produto**, com busca por descrição ou código.
-- **＋ NOVO PRODUTO** cadastra um produto; dentro de um grupo/subclasse eles já vêm preenchidos.
+- **＋ Novo produto** cadastra um produto; dentro de um grupo/subclasse eles já vêm preenchidos.
 - Clicar num produto abre o formulário para editar código, descrição, grupo, subclasse, situação e em quais lojas ele existe, ou excluir o produto. Quantidades e preços não são editados aqui: vêm das planilhas importadas na análise.
 - Cada alteração é gravada na hora em `data/catalogo_produtos_estoque_geral.json`; a versão anterior fica em `catalogo_produtos_estoque_geral.json.bak`. Os totais do `meta` são recalculados.
 - A descrição de cada loja é preservada quando difere da descrição geral, porque o cruzamento com as vendas usa loja + código + descrição. Ao trocar a descrição geral, só as lojas que usavam a mesma descrição acompanham.
@@ -93,7 +93,15 @@ Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflo
 
 ## Produtos sem classificação
 - Na análise, o mesmo código de barras em várias lojas conta como **1 produto sem classificação** (explorador, tabela de grupos e botão do dashboard). O card do produto soma as lojas e mostra estoque, vendas e preço de cada uma.
-- **📋 SEM CLASSIFICAÇÃO** (dashboard) ou **⬇ EXCEL PARA CADASTRO** (explorador) baixam um Excel com uma aba por loja: código, descrição, estoque, preços e as colunas **GRUPO** e **SUBCLASSE**, em branco para o cliente preencher, com lista suspensa dos grupos e subclasses do catálogo.
-- Preenchido, o arquivo volta por **Explorar estoque › IMPORTAR CLASSIFICAÇÕES**: preencher em uma aba vale para todas as lojas do produto; o mesmo código com classificações diferentes é avisado e fica de fora.
+- **📋 N sem classificação** (dashboard) ou **⬇ Excel para cadastro** (explorador) baixam um Excel com uma aba por loja: código, descrição, estoque, preços e as colunas **GRUPO** e **SUBCLASSE**, em branco para o cliente preencher, com lista suspensa dos grupos e subclasses do catálogo.
+- Preenchido, o arquivo volta por **Explorar estoque › Importar planilha de classificação**: preencher em uma aba vale para todas as lojas do produto; o mesmo código com classificações diferentes é avisado e fica de fora.
 - A importação também aceita uma planilha montada à mão: basta ter, em qualquer aba, um cabeçalho (nas 15 primeiras linhas) com **Código de barras**, **Grupo** e **Subclasse**. **Descrição**, **Loja**, **Estoque** e **Preço de venda** são opcionais; sem a coluna Loja, o nome da aba é usado quando for uma loja da rede. Código que já está no catálogo tem a classificação atualizada; código novo é cadastrado.
 - Depois de qualquer mudança no catálogo (cadastro, edição ou importação), o dashboard aberto e a **última análise** passam a usar a classificação nova, sem precisar gerar a análise de novo.
+
+## Visual e navegação
+
+- Todas as telas seguem o mesmo desenho: **voltar no canto esquerdo**, título e "onde estou" ao lado, e as ações da tela à direita, com a principal por último (azul ou verde). Ações secundárias são brancas com borda; excluir é sempre vermelho.
+- **Nova análise** em 3 passos numerados: período → lojas e planilhas → gerar. Cada planilha escolhida fica verde com ✓, o rodapé diz o que ainda falta e "Remover esta loja" só aparece quando há mais de uma loja.
+- **Dashboard**: o título mostra o período e as lojas da análise; o painel de filtros tem **↺ Limpar filtros** (aparece quando algum filtro está ativo); cada seção tem uma frase dizendo o que dá para fazer; **Explorar por grupo** fica em cards no próprio dashboard (Grupo › Subclasse › Produto, com ← Voltar, e mantém o grupo aberto ao mudar os filtros; estoque, valor, faturamento e giro aparecem no card e ao passar o mouse); as tabelas têm títulos em português e abrem o card do produto com um clique (no código, dois cliques continuam copiando).
+- **Explorar estoque**: busca em linha própria e cards com borda única. As listas e modais têm botão **Fechar**, além dos botões da barra de título.
+- **Cores da Mix Moda** (amarelo e vermelho da fachada) onde a marca aparece: nome "MIX MODA" em vermelho com a faixa amarelo → vermelho na tela inicial, cabeçalho do dashboard em cartão com ícone em degradê da marca e lojas em pílulas, card "Continue de onde parou" e "Mix Moda" em amarelo na barra de título das janelas. Nos arquivos exportados: o PDF tem banner azul-marinho com "MIX MODA" em amarelo, fio vermelho e linha amarela, faixa amarelo/vermelho no topo de cada página e rodapé com a marca em vermelho; os Excel (reposição e sem classificação) têm o título "MIX MODA • …" em faixa vermelha com fio amarelo e cabeçalhos das colunas em azul-marinho. O amarelo não é usado em texto sobre fundo branco (sem contraste): entra em faixas, degradês e detalhes. O resto do app mantém o azul.

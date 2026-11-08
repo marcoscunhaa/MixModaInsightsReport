@@ -34,6 +34,9 @@ MUTED = colors.HexColor("#718097")
 PALE = colors.HexColor("#F3F6FB")
 LINE = colors.HexColor("#E1E7F0")
 WHITE = colors.white
+# Cores da marca Mix Moda (fachada amarela, letreiro vermelho).
+BRAND_RED = colors.HexColor("#D3203B")
+BRAND_YELLOW = colors.HexColor("#FFC20E")
 
 
 def _stylebook():
@@ -199,7 +202,8 @@ def _card(label, value, accent, styles):
 
 def _banner(period, loja, styles, width):
     title = _paragraph("RELATÓRIO EXECUTIVO<br/><font size='11'>Estoque e vendas</font>", styles["title"], markup=True)
-    brand = _paragraph("MIX MODA  /  INSIGHTS", styles["brand"])
+    # "MIX MODA" no amarelo da marca: sobre o azul-marinho do banner o contraste é alto.
+    brand = _paragraph("<font color='#FFC20E'>MIX MODA</font>&nbsp;&nbsp;/&nbsp;&nbsp;INSIGHTS", styles["brand"], markup=True)
     metadata = _paragraph(
         f"PERÍODO<br/><b>{escape(period[0].strftime('%d/%m/%Y'))} a {escape(period[1].strftime('%d/%m/%Y'))}</b>"
         f"<br/><br/>VISÃO<br/><b>{escape(str(loja))}</b>", styles["meta"], markup=True
@@ -207,7 +211,8 @@ def _banner(period, loja, styles, width):
     table = Table([[ [brand, title], metadata ]], colWidths=[width * 0.69, width * 0.31])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), NAVY),
-        ("LINEBEFORE", (0, 0), (0, 0), 4, GOLD),
+        ("LINEBEFORE", (0, 0), (0, 0), 5, BRAND_RED),
+        ("LINEBELOW", (0, 0), (-1, 0), 3, BRAND_YELLOW),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("LEFTPADDING", (0, 0), (0, 0), 16),
         ("RIGHTPADDING", (0, 0), (0, 0), 8),
@@ -577,14 +582,20 @@ def export_dashboard_pdf(path, df, period, loja, audit):
 
     def page_chrome(canvas, document):
         canvas.saveState()
-        canvas.setFillColor(NAVY)
-        canvas.rect(0, landscape(A4)[1] - 3, landscape(A4)[0], 3, fill=1, stroke=0)
+        # Faixa da marca no topo de cada página: amarelo com um fio vermelho embaixo.
+        top = landscape(A4)[1]
+        canvas.setFillColor(BRAND_YELLOW)
+        canvas.rect(0, top - 3, landscape(A4)[0], 3, fill=1, stroke=0)
+        canvas.setFillColor(BRAND_RED)
+        canvas.rect(0, top - 4.2, landscape(A4)[0], 1.2, fill=1, stroke=0)
         canvas.setStrokeColor(LINE)
         canvas.setLineWidth(0.5)
         canvas.line(margin, 11 * mm, page_width - margin, 11 * mm)
-        canvas.setFillColor(MUTED)
         canvas.setFont("Helvetica-Bold", 7)
-        canvas.drawString(margin, 7 * mm, "MIX MODA  |  RELATÓRIO EXECUTIVO")
+        canvas.setFillColor(BRAND_RED)
+        canvas.drawString(margin, 7 * mm, "MIX MODA")
+        canvas.setFillColor(MUTED)
+        canvas.drawString(margin + canvas.stringWidth("MIX MODA", "Helvetica-Bold", 7), 7 * mm, "  |  RELATÓRIO EXECUTIVO")
         canvas.setFont("Helvetica", 7)
         canvas.drawRightString(page_width - margin, 7 * mm, f"{document.page}")
         canvas.restoreState()

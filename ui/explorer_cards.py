@@ -13,17 +13,28 @@ def _stable_color(text):
 
 
 class ExplorerCard(QFrame):
+    """Card clicável da grade (grupo, subclasse ou produto).
+
+    O card desenha a própria borda arredondada, a faixa colorida à esquerda e o
+    hover; a lista que o contém (objectName "CardGrid") não desenha nada por trás.
+    `flat` foi mantido por compatibilidade: o visual é o mesmo nos dois casos.
+    """
+
     def __init__(self, emoji, title, subtitle, value, accent, parent=None, flat=True, copyable_subtitle=False):
         super().__init__(parent); self.setObjectName("ExplorerCard")
-        border="none" if flat else "1px solid #DCE6F3"; radius="0px" if flat else "18px"
-        self.setStyleSheet(f"QFrame#ExplorerCard{{background:#FFFFFF;border:{border};border-left:6px solid {accent};border-radius:{radius};}} QFrame#ExplorerCard:hover{{background:#F7FAFF;}}")
-        l=QHBoxLayout(self); l.setContentsMargins(13,14,14,14); l.setSpacing(12)
+        self.setToolTip("Clique para abrir")
+        self.setStyleSheet(
+            f"QFrame#ExplorerCard{{background:#FFFFFF;border:1px solid #DCE6F3;border-left:5px solid {accent};border-radius:14px;}}"
+            f"QFrame#ExplorerCard:hover{{background:#F7FAFF;border:1px solid {accent};border-left:5px solid {accent};}}"
+            "QFrame#ExplorerCard QLabel{background:transparent;border:none;}"
+        )
+        l=QHBoxLayout(self); l.setContentsMargins(16,12,12,12); l.setSpacing(12)
         text=QVBoxLayout(); text.setSpacing(3)
         name=QLabel(str(title)); name.setStyleSheet("font-size:13px;font-weight:900;color:#142B52;"); name.setWordWrap(True); text.addWidget(name)
-        sub=QLabel(str(subtitle)); sub.setStyleSheet("font-size:10px;font-weight:700;color:#73829A;"); text.addWidget(sub)
+        sub=QLabel(str(subtitle)); sub.setStyleSheet("font-size:11px;font-weight:700;color:#73829A;"); text.addWidget(sub)
         if copyable_subtitle:
             # Subtítulo do card de produto traz o código de barras: dois cliques selecionam, Ctrl+C copia.
             from ui.copyable import make_label_copyable
             make_label_copyable(sub)
-        val=QLabel(str(value)); val.setStyleSheet(f"font-size:10px;font-weight:900;color:{accent};"); text.addWidget(val); l.addLayout(text,1)
-        arrow=QLabel("›"); arrow.setStyleSheet(f"font-size:25px;font-weight:300;color:{accent};"); l.addWidget(arrow)
+        val=QLabel(str(value)); val.setStyleSheet(f"font-size:11px;font-weight:900;color:{accent};"); val.setWordWrap(True); text.addWidget(val); l.addLayout(text,1)
+        arrow=QLabel("›"); arrow.setStyleSheet(f"font-size:26px;font-weight:300;color:{accent};"); l.addWidget(arrow)

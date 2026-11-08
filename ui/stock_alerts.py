@@ -74,6 +74,8 @@ QFrame#card QLineEdit#minimumField { background:#F8FAFD; border:1px solid #DCE4F
     color:#12213D; font-size:16px; font-weight:900; min-height:0; }
 QFrame#card QLineEdit#minimumField:focus { border:1px solid #5675E8; background:#FFFFFF; }
 QLabel#footNote { color:#7A879D; font-size:11px; }
+QPushButton#closeRules { background:#FFFFFF; color:#40516E; border:1px solid #D8E2F0; border-radius:12px; padding:10px 22px; font-weight:800; }
+QPushButton#closeRules:hover { background:#EEF4FF; color:#2854D9; border-color:#AFC2FF; }
 QFrame#card QPushButton#stepper { background:#EEF2FF; color:#2F5BEA; border:none; border-radius:12px; font-size:18px; font-weight:900;
     padding:0; min-width:40px; max-width:40px; min-height:40px; max-height:40px; }
 QFrame#card QPushButton#stepper:hover { background:#DCE6FF; }
@@ -354,6 +356,7 @@ class StockAlertRulesDialog(QDialog):
         layout.setSpacing(10)
         heading = QHBoxLayout()
         title = QLabel("📋  Suas regras")
+        title.setToolTip("Use ✏️ para editar e 🗑️ para excluir uma regra")
         title.setObjectName("cardTitle")
         heading.addWidget(title)
         heading.addStretch()
@@ -372,8 +375,10 @@ class StockAlertRulesDialog(QDialog):
         header = self.rules_table.horizontalHeader()
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for column in (1, 2, 3):
-            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        # Larguras fixas: as pílulas de loja/limite não ficam cortadas ("Todas as loja…").
+        for column, width in ((1, 160), (2, 96), (3, 92)):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
+            self.rules_table.setColumnWidth(column, width)
         layout.addWidget(self.rules_table, 1)
         self.empty_rules = QLabel("🔕\n\nNenhuma regra ainda.\nCrie a primeira ao lado para acompanhar um produto.")
         self.empty_rules.setObjectName("emptyRules")
@@ -394,6 +399,12 @@ class StockAlertRulesDialog(QDialog):
         note.setObjectName("footNote")
         note.setWordWrap(True)
         row.addWidget(note, 1)
+        close = QPushButton("Fechar")
+        close.setObjectName("closeRules")
+        close.setCursor(Qt.CursorShape.PointingHandCursor)
+        close.setToolTip("Fechar e voltar (as regras já ficam salvas)")
+        close.clicked.connect(lambda checked=False: self.accept())
+        row.addWidget(close)
         return row
 
     def refresh_products(self, text):
@@ -511,6 +522,7 @@ class StockAlertRulesDialog(QDialog):
             product_box.setSpacing(1)
             name = QLabel(str(rule.get("descricao", "")))
             name.setObjectName("ruleName")
+            name.setToolTip(str(rule.get("descricao", "")))
             product_box.addWidget(name)
             code = QLabel(str(rule.get("codigo_barras", "")))
             code.setObjectName("ruleCode")
@@ -665,7 +677,7 @@ class StockAlertsDialog(QDialog):
         layout.addWidget(table, 1)
         if not alerts:
             table.hide()
-            empty = QLabel("Tudo em dia")
+            empty = QLabel("✅  Tudo em dia")
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty.setStyleSheet("color:#16836D;font-size:18px;font-weight:900;padding:28px;")
             detail = QLabel("Nenhum produto atingiu a faixa de estoque definida nas suas regras.")
@@ -680,7 +692,8 @@ class StockAlertsDialog(QDialog):
         count = QLabel(f"{len(alerts)} produto(s) dentro da faixa configurada")
         count.setObjectName("muted")
         footer.addWidget(count, 1)
-        export_button = QPushButton("EXPORTAR EXCEL")
+        export_button = QPushButton("📊  Exportar para Excel")
+        export_button.setToolTip("Salva a lista de reposição numa planilha")
         export_button.setEnabled(bool(self.alerts))
         export_button.setCursor(Qt.CursorShape.PointingHandCursor)
         export_button.setStyleSheet(
@@ -691,8 +704,9 @@ class StockAlertsDialog(QDialog):
         )
         export_button.clicked.connect(self.export_excel)
         footer.addWidget(export_button)
-        close = QPushButton("FECHAR")
+        close = QPushButton("Fechar")
         close.setObjectName("Ghost")
+        close.setCursor(Qt.CursorShape.PointingHandCursor)
         close.clicked.connect(self.accept)
         footer.addWidget(close)
         root.addLayout(footer)

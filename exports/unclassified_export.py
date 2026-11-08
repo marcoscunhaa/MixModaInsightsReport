@@ -3,7 +3,7 @@
 Cada aba traz o que é preciso para cadastrar: código, descrição, estoque, preços,
 as colunas GRUPO e SUBCLASSE a preencher pelo cliente (com
 lista suspensa). O mesmo arquivo, preenchido, volta para o app em
-Explorar estoque › Importar classificações.
+Explorar estoque › Importar planilha de classificação.
 """
 from pathlib import Path
 
@@ -15,7 +15,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 from core.stores import order_stores, store_sort_key
 from core.unclassified import is_unclassified, merge_by_barcode, unclassified_rows
-from exports.stock_alerts_export import _sheet_name
+from exports.stock_alerts_export import BRAND_YELLOW, _sheet_name, brand_title_row
 from utils.normalization import barcode_sort_key, normalize_barcode, normalize_text, to_number
 
 NAVY = "14284B"
@@ -69,19 +69,21 @@ def _guide_sheet(workbook, total, stores):
     sheet.sheet_view.showGridLines = False
     sheet.column_dimensions["A"].width = 110
     lines = [
-        ("CADASTRO DE PRODUTOS SEM CLASSIFICAÇÃO", Font(name="Aptos Display", size=16, bold=True, color=WHITE), NAVY),
+        ("MIX MODA  •  CADASTRO DE PRODUTOS SEM CLASSIFICAÇÃO", Font(name="Aptos Display", size=16, bold=True, color=WHITE), "brand"),
         (f"{total} produto(s) sem classificação • lojas: {', '.join(stores)}", Font(name="Aptos", size=11, bold=True, color=INK), None),
         ("", None, None),
         ("1. Em cada aba de loja, preencha as colunas laranja GRUPO e SUBCLASSE (há lista suspensa; a subclasse acompanha o grupo).", None, None),
         ("2. Um produto em várias lojas aparece em cada aba, mas é um produto só: preencher em uma aba já vale para todas.", None, None),
-        ("3. Salve o arquivo e, no app, abra Explorar estoque › IMPORTAR CLASSIFICAÇÕES.", None, None),
+        ("3. Salve o arquivo e, no app, abra Explorar estoque › Importar planilha de classificação.", None, None),
         ("4. Linhas com GRUPO ou SUBCLASSE vazios são ignoradas. Pode importar aos poucos.", None, None),
     ]
     for i, (text, font, fill) in enumerate(lines, 1):
         cell = sheet.cell(i, 1, text)
         cell.font = font or Font(name="Aptos", size=11, color=INK)
         cell.alignment = Alignment(vertical="center", wrap_text=True)
-        if fill:
+        if fill == "brand":
+            brand_title_row(sheet, i, 1)
+        elif fill:
             cell.fill = PatternFill("solid", fgColor=fill)
         sheet.row_dimensions[i].height = 30 if i == 1 else 22
 
@@ -114,22 +116,22 @@ def export_unclassified_xlsx(path, df, catalog=None):
         last_col = len(HEADERS)
         letter = get_column_letter(last_col)
         sheet.merge_cells(f"A1:{letter}1")
-        sheet["A1"] = f"PRODUTOS SEM CLASSIFICAÇÃO  •  {store}  •  {len(lines)} produto(s)"
+        sheet["A1"] = f"MIX MODA  •  PRODUTOS SEM CLASSIFICAÇÃO  •  {store}  •  {len(lines)} produto(s)"
         sheet["A1"].font = Font(name="Aptos Display", size=15, bold=True, color=WHITE)
-        sheet["A1"].fill = PatternFill("solid", fgColor=NAVY)
+        brand_title_row(sheet, 1, last_col)
         sheet["A1"].alignment = Alignment(vertical="center")
         sheet.row_dimensions[1].height = 30
         sheet.merge_cells(f"A2:{letter}2")
-        sheet["A2"] = "Preencha GRUPO e SUBCLASSE (colunas laranja) e importe em Explorar estoque › Importar classificações."
+        sheet["A2"] = "Preencha GRUPO e SUBCLASSE (colunas laranja) e importe em Explorar estoque › Importar planilha de classificação."
         sheet["A2"].font = Font(name="Aptos", size=10, italic=True, color=MUTED)
 
         for c, title in enumerate(HEADERS, 1):
             cell = sheet.cell(HEADER_ROW, c, title)
             fill_me = title in ("GRUPO", "SUBCLASSE")
             cell.font = Font(name="Aptos", size=10, bold=True, color=WHITE)
-            cell.fill = PatternFill("solid", fgColor=ORANGE if fill_me else BLUE)
+            cell.fill = PatternFill("solid", fgColor=ORANGE if fill_me else NAVY)
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            cell.border = Border(bottom=Side(style="medium", color=NAVY))
+            cell.border = Border(bottom=Side(style="medium", color=BRAND_YELLOW))
         sheet.row_dimensions[HEADER_ROW].height = 30
 
         for r, (product, entry) in enumerate(lines, HEADER_ROW + 1):

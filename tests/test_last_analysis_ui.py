@@ -22,7 +22,9 @@ def app():
 
 
 def frame():
+    # Com grupo/subclasse, como toda análise real: abrir a análise salva reaplica o catálogo.
     return pd.DataFrame({"codigo_barras": ["1"], "descricao": ["A"], "loja": ["Pedras"],
+                         "grupo": ["SEM CLASSIFICAÇÃO"], "subclasse": ["SEM CLASSIFICAÇÃO"],
                          "quantidade_vendida": [3], "valor_vendido": [90.0], "valor_estoque": [10.0]})
 
 

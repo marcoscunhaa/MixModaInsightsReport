@@ -21,6 +21,9 @@ MUTED = "718097"
 GREEN = "E7F5EE"
 GREEN_INK = "18794E"
 LINE = "DCE4EF"
+# Cores da marca Mix Moda para o título das planilhas.
+BRAND_RED = "D3203B"
+BRAND_YELLOW = "FFC20E"
 CHECK_PENDING = "☐ Pendente"
 CHECK_DONE = "☑ Separado"
 
@@ -38,6 +41,18 @@ def _sheet_name(store, used):
     return candidate
 
 
+def brand_title_row(sheet, row, last_col):
+    """Linha de título com as cores da Mix Moda: fundo vermelho e fio amarelo embaixo.
+
+    Pinta cada célula da faixa mesclada (o Excel mostra o fundo da primeira, o
+    LibreOffice olha todas) para a borda amarela aparecer inteira.
+    """
+    for col in range(1, last_col + 1):
+        cell = sheet.cell(row, col)
+        cell.fill = PatternFill("solid", fgColor=BRAND_RED)
+        cell.border = Border(bottom=Side(style="thick", color=BRAND_YELLOW))
+
+
 def export_stock_alerts_xlsx(path, alerts):
     """Write one sortable, checkable worksheet per store with active alerts."""
     grouped = defaultdict(list)
@@ -53,9 +68,9 @@ def export_stock_alerts_xlsx(path, alerts):
         sheet = workbook.create_sheet(_sheet_name(store, used_names))
         sheet.sheet_view.showGridLines = False
         sheet.merge_cells("A1:G1")
-        sheet["A1"] = f"REPOSIÇÃO DE ESTOQUE  •  {store}"
+        sheet["A1"] = f"MIX MODA  •  REPOSIÇÃO DE ESTOQUE  •  {store}"
         sheet["A1"].font = Font(name="Aptos Display", size=16, bold=True, color=WHITE)
-        sheet["A1"].fill = PatternFill("solid", fgColor=NAVY)
+        brand_title_row(sheet, 1, 7)
         sheet["A1"].alignment = Alignment(vertical="center")
         sheet.row_dimensions[1].height = 32
 
@@ -73,9 +88,9 @@ def export_stock_alerts_xlsx(path, alerts):
         for column, title in enumerate(headers, 1):
             cell = sheet.cell(header_row, column, title)
             cell.font = Font(name="Aptos", size=10, bold=True, color=WHITE)
-            cell.fill = PatternFill("solid", fgColor=BLUE)
+            cell.fill = PatternFill("solid", fgColor=NAVY)
             cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.border = Border(bottom=Side(style="medium", color=NAVY))
+            cell.border = Border(bottom=Side(style="medium", color=BRAND_YELLOW))
         sheet.row_dimensions[header_row].height = 26
 
         # Código de barras do menor para o maior: a grade de tamanhos fica junta (P → GG).
