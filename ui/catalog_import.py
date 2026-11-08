@@ -1,6 +1,6 @@
 """Importar cadastro: lê um Excel e grava grupo/subclasse no catálogo.
 
-Usado pelo botão IMPORTAR CLASSIFICAÇÕES do Explorar estoque. Aceita o Excel
+Usado pelo botão "Importar planilha de classificação" do Explorar estoque. Aceita o Excel
 de produtos sem classificação gerado pelo app ou uma planilha com colunas
 equivalentes (código, descrição, grupo, subclasse, loja, estoque, preço).
 """
