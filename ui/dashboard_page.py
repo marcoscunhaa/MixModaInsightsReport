@@ -248,8 +248,8 @@ class DashboardPage(QWidget):
         self.unclassified_button.clicked.connect(lambda: UnclassifiedDialog(self.current_df(),self.catalog,self).exec()); head.addWidget(self.unclassified_button,0,Qt.AlignmentFlag.AlignVCenter)
         self.inventory_button=button("📦  Excel do estoque","Secondary",
             "Baixa o estoque completo (todas as lojas, sem os filtros da tela):\n"
-            "resumo, visão Grupo › Subclasse › Produto que abre e fecha, aba geral e uma aba por loja,\n"
-            "com busca e filtros por código, nome, loja, grupo e subclasse.",self.export_inventory)
+            "resumo, tabela dinâmica Grupo › Subclasse › Produto por loja, aba geral e uma aba por loja,\n"
+            "com filtros por código, nome, loja, grupo e subclasse.",self.export_inventory)
         head.addWidget(self.inventory_button,0,Qt.AlignmentFlag.AlignVCenter)
         pdf=button("📄  Exportar PDF","Primary","Gera um relatório em PDF com o que está filtrado na tela.",self.export_pdf); head.addWidget(pdf,0,Qt.AlignmentFlag.AlignVCenter); root.addWidget(hero)
         filters=QFrame(); filters.setObjectName("Panel"); fbox=QVBoxLayout(filters); fbox.setContentsMargins(16,12,16,12); fbox.setSpacing(10)

@@ -222,4 +222,4 @@ def test_inventory_excel_exports_the_whole_stock_ignoring_screen_filters(app, ch
     page.search.setText("cueca")                       # filtro da tela não reduz o Excel
     assert page.export_inventory() == str(target)
     general = load_workbook(target)["Geral"]
-    assert {general.cell(r, 3).value for r in (6, 7)} == {"CONJUNTO RENDA P", "CUECA BOXER M"}
+    assert {general.cell(r, 3).value for r in (4, 5)} == {"CONJUNTO RENDA P", "CUECA BOXER M"}

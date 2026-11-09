@@ -1,110 +1,117 @@
-"""Excel "Estoque completo": resumo, visão Grupo › Subclasse › Produto, aba geral e uma aba por loja.
+"""Excel "Estoque completo": resumo, tabela dinâmica, aba geral e uma aba por loja.
 
 - **Resumo**: números da rede, tabela por loja e por grupo (com atalhos para as abas).
-- **Por grupo**: funciona como uma tabela dinâmica. Abre fechada nos grupos; o ＋ na
-  margem (ou os botões 1 · 2 · 3) abre as subclasses e depois os produtos, com o
-  estoque de cada loja em colunas.
-- **Geral** e uma aba por loja: tabela do Excel com filtro em cada coluna, campo
-  🔎 Buscar que destaca as linhas encontradas e contadores que acompanham o filtro.
+- **Tabela dinâmica**: tabela dinâmica de verdade (Excel, WPS e LibreOffice), com
+  Grupo › Subclasse › Produto nas linhas e as lojas nas colunas. Abre fechada nos
+  grupos: o ⊞ ao lado do grupo (ou dois cliques no nome) abre as subclasses, e a
+  subclasse abre os produtos. A fonte é a aba oculta **Dados**.
+- **Geral** e uma aba por loja: tabela do Excel com filtro em cada coluna.
 
-Os valores são escritos prontos (sem fórmula), exceto os contadores e o destaque da
-busca, que precisam reagir ao que o usuário faz no Excel.
+Visual nas cores da Mix Moda: faixa vermelha com fio amarelo, cabeçalhos amarelos e
+linhas alternadas em creme. Fonte Arial, que existe no Excel, no WPS e no LibreOffice.
 """
-from collections import Counter
 from datetime import datetime
 from pathlib import Path
 import re
+from xml.sax.saxutils import quoteattr
 
+from lxml import etree
 from openpyxl import Workbook
 from openpyxl.formatting.rule import DataBarRule, FormulaRule
+from openpyxl.pivot.cache import CacheDefinition
+from openpyxl.pivot.record import RecordList
+from openpyxl.pivot.table import TableDefinition
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter, quote_sheetname
-from openpyxl.worksheet.datavalidation import DataValidation
-from openpyxl.worksheet.properties import Outline
 from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.writer.theme import theme_xml
 
-from core.inventory import (
-    PRICE_CATALOG, PRICE_ESTIMATED, PRICE_SALES, PRICE_SYSTEM, inventory_rows,
-)
+from core.inventory import PRICE_CATALOG, PRICE_ESTIMATED, PRICE_SALES, PRICE_SYSTEM, inventory_rows
 from core.stores import order_stores
 from exports.stock_alerts_export import BRAND_RED, BRAND_YELLOW, _sheet_name
-from utils.normalization import barcode_sort_key, normalize_text
+from utils.normalization import normalize_text
 
-NAVY = "14284B"
-NAVY_SOFT = "1F3A68"
-BLUE = "2854D9"
-INK = "233451"
-MUTED = "718097"
-LINE = "DCE4EF"
-PALE = "F3F6FB"
-GROUP_FILL = "DCE6F5"
-GROUP_LINE = "B8C8E6"
-SUB_FILL = "F4F7FC"
+# Paleta Mix Moda (vermelho e amarelo da fachada) com neutros quentes.
+RED = BRAND_RED            # D3203B
+RED_DARK = "9E1830"
+YELLOW = BRAND_YELLOW      # FFC20E
+YELLOW_SOFT = "FFE7A1"
 CREAM = "FFF8E7"
-HIGHLIGHT = "FFE89A"
+BAND = "FFFBF1"
+INK = "2E2724"
+MUTED = "7D716A"
+LINE = "EFE3CB"
 WHITE = "FFFFFF"
 
-FONT = "Aptos"
-FONT_DISPLAY = "Aptos Display"
+FONT = "Arial"
 MONEY = '"R$" #,##0.00'
 UNITS = '#,##0;[Red]-#,##0;0'
 SUMMARY_SHEET = "Resumo"
-GROUP_SHEET = "Por grupo"
+PIVOT_SHEET = "Tabela dinâmica"
 GENERAL_SHEET = "Geral"
+DATA_SHEET = "Dados"
+NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 
-# Tabela das abas Geral e por loja.
-HEADER_ROW = 5
-TABLE_HEADERS = [
-    ("Código de barras", 19), ("Loja", 17), ("Descrição do produto", 46), ("Grupo", 24),
-    ("Subclasse", 24), ("Estoque", 11), ("Valor de venda", 15), ("Valor em estoque", 17),
-    ("Origem do preço", 19),
+# Abas Geral e por loja.
+HEADER_ROW = 3
+TABLE_COLUMNS = [
+    ("codigo_barras", "Código de barras", 19), ("loja", "Loja", 17),
+    ("descricao", "Descrição do produto", 46), ("grupo", "Grupo", 25), ("subclasse", "Subclasse", 25),
+    ("estoque", "Estoque", 11), ("preco_venda", "Valor unitário", 15), ("valor_total", "Valor total em estoque", 19),
 ]
-TABLE_KEYS = ["codigo_barras", "loja", "descricao", "grupo", "subclasse",
-              "estoque", "preco_venda", "valor_total", "origem_preco"]
 
-_thin = Side(style="thin", color=LINE)
+# Fonte da tabela dinâmica (aba Dados).
+DATA_COLUMNS = ["Grupo", "Subclasse", "Produto", "Loja", "Estoque", "Valor unitário", "Valor total em estoque"]
+PIVOT_TOP = 4
+
 _hair = Side(style="hair", color=LINE)
 
 
-def _font(size=10, bold=False, color=INK, italic=False, display=False):
-    return Font(name=FONT_DISPLAY if display else FONT, size=size, bold=bold, color=color, italic=italic)
+def _font(size=10, bold=False, color=INK, italic=False):
+    return Font(name=FONT, size=size, bold=bold, color=color, italic=italic)
 
 
 def _fill(color):
     return PatternFill("solid", fgColor=color)
 
 
+def _brand_theme():
+    """Tema com as cores da marca: o estilo da tabela dinâmica (destaque 1) sai vermelho."""
+    theme = re.sub(r"(<a:accent1>\s*<a:srgbClr val=\")[0-9A-F]{6}", rf"\g<1>{RED}", theme_xml)
+    theme = re.sub(r"(<a:accent2>\s*<a:srgbClr val=\")[0-9A-F]{6}", rf"\g<1>{YELLOW}", theme)
+    theme = re.sub(r'<a:latin typeface="(Cambria|Calibri)"', f'<a:latin typeface="{FONT}"', theme)
+    return theme.encode("utf-8")
+
+
 def _title(sheet, text, subtitle, last_col, back_link=True):
-    """Faixa da marca (vermelho com fio amarelo) e uma linha de orientação embaixo."""
-    letter = get_column_letter(last_col)
-    sheet.merge_cells(f"A1:{letter}1")
-    sheet["A1"] = text
-    sheet["A1"].font = _font(16, True, WHITE, display=True)
-    sheet["A1"].alignment = Alignment(vertical="center", indent=1)
+    """Faixa vermelha com fio amarelo e uma linha de orientação embaixo."""
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_col)
+    cell = sheet.cell(1, 1, text)
+    cell.font = _font(15, True, WHITE)
+    cell.alignment = Alignment(vertical="center", indent=1)
     for col in range(1, last_col + 1):
-        cell = sheet.cell(1, col)
-        cell.fill = _fill(BRAND_RED)
-        cell.border = Border(bottom=Side(style="thick", color=BRAND_YELLOW))
-    sheet.row_dimensions[1].height = 36
+        sheet.cell(1, col).fill = _fill(RED)
+        sheet.cell(1, col).border = Border(bottom=Side(style="thick", color=YELLOW))
+    sheet.row_dimensions[1].height = 34
     end = last_col - 1 if back_link and last_col > 2 else last_col
-    sheet.merge_cells(f"A2:{get_column_letter(end)}2")
-    sheet["A2"] = subtitle
-    sheet["A2"].font = _font(10, color=MUTED, italic=True)
-    sheet["A2"].alignment = Alignment(vertical="center", indent=1, wrap_text=True)
-    sheet.row_dimensions[2].height = 30
+    sheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=end)
+    cell = sheet.cell(2, 1, subtitle)
+    cell.font = _font(9, color=MUTED, italic=True)
+    cell.alignment = Alignment(vertical="center", indent=1, wrap_text=True)
+    sheet.row_dimensions[2].height = 26
     if back_link and last_col > 2:
         link = sheet.cell(2, last_col, "↩ Resumo")
         link.hyperlink = f"#{quote_sheetname(SUMMARY_SHEET)}!A1"
-        link.font = Font(name=FONT, size=10, bold=True, color=BLUE, underline="single")
+        link.font = Font(name=FONT, size=9, bold=True, color=RED, underline="single")
         link.alignment = Alignment(horizontal="right", vertical="center")
 
 
 def _header_cell(cell, text, align="center"):
     cell.value = text
-    cell.font = _font(10, True, WHITE)
-    cell.fill = _fill(NAVY)
+    cell.font = _font(10, True, RED_DARK)
+    cell.fill = _fill(YELLOW)
     cell.alignment = Alignment(horizontal=align, vertical="center", wrap_text=True, indent=1 if align == "left" else 0)
-    cell.border = Border(bottom=Side(style="medium", color=BRAND_YELLOW))
+    cell.border = Border(bottom=Side(style="medium", color=RED))
 
 
 def _page_setup(sheet, title_rows):
@@ -120,88 +127,40 @@ def _page_setup(sheet, title_rows):
 
 def _table_name(label, used):
     base = re.sub(r"[^A-Za-z0-9]+", "_", normalize_text(label)).strip("_").title() or "Loja"
-    name = f"Estoque_{base}"
-    candidate, n = name, 2
+    name, n = f"Estoque_{base}", 2
+    candidate = name
     while candidate.lower() in used:
         candidate, n = f"{name}_{n}", n + 1
     used.add(candidate.lower())
     return candidate
 
 
-def _price_text(prices):
-    """Um preço: o número. Preços diferentes entre lojas: a faixa, em texto."""
-    values = sorted({round(p, 2) for p in prices if p > 0})
-    if not values:
-        return None
-    if len(values) == 1:
-        return values[0]
-    br = lambda v: f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"R$ {br(values[0])} – {br(values[-1])}"
-
-
 # --------------------------------------------------------------------------- Geral / lojas
 
 def _write_table_sheet(sheet, rows, title, subtitle, table_name):
-    last_col = len(TABLE_HEADERS)
+    last_col = len(TABLE_COLUMNS)
     _title(sheet, title, subtitle, last_col)
     sheet.sheet_view.showGridLines = False
     first, last = HEADER_ROW + 1, HEADER_ROW + max(len(rows), 1)
-
-    # Linha de busca e contadores que acompanham o filtro.
-    label = sheet.cell(3, 1, "🔎  BUSCAR")
-    label.font = _font(10, True, NAVY)
-    label.alignment = Alignment(horizontal="right", vertical="center", indent=1)
-    sheet.merge_cells("B3:D3")
-    for col in range(2, 5):
-        box = sheet.cell(3, col)
-        box.fill = _fill(CREAM)
-        box.border = Border(top=Side(style="medium", color=BRAND_YELLOW), bottom=Side(style="medium", color=BRAND_YELLOW),
-                            left=Side(style="medium", color=BRAND_YELLOW) if col == 2 else None,
-                            right=Side(style="medium", color=BRAND_YELLOW) if col == 4 else None)
-    search = sheet["B3"]
-    search.font = _font(11, True, INK)
-    search.alignment = Alignment(vertical="center", indent=1)
-    tip = DataValidation(type="textLength", operator="lessThan", formula1="200", allow_blank=True)
-    tip.promptTitle = "Buscar no estoque"
-    tip.prompt = "Digite parte do código, do nome, da loja, do grupo ou da subclasse. As linhas encontradas ficam em amarelo. Apague para limpar."
-    tip.showInputMessage = True
-    sheet.add_data_validation(tip)
-    tip.add("B3")
-    counters = [
-        (5, f"SUBTOTAL(103,A{first}:A{last})", '#,##0" itens visíveis";;"nenhum item visível"'),
-        (6, f"SUBTOTAL(109,F{first}:F{last})", '#,##0" un.";[Red]-#,##0" un.";"0 un."'),
-        (8, f"SUBTOTAL(109,H{first}:H{last})", MONEY),
-    ]
-    for col, formula, fmt in counters:
-        cell = sheet.cell(3, col, f"={formula}")
-        cell.number_format = fmt
-        cell.font = _font(10, True, NAVY)
-        cell.alignment = Alignment(horizontal="right" if col != 5 else "center", vertical="center")
-    sheet.row_dimensions[3].height = 26
-    note = sheet.cell(4, 5, "↑ contadores do que está visível (seguem os filtros)")
-    note.font = _font(8, color=MUTED, italic=True)
-    sheet.row_dimensions[4].height = 16
-
-    for col, (text, width) in enumerate(TABLE_HEADERS, 1):
-        _header_cell(sheet.cell(HEADER_ROW, col), text, "left" if col in (2, 3, 4, 5) else "center")
+    text_keys = ("loja", "descricao", "grupo", "subclasse")
+    for col, (key, text, width) in enumerate(TABLE_COLUMNS, 1):
+        _header_cell(sheet.cell(HEADER_ROW, col), text, "left" if key in text_keys else "center")
         sheet.column_dimensions[get_column_letter(col)].width = width
     sheet.row_dimensions[HEADER_ROW].height = 30
 
     for r, row in enumerate(rows, first):
-        for col, key in enumerate(TABLE_KEYS, 1):
+        for col, (key, _text, _width) in enumerate(TABLE_COLUMNS, 1):
             cell = sheet.cell(r, col, row[key])
-            cell.font = _font(10, color=MUTED if key == "origem_preco" else INK,
-                              italic=key == "origem_preco", bold=key == "descricao")
-            cell.alignment = Alignment(horizontal="center" if key in ("estoque", "codigo_barras") else
-                                       "right" if key in ("preco_venda", "valor_total") else "left",
-                                       vertical="center", indent=1 if key in ("loja", "descricao", "grupo", "subclasse", "origem_preco") else 0)
+            cell.font = _font(10, bold=key == "descricao")
+            cell.alignment = Alignment(
+                horizontal="center" if key in ("estoque", "codigo_barras") else
+                "right" if key in ("preco_venda", "valor_total") else "left",
+                vertical="center", indent=0 if key in ("estoque", "codigo_barras") else 1)
             cell.border = Border(bottom=_hair)
         sheet.cell(r, 1).number_format = "@"
         sheet.cell(r, 6).number_format = UNITS
         sheet.cell(r, 7).number_format = MONEY
         sheet.cell(r, 8).number_format = MONEY
-        if row["origem_preco"] == PRICE_ESTIMATED:
-            sheet.cell(r, 7).font = _font(10, color="A35A00", italic=True)
 
     if rows:
         ref = f"A{HEADER_ROW}:{get_column_letter(last_col)}{last}"
@@ -209,144 +168,160 @@ def _write_table_sheet(sheet, rows, title, subtitle, table_name):
         table.tableStyleInfo = TableStyleInfo(name="TableStyleLight1", showRowStripes=False,
                                               showFirstColumn=False, showLastColumn=False, showColumnStripes=False)
         sheet.add_table(table)
-        # Busca: destaca as linhas em que o texto aparece no código, nome, loja, grupo ou subclasse.
-        sheet.conditional_formatting.add(
-            f"A{first}:{get_column_letter(last_col)}{last}",
-            FormulaRule(formula=[f'AND(LEN($B$3)>0,ISNUMBER(SEARCH($B$3,$A{first}&" "&$B{first}&" "&$C{first}&" "&$D{first}&" "&$E{first})))'],
-                        fill=_fill(HIGHLIGHT), font=Font(bold=True, color=NAVY), stopIfTrue=True),
-        )
-        sheet.conditional_formatting.add(
-            f"A{first}:{get_column_letter(last_col)}{last}",
-            FormulaRule(formula=["MOD(ROW(),2)=0"], fill=_fill(PALE)),
-        )
+        # Linhas alternadas em creme (formatação condicional: vale também no WPS e no LibreOffice).
+        sheet.conditional_formatting.add(f"A{first}:{get_column_letter(last_col)}{last}",
+                                         FormulaRule(formula=["MOD(ROW(),2)=0"], fill=_fill(BAND)))
     else:
         sheet.cell(first, 1, "Nenhum produto nesta aba.").font = _font(10, color=MUTED, italic=True)
     sheet.freeze_panes = f"B{first}"
     _page_setup(sheet, f"1:{HEADER_ROW}")
-    sheet.sheet_view.zoomScale = 95
 
 
-# --------------------------------------------------------------------------- Por grupo
+# --------------------------------------------------------------------------- Tabela dinâmica
 
-def _product_entries(frame):
-    """Produtos (por código) com estoque por loja, preço e valor, agrupados por grupo › subclasse."""
-    tree = {}
-    for row in frame.to_dict("records"):
-        subs = tree.setdefault(row["grupo"], {})
-        products = subs.setdefault(row["subclasse"], {})
-        item = products.setdefault(row["codigo_barras"], {
-            "codigo_barras": row["codigo_barras"], "nomes": Counter(), "estoque": {}, "precos": [], "valor": 0.0,
-        })
-        item["nomes"][row["descricao"]] += 1
-        item["estoque"][row["loja"]] = item["estoque"].get(row["loja"], 0.0) + row["estoque"]
-        item["precos"].append(row["preco_venda"])
-        item["valor"] += row["valor_total"]
-    return tree
+def _product_label(row):
+    return f"{row['descricao']}  ·  {row['codigo_barras']}"
 
 
-def _write_group_sheet(sheet, frame, stores):
+def _number(value):
+    value = float(value)
+    return int(value) if value.is_integer() else round(value, 4)
+
+
+def _write_data_sheet(sheet, records):
+    """Fonte da tabela dinâmica: uma linha por produto × loja (aba oculta)."""
+    sheet.append(DATA_COLUMNS)
+    for row in records:
+        sheet.append([row["grupo"], row["subclasse"], _product_label(row), row["loja"],
+                      _number(row["estoque"]), row["preco_venda"], row["valor_total"]])
+    sheet.sheet_state = "hidden"
+
+
+def _ordered_unique(values):
+    seen = {}
+    for value in values:
+        seen.setdefault(value, len(seen))
+    return list(seen)
+
+
+def _pivot_xml(records, stores):
+    """XML (cache, registros, tabela) da tabela dinâmica e a lista de grupos na ordem exibida."""
+    text_fields = [
+        _ordered_unique(r["grupo"] for r in records),
+        _ordered_unique(r["subclasse"] for r in records),
+        _ordered_unique(_product_label(r) for r in records),
+        list(stores),
+    ]
+    index = [{value: i for i, value in enumerate(items)} for items in text_fields]
+    numbers = [[_number(r["estoque"]) for r in records], [r["preco_venda"] for r in records],
+               [r["valor_total"] for r in records]]
+
+    fields = []
+    for name, items in zip(DATA_COLUMNS[:4], text_fields):
+        shared = "".join(f"<s v={quoteattr(str(v))}/>" for v in items)
+        fields.append(f'<cacheField name={quoteattr(name)} numFmtId="0">'
+                      f'<sharedItems count="{len(items)}">{shared}</sharedItems></cacheField>')
+    for name, values in zip(DATA_COLUMNS[4:], numbers):
+        integer = ' containsInteger="1"' if all(float(v).is_integer() for v in values) else ""
+        fields.append(f'<cacheField name={quoteattr(name)} numFmtId="0"><sharedItems containsSemiMixedTypes="0" '
+                      f'containsString="0" containsNumber="1"{integer} minValue="{min(values)}" '
+                      f'maxValue="{max(values)}"/></cacheField>')
+    # refreshOnLoad: o Excel/WPS recalcula a tabela a partir da aba Dados ao abrir.
+    cache = (f'<pivotCacheDefinition xmlns="{NS}" refreshOnLoad="1" refreshedBy="Mix Moda Insights" '
+             f'createdVersion="6" refreshedVersion="6" minRefreshableVersion="3" recordCount="{len(records)}">'
+             f'<cacheSource type="worksheet"><worksheetSource ref="A1:G{len(records) + 1}" '
+             f'sheet="{DATA_SHEET}"/></cacheSource>'
+             f'<cacheFields count="{len(DATA_COLUMNS)}">{"".join(fields)}</cacheFields></pivotCacheDefinition>')
+
+    rows_xml = []
+    for i, r in enumerate(records):
+        keys = (r["grupo"], r["subclasse"], _product_label(r), r["loja"])
+        rows_xml.append("<r>" + "".join(f'<x v="{index[f][k]}"/>' for f, k in enumerate(keys))
+                        + "".join(f'<n v="{values[i]}"/>' for values in numbers) + "</r>")
+    record_list = f'<pivotCacheRecords xmlns="{NS}" count="{len(records)}">{"".join(rows_xml)}</pivotCacheRecords>'
+
+    def items(field, collapsed):
+        sd = ' sd="0"' if collapsed else ""  # sd="0": item fechado (não mostra o nível de baixo)
+        body = "".join(f'<item{sd} x="{i}"/>' for i in range(len(text_fields[field])))
+        return f'<items count="{len(text_fields[field]) + 1}">{body}<item t="default"/></items>'
+
+    def line(i):
+        return f'<i><x v="{i}"/></i>' if i else "<i><x/></i>"
+
+    groups, n_stores = len(text_fields[0]), len(stores)
+    ref = f"A{PIVOT_TOP}:{get_column_letter(n_stores + 2)}{PIVOT_TOP + groups + 2}"
+    table = (
+        f'<pivotTableDefinition xmlns="{NS}" name="EstoqueDinamico" cacheId="1" applyNumberFormats="0" '
+        'applyBorderFormats="0" applyFontFormats="0" applyPatternFormats="0" applyAlignmentFormats="0" '
+        'applyWidthHeightFormats="1" dataCaption="Valores" updatedVersion="6" minRefreshableVersion="3" '
+        'useAutoFormatting="1" itemPrintTitles="1" createdVersion="6" indent="0" outline="1" outlineData="1" '
+        'multipleFieldFilters="0" rowHeaderCaption="Grupo › Subclasse › Produto" colHeaderCaption="Loja">'
+        f'<location ref="{ref}" firstHeaderRow="1" firstDataRow="2" firstDataCol="1"/>'
+        f'<pivotFields count="{len(DATA_COLUMNS)}">'
+        f'<pivotField axis="axisRow" showAll="0">{items(0, True)}</pivotField>'
+        f'<pivotField axis="axisRow" showAll="0">{items(1, True)}</pivotField>'
+        f'<pivotField axis="axisRow" showAll="0">{items(2, False)}</pivotField>'
+        f'<pivotField axis="axisCol" showAll="0">{items(3, False)}</pivotField>'
+        '<pivotField dataField="1" showAll="0"/><pivotField showAll="0"/><pivotField showAll="0"/></pivotFields>'
+        '<rowFields count="3"><field x="0"/><field x="1"/><field x="2"/></rowFields>'
+        f'<rowItems count="{groups + 1}">{"".join(line(i) for i in range(groups))}<i t="grand"><x/></i></rowItems>'
+        '<colFields count="1"><field x="3"/></colFields>'
+        f'<colItems count="{n_stores + 1}">{"".join(line(i) for i in range(n_stores))}<i t="grand"><x/></i></colItems>'
+        '<dataFields count="1"><dataField name="Unidades em estoque" fld="4" baseField="0" baseItem="0" '
+        'numFmtId="3"/></dataFields>'
+        '<pivotTableStyleInfo name="PivotStyleMedium2" showRowHeaders="1" showColHeaders="1" '
+        'showRowStripes="0" showColStripes="0" showLastColumn="1"/></pivotTableDefinition>'
+    )
+    return cache, record_list, table, text_fields[0]
+
+
+def _write_pivot_sheet(sheet, records, stores):
+    last_col = 2 + len(stores)
+    _title(sheet, "MIX MODA  •  TABELA DINÂMICA DO ESTOQUE",
+           "Clique no ⊞ ao lado do grupo (ou dê dois cliques no nome) para abrir as subclasses; na subclasse, "
+           "abre os produtos. A seta de Loja escolhe as lojas. Os números são unidades em estoque.",
+           max(last_col, 4))
     sheet.sheet_view.showGridLines = False
-    sheet.sheet_properties.outlinePr = Outline(summaryBelow=False, summaryRight=False, showOutlineSymbols=True)
-    # Colunas: rótulo, código, produtos, uma por loja, total, preço, valor.
-    c_label, c_code, c_count = 1, 2, 3
-    c_store = {store: 4 + i for i, store in enumerate(stores)}
-    c_total = 4 + len(stores)
-    c_price, c_value = c_total + 1, c_total + 2
-    last_col = c_value
-    _title(sheet, "MIX MODA  •  ESTOQUE POR GRUPO › SUBCLASSE › PRODUTO",
-           "Clique no ＋ da margem esquerda para abrir um grupo e depois a subclasse. "
-           "Os botões 1 · 2 · 3 no canto superior esquerdo abrem ou fecham todos os níveis de uma vez.",
-           last_col)
+    sheet.column_dimensions["A"].width = 58
+    for col in range(2, max(last_col, 4) + 1):
+        sheet.column_dimensions[get_column_letter(col)].width = 15
+    if not records:
+        sheet.cell(PIVOT_TOP, 1, "Nenhum produto nesta análise.").font = _font(10, color=MUTED, italic=True)
+        return
 
-    top, sub = 4, 5
-    for col, text in ((c_label, "Grupo  ›  Subclasse  ›  Produto"), (c_code, "Código de barras"),
-                      (c_count, "Produtos"), (c_total, "Estoque total"),
-                      (c_price, "Valor de venda"), (c_value, "Valor em estoque")):
-        sheet.merge_cells(start_row=top, start_column=col, end_row=sub, end_column=col)
-        _header_cell(sheet.cell(top, col), text, "left" if col == c_label else "center")
-        sheet.cell(sub, col).border = Border(bottom=Side(style="medium", color=BRAND_YELLOW))
-    if stores:
-        sheet.merge_cells(start_row=top, start_column=c_store[stores[0]], end_row=top, end_column=c_store[stores[-1]])
-        for col in c_store.values():
-            sheet.cell(top, col).fill = _fill(NAVY_SOFT)
-        head = sheet.cell(top, c_store[stores[0]], "ESTOQUE POR LOJA")
-        head.font = _font(9, True, BRAND_YELLOW)
-        head.alignment = Alignment(horizontal="center", vertical="center")
-        for store, col in c_store.items():
-            _header_cell(sheet.cell(sub, col), store)
-    sheet.row_dimensions[top].height = 20
-    sheet.row_dimensions[sub].height = 30
+    cache_xml, records_xml, table_xml, groups = _pivot_xml(records, stores)
+    cache = CacheDefinition.from_tree(etree.fromstring(cache_xml.encode("utf-8")))
+    cache.records = RecordList.from_tree(etree.fromstring(records_xml.encode("utf-8")))
+    pivot = TableDefinition.from_tree(etree.fromstring(table_xml.encode("utf-8")))
+    pivot.cache = cache
+    sheet._pivots.append(pivot)
 
-    tree = _product_entries(frame)
-
-    def write_line(r, label, level, counts, stock, total, price, value, code=""):
-        styles = {
-            -1: (_fill(CREAM), _font(11, True, BRAND_RED), Border(bottom=Side(style="medium", color=BRAND_YELLOW))),
-            0: (_fill(GROUP_FILL), _font(11, True, NAVY), Border(top=Side(style="thin", color=GROUP_LINE), bottom=Side(style="thin", color=GROUP_LINE))),
-            1: (_fill(SUB_FILL), _font(10, True, NAVY_SOFT), Border(bottom=_thin)),
-            2: (_fill(WHITE), _font(10, color=INK), Border(bottom=_hair)),
-        }
-        fill, font, border = styles[level]
-        values = {c_label: label, c_code: code or None, c_count: counts, c_total: total,
-                  c_price: price, c_value: value}
-        for store, col in c_store.items():
-            values[col] = stock.get(store) if store in stock else ("—" if level == 2 else 0)
-        for col in range(1, last_col + 1):
-            cell = sheet.cell(r, col, values.get(col))
-            cell.fill, cell.font, cell.border = fill, font, border
-            cell.alignment = Alignment(horizontal="left" if col == c_label else "center", vertical="center",
-                                       indent={-1: 1, 0: 1, 1: 3, 2: 5}[level] if col == c_label else 0)
-            if col in c_store.values() or col == c_total:
+    # O mesmo conteúdo já desenhado (fechado nos grupos): aparece certo mesmo
+    # num programa que não recalcula a tabela ao abrir.
+    totals = {}
+    for r in records:
+        key = (r["grupo"], r["loja"])
+        totals[key] = totals.get(key, 0) + r["estoque"]
+    lines = [[("Unidades em estoque", "label"), ("Loja", "label")],
+             [("Grupo › Subclasse › Produto", "head")] + [(s, "head") for s in stores] + [("Total geral", "head")]]
+    for group in groups:
+        values = [totals.get((group, s), 0) for s in stores]
+        lines.append([(group, "group")] + [(v, "num") for v in values] + [(sum(values), "num")])
+    values = [sum(totals.get((g, s), 0) for g in groups) for s in stores]
+    lines.append([("Total geral", "grand")] + [(v, "grand_num") for v in values] + [(sum(values), "grand_num")])
+    for i, line in enumerate(lines):
+        for j, (value, kind) in enumerate(line):
+            cell = sheet.cell(PIVOT_TOP + i, 1 + j, value)
+            cell.font = _font(10, kind in ("head", "group", "grand", "grand_num"),
+                              WHITE if kind == "head" else RED_DARK if kind.startswith("grand") else INK)
+            if kind == "head":
+                cell.fill = _fill(RED)
+            elif kind.startswith("grand"):
+                cell.fill = _fill(CREAM)
+            if kind in ("num", "grand_num"):
                 cell.number_format = UNITS
-                if cell.value == "—":
-                    cell.font = _font(10, color="B4BFCF")
-            elif col == c_count:
-                cell.number_format = "#,##0"
-            elif col in (c_price, c_value):
-                cell.number_format = MONEY
-                cell.alignment = Alignment(horizontal="right", vertical="center")
-        sheet.cell(r, c_code).number_format = "@"
-        if level >= 1:
-            dim = sheet.row_dimensions[r]
-            dim.outlineLevel = level
-            dim.hidden = True  # abre fechado nos grupos
-        sheet.row_dimensions[r].height = {-1: 26, 0: 24, 1: 21, 2: 19}[level]
-
-    def totals(rows_frame):
-        stock = {s: float(v) for s, v in rows_frame.groupby("loja").estoque.sum().items()}
-        return stock, float(rows_frame.estoque.sum()), float(rows_frame.valor_total.sum())
-
-    stock, total, value = totals(frame)
-    r = sub + 1
-    write_line(r, "TOTAL GERAL", -1, frame.codigo_barras.nunique(), stock, total, None, value)
-    group_rows = {}
-    r += 1
-    for group, subs in tree.items():
-        g_frame = frame[frame.grupo == group]
-        stock, total, value = totals(g_frame)
-        group_rows[group] = r
-        write_line(r, f"▸  {group}", 0, g_frame.codigo_barras.nunique(), stock, total, None, value)
-        sheet.row_dimensions[r].collapsed = True
-        r += 1
-        for subclass, products in subs.items():
-            s_frame = g_frame[g_frame.subclasse == subclass]
-            stock, total, value = totals(s_frame)
-            write_line(r, subclass, 1, len(products), stock, total, None, value)
-            sheet.row_dimensions[r].collapsed = True
-            r += 1
-            for code in sorted(products, key=barcode_sort_key):
-                item = products[code]
-                name = item["nomes"].most_common(1)[0][0]
-                write_line(r, name, 2, None, item["estoque"], sum(item["estoque"].values()),
-                           _price_text(item["precos"]), item["valor"], code=code)
-                r += 1
-
-    widths = {c_label: 52, c_code: 18, c_count: 11, c_total: 13, c_price: 21, c_value: 18}
-    for col in range(1, last_col + 1):
-        sheet.column_dimensions[get_column_letter(col)].width = widths.get(col, 14)
-    sheet.freeze_panes = sheet.cell(sub + 1, c_count)
-    _page_setup(sheet, f"1:{sub}")
-    return group_rows
+    sheet.freeze_panes = sheet.cell(PIVOT_TOP + 2, 2)
+    _page_setup(sheet, f"1:{PIVOT_TOP + 1}")
 
 
 # --------------------------------------------------------------------------- Resumo
@@ -354,10 +329,10 @@ def _write_group_sheet(sheet, frame, stores):
 def _kpi(sheet, row, col, label, value, fmt, note, accent):
     for c in (col, col + 1):
         for rr in (row, row + 1, row + 2):
-            sheet.cell(rr, c).fill = _fill(PALE)
+            sheet.cell(rr, c).fill = _fill(CREAM)
         sheet.cell(row, c).border = Border(top=Side(style="thick", color=accent))
-    for rr, (text, font) in enumerate([(label, _font(9, True, MUTED)), (value, _font(18, True, NAVY, display=True)),
-                                        (note, _font(9, color=MUTED, italic=True))]):
+    for rr, (text, font) in enumerate([(label, _font(8, True, MUTED)), (value, _font(17, True, RED_DARK)),
+                                        (note, _font(8, color=MUTED, italic=True))]):
         sheet.merge_cells(start_row=row + rr, start_column=col, end_row=row + rr, end_column=col + 1)
         cell = sheet.cell(row + rr, col, text)
         cell.font = font
@@ -368,9 +343,9 @@ def _kpi(sheet, row, col, label, value, fmt, note, accent):
 
 def _section(sheet, row, text, last_col):
     cell = sheet.cell(row, 2, text)
-    cell.font = _font(12, True, NAVY, display=True)
+    cell.font = _font(12, True, RED_DARK)
     for col in range(2, last_col + 1):
-        sheet.cell(row, col).border = Border(bottom=Side(style="medium", color=BRAND_RED))
+        sheet.cell(row, col).border = Border(bottom=Side(style="medium", color=RED))
     sheet.row_dimensions[row].height = 24
 
 
@@ -378,44 +353,46 @@ def _summary_table(sheet, row, headers, lines, formats, bars, total=None, links=
     """Tabela simples a partir da coluna B; devolve a próxima linha livre."""
     for i, text in enumerate(headers):
         _header_cell(sheet.cell(row, 2 + i), text, "left" if i == 0 else "center")
-    sheet.row_dimensions[row].height = 26
+    sheet.row_dimensions[row].height = 32
     first = row + 1
     for n, line in enumerate(lines):
         r = first + n
         for i, value in enumerate(line):
             cell = sheet.cell(r, 2 + i, value)
-            cell.font = _font(10, bold=i == 0, color=INK)
-            cell.fill = _fill(WHITE if n % 2 == 0 else PALE)
+            cell.font = _font(10, bold=i == 0)
+            cell.fill = _fill(WHITE if n % 2 == 0 else BAND)
             cell.border = Border(bottom=_hair)
             cell.number_format = formats[i]
-            cell.alignment = Alignment(horizontal="left" if i == 0 else "center", vertical="center", indent=1 if i == 0 else 0)
+            cell.alignment = Alignment(horizontal="left" if i == 0 else "center", vertical="center",
+                                       indent=1 if i == 0 else 0)
         if links and links[n]:
             cell = sheet.cell(r, 2)
             cell.hyperlink = links[n]
-            cell.font = Font(name=FONT, size=10, bold=True, color=BLUE)
+            cell.font = Font(name=FONT, size=10, bold=True, color=RED, underline="single")
         sheet.row_dimensions[r].height = 21
     last = first + len(lines) - 1
-    for i in bars:
-        if lines:
+    if lines:
+        for i in bars:
             letter = get_column_letter(2 + i)
             sheet.conditional_formatting.add(f"{letter}{first}:{letter}{last}",
                                              DataBarRule(start_type="num", start_value=0, end_type="max",
-                                                         color="9DB4F0", showValue=True))
+                                                         color="FFD45C", showValue=True))
     r = last + 1
     if total:
         for i, value in enumerate(total):
             cell = sheet.cell(r, 2 + i, value)
-            cell.font = _font(10, True, BRAND_RED)
-            cell.fill = _fill(CREAM)
-            cell.border = Border(top=Side(style="medium", color=BRAND_YELLOW))
+            cell.font = _font(10, True, RED_DARK)
+            cell.fill = _fill(YELLOW_SOFT)
+            cell.border = Border(top=Side(style="medium", color=RED))
             cell.number_format = formats[i]
-            cell.alignment = Alignment(horizontal="left" if i == 0 else "center", vertical="center", indent=1 if i == 0 else 0)
+            cell.alignment = Alignment(horizontal="left" if i == 0 else "center", vertical="center",
+                                       indent=1 if i == 0 else 0)
         sheet.row_dimensions[r].height = 23
         r += 1
     return r
 
 
-def _write_summary(sheet, frame, stores, store_sheets, group_rows, subtitle):
+def _write_summary(sheet, frame, stores, store_sheets, subtitle):
     sheet.sheet_view.showGridLines = False
     last_col = max(9, 7 + len(stores))
     sheet.column_dimensions["A"].width = 3
@@ -429,12 +406,13 @@ def _write_summary(sheet, frame, stores, store_sheets, group_rows, subtitle):
     value = float(frame.valor_total.sum())
     zero = int((frame.estoque == 0).sum())
     negative = int((frame.estoque < 0).sum())
-    groups, subclasses = frame.grupo.nunique(), frame[["grupo", "subclasse"]].drop_duplicates().shape[0]
-    _kpi(sheet, 4, 2, "PRODUTOS", products, "#,##0", f"{len(frame):,} itens produto × loja".replace(",", "."), BRAND_RED)
-    _kpi(sheet, 4, 4, "UNIDADES EM ESTOQUE", units, "#,##0", f"{zero} zerados • {negative} negativos", BRAND_YELLOW)
-    _kpi(sheet, 4, 6, "VALOR DE VENDA EM ESTOQUE", value, MONEY, "estoque × valor de venda atual", NAVY)
-    _kpi(sheet, 4, 8, "GRUPOS  •  SUBCLASSES", f"{groups}  •  {subclasses}", "@", "classificação do catálogo", BLUE)
-    sheet.row_dimensions[5].height = 34
+    groups = frame.grupo.nunique()
+    subclasses = frame[["grupo", "subclasse"]].drop_duplicates().shape[0]
+    _kpi(sheet, 4, 2, "PRODUTOS", products, "#,##0", f"{len(frame):,} itens produto × loja".replace(",", "."), RED)
+    _kpi(sheet, 4, 4, "UNIDADES EM ESTOQUE", units, "#,##0", f"{zero} zerados • {negative} negativos", YELLOW)
+    _kpi(sheet, 4, 6, "VALOR TOTAL EM ESTOQUE", value, MONEY, "estoque × valor unitário de venda", RED)
+    _kpi(sheet, 4, 8, "GRUPOS  •  SUBCLASSES", f"{groups}  •  {subclasses}", "@", "classificação do catálogo", YELLOW)
+    sheet.row_dimensions[5].height = 32
 
     row = 8
     _section(sheet, row, "Por loja", last_col)
@@ -445,10 +423,11 @@ def _write_summary(sheet, frame, stores, store_sheets, group_rows, subtitle):
         lines.append([store, part.codigo_barras.nunique(), float(part.estoque.sum()), part_value,
                       int((part.estoque == 0).sum()), int((part.estoque < 0).sum()),
                       part_value / value if value else 0])
-        links.append(f"#{quote_sheetname(store_sheets[store])}!A1" if store in store_sheets else None)
+        links.append(f"#{quote_sheetname(store_sheets[store])}!A1")
     row = _summary_table(
         sheet, row + 1,
-        ["Loja  (clique para abrir a aba)", "Produtos", "Unidades", "Valor em estoque", "Zerados", "Negativos", "% do valor"],
+        ["Loja  (clique para abrir a aba)", "Produtos", "Unidades", "Valor total em estoque", "Zerados",
+         "Negativos", "% do valor"],
         lines, ["@", "#,##0", UNITS, MONEY, "#,##0", "#,##0", "0.0%"], bars=[2, 3],
         total=["Total da rede", products, units, value, zero, negative, 1 if value else 0], links=links,
     )
@@ -463,34 +442,34 @@ def _write_summary(sheet, frame, stores, store_sheets, group_rows, subtitle):
         lines.append([group, part.subclasse.nunique(), part.codigo_barras.nunique(), float(part.estoque.sum()),
                       part_value, part_value / value if value else 0]
                      + [int(per_store.get(s, 0)) for s in stores])
-        links.append(f"#{quote_sheetname(GROUP_SHEET)}!A{group_rows[group]}" if group in group_rows else None)
+        links.append(f"#{quote_sheetname(PIVOT_SHEET)}!A1")
     header_row = row + 1
     row = _summary_table(
         sheet, header_row,
-        ["Grupo  (clique para ver)", "Subclasses", "Produtos", "Unidades", "Valor em estoque", "% do valor"]
-        + [f"{s}\nprodutos" for s in stores],
-        lines, ["@", "#,##0", "#,##0", UNITS, MONEY, "0.0%"] + ["#,##0;;\"—\""] * len(stores), bars=[3, 4],
+        ["Grupo  (clique para a tabela dinâmica)", "Subclasses", "Produtos", "Unidades", "Valor total em estoque",
+         "% do valor"] + [f"{s}\nprodutos" for s in stores],
+        lines, ["@", "#,##0", "#,##0", UNITS, MONEY, "0.0%"] + ['#,##0;;"—"'] * len(stores), bars=[3, 4],
+        links=links,
     )
     for i in range(len(stores)):
-        cell = sheet.cell(header_row, 8 + i)
-        cell.fill = _fill(NAVY_SOFT)
-    sheet.row_dimensions[header_row].height = 32
+        sheet.cell(header_row, 8 + i).fill = _fill(YELLOW_SOFT)
 
     row += 1
     _section(sheet, row, "Como usar", last_col)
     tips = [
-        "🔎  Geral e abas das lojas: digite no campo BUSCAR (código, nome, loja, grupo ou subclasse) e as linhas encontradas ficam em amarelo.",
-        "⏷  Para filtrar de verdade, use a seta de cada cabeçalho (ex.: Loja = Pedras, Grupo = Utilidades). Os contadores acima da tabela mostram só o que está visível.",
-        "▸  Por grupo: clique no ＋ da margem esquerda para abrir o grupo, depois a subclasse, até os produtos — com o estoque de cada loja lado a lado.",
-        f"R$  Valor de venda: {PRICE_SYSTEM} (preço do sistema, coluna F do estoque) → {PRICE_SALES} → "
-        f"{PRICE_CATALOG} (último valor gravado) → {PRICE_ESTIMATED}. A coluna “Origem do preço” mostra qual foi usado.",
-        "≠  Estoque negativo aparece em vermelho e não entra no valor em estoque (é venda sem entrada no sistema).",
+        "▸  Tabela dinâmica: clique no ⊞ ao lado do grupo (ou dê dois cliques no nome) para abrir as subclasses; "
+        "na subclasse, abre os produtos, com o estoque de cada loja lado a lado. A seta de Loja escolhe as lojas.",
+        "⏷  Geral e abas das lojas: use a seta de cada cabeçalho para filtrar por código, descrição, loja, grupo "
+        "ou subclasse (em “Filtros de texto › Contém” dá para buscar parte do nome).",
+        f"R$  Valor unitário: preço de venda do {PRICE_SYSTEM.lower()} (coluna F do estoque) → "
+        f"{PRICE_SALES.lower()} → {PRICE_CATALOG.lower()} (último valor gravado) → {PRICE_ESTIMATED.lower()}.",
+        "≠  Valor total em estoque = estoque × valor unitário. Estoque negativo aparece em vermelho e não entra no valor.",
     ]
     for tip in tips:
         row += 1
         sheet.merge_cells(start_row=row, start_column=2, end_row=row, end_column=last_col)
         cell = sheet.cell(row, 2, tip)
-        cell.font = _font(10, color=INK)
+        cell.font = _font(10)
         cell.alignment = Alignment(vertical="center", wrap_text=True, indent=1)
         sheet.row_dimensions[row].height = 30
     _page_setup(sheet, "1:2")
@@ -502,36 +481,37 @@ def export_inventory_xlsx(path, df, catalog=None, period_text="", generated_at=N
     """Escreve o Excel do estoque completo e devolve o número de produtos (códigos) exportados."""
     frame = inventory_rows(df, catalog)
     stores = order_stores(frame.loja.dropna().unique()) if not frame.empty else []
-    generated_at = generated_at or datetime.now()
-    stamp = generated_at.strftime("%d/%m/%Y às %H:%M")
-    base = " • ".join(x for x in (period_text, f"gerado em {stamp}", f"{len(stores)} loja(s)") if x)
+    stamp = (generated_at or datetime.now()).strftime("%d/%m/%Y às %H:%M")
+    subtitle = " • ".join(x for x in (period_text, f"gerado em {stamp}", f"{len(stores)} loja(s)") if x)
 
     workbook = Workbook()
+    workbook.loaded_theme = _brand_theme()
     summary = workbook.active
     summary.title = SUMMARY_SHEET
-    used_sheets = {SUMMARY_SHEET.casefold(), GROUP_SHEET.casefold(), GENERAL_SHEET.casefold()}
-    group_sheet = workbook.create_sheet(GROUP_SHEET)
+    pivot_sheet = workbook.create_sheet(PIVOT_SHEET)
     general = workbook.create_sheet(GENERAL_SHEET)
+    used_sheets = {n.casefold() for n in (SUMMARY_SHEET, PIVOT_SHEET, GENERAL_SHEET, DATA_SHEET)}
     store_sheets = {store: _sheet_name(store, used_sheets) for store in stores}
 
     records = frame.to_dict("records")
     used_tables = set()
     _write_table_sheet(general, records, f"MIX MODA  •  ESTOQUE GERAL  •  {frame.codigo_barras.nunique()} produtos",
-                       "Todas as lojas juntas: uma linha por produto em cada loja. Filtre pelas setas do cabeçalho ou use a busca.",
+                       "Todas as lojas juntas: uma linha por produto em cada loja. Filtre pelas setas do cabeçalho.",
                        _table_name("Geral", used_tables))
     for store in stores:
         sheet = workbook.create_sheet(store_sheets[store])
         part = [r for r in records if r["loja"] == store]
         _write_table_sheet(sheet, part, f"MIX MODA  •  {store.upper()}  •  {len(part)} produtos",
-                           f"Estoque da loja {store}. Filtre pelas setas do cabeçalho ou use a busca.",
+                           f"Estoque da loja {store}. Filtre pelas setas do cabeçalho.",
                            _table_name(store, used_tables))
-        sheet.sheet_properties.tabColor = BRAND_YELLOW
-    group_rows = _write_group_sheet(group_sheet, frame, stores) if not frame.empty else {}
-    _write_summary(summary, frame, stores, store_sheets, group_rows, base)
+        sheet.sheet_properties.tabColor = YELLOW
+    _write_data_sheet(workbook.create_sheet(DATA_SHEET), records)
+    _write_pivot_sheet(pivot_sheet, records, stores)
+    _write_summary(summary, frame, stores, store_sheets, subtitle)
 
-    summary.sheet_properties.tabColor = BRAND_RED
-    group_sheet.sheet_properties.tabColor = NAVY
-    general.sheet_properties.tabColor = BLUE
+    summary.sheet_properties.tabColor = RED
+    pivot_sheet.sheet_properties.tabColor = RED_DARK
+    general.sheet_properties.tabColor = YELLOW
     workbook.active = 0
     workbook.properties.title = "Mix Moda • Estoque completo"
     workbook.properties.creator = "Mix Moda Insights"

@@ -70,12 +70,13 @@ Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflo
 
 - No dashboard, **📦 Excel do estoque** baixa o estoque inteiro da análise (todas as lojas; os filtros da tela não se aplicam, o Excel tem os próprios).
 - Abas:
-  - **Resumo**: produtos, unidades, valor de venda em estoque, grupos e subclasses; tabela **por loja** (produtos, unidades, valor, zerados, negativos, % do valor) e **por grupo** (com quantos produtos cada loja tem). Os nomes de loja e de grupo são atalhos para as outras abas.
-  - **Por grupo**: funciona como uma tabela dinâmica. Abre fechada nos grupos; o ＋ da margem esquerda (ou os botões 1 · 2 · 3) abre as subclasses e depois os produtos, com o estoque de cada loja em colunas, estoque total, valor de venda e valor em estoque.
-  - **Geral** e **uma aba por loja**: código de barras, loja, descrição, grupo, subclasse, estoque, valor de venda, valor em estoque e origem do preço. São tabelas do Excel com filtro em cada coluna; o campo **🔎 Buscar** destaca em amarelo as linhas com o texto (código, nome, loja, grupo ou subclasse) e os contadores acima da tabela (itens, unidades e valor) mostram só o que está visível no filtro.
-- **Valor de venda**, nesta ordem: **Sistema** (coluna F da planilha de estoque, o preço definido no sistema) → **Vendas do período** (o valor registrado nas vendas, quando o sistema está sem preço) → **Catálogo** (último valor gravado para a loja) → **Estimado (2× compra)**. A coluna "Origem do preço" diz qual foi usado. A análise passa a guardar a coluna F em `preco_venda_sistema`; em análises salvas antes disso, o preço do produto sem venda já é a coluna F.
-- Valor em estoque = estoque × valor de venda. Estoque negativo aparece em vermelho e não entra no valor.
-- Código no arquivo `exports/inventory_export.py`; regra do preço em `core/inventory.py`.
+  - **Resumo**: produtos, unidades, valor total em estoque, grupos e subclasses; tabela **por loja** (produtos, unidades, valor, zerados, negativos, % do valor) e **por grupo** (com quantos produtos cada loja tem). Os nomes de loja e de grupo são atalhos para as outras abas.
+  - **Tabela dinâmica**: tabela dinâmica de verdade (Excel, WPS e LibreOffice), com Grupo › Subclasse › Produto nas linhas, as lojas nas colunas e as unidades em estoque. Abre fechada nos grupos: o ⊞ ao lado do grupo (ou dois cliques no nome) abre as subclasses, e a subclasse abre os produtos. A fonte é a aba oculta **Dados**; o arquivo pede para recalcular ao abrir.
+  - **Geral** e **uma aba por loja**: código de barras, loja, descrição, grupo, subclasse, estoque, valor unitário e valor total em estoque, como tabela do Excel com filtro em cada coluna.
+- **Valor unitário**, nesta ordem: preço do **sistema** (coluna F da planilha de estoque) → valor registrado nas **vendas do período** → **catálogo** (último valor gravado para a loja) → **estimado** (2× compra). A análise passa a guardar a coluna F em `preco_venda_sistema`; em análises salvas antes disso, o preço do produto sem venda já é a coluna F.
+- Valor total em estoque = estoque × valor unitário. Estoque negativo aparece em vermelho e não entra no valor.
+- Visual nas cores da Mix Moda (faixa vermelha com fio amarelo, cabeçalhos amarelos, linhas em creme) e fonte Arial, para abrir igual no Excel e no WPS.
+- Código em `exports/inventory_export.py`; regra do preço em `core/inventory.py`.
 
 ## Dashboard: estoque zerado ou negativo
 

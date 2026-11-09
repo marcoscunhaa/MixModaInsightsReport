@@ -75,43 +75,58 @@ def test_build_analysis_keeps_the_system_price():
     assert sale_price(row.to_dict()) == (59.9, PRICE_SYSTEM)
 
 
-def test_workbook_has_summary_groups_general_and_one_sheet_per_store(tmp_path):
+def test_workbook_has_summary_pivot_general_and_one_sheet_per_store(tmp_path):
     path = tmp_path / "estoque.xlsx"
     assert export_inventory_xlsx(path, frame(), CATALOG, "Análise de outubro") == 5
     wb = load_workbook(path)
-    assert wb.sheetnames == ["Resumo", "Por grupo", "Geral", "Sitio São João", "Palmeiras", "Sapiranga", "Pedras"]
+    assert wb.sheetnames == ["Resumo", "Tabela dinâmica", "Geral", "Sitio São João", "Palmeiras",
+                             "Sapiranga", "Pedras", "Dados"]
+    assert wb["Dados"].sheet_state == "hidden"
 
     general = wb["Geral"]
-    assert [general.cell(5, c).value for c in range(1, 8)] == [
-        "Código de barras", "Loja", "Descrição do produto", "Grupo", "Subclasse", "Estoque", "Valor de venda"]
-    assert len(general.tables) == 1 and list(general.tables.values())[0].ref == "A5:I11"
-    assert general["E3"].value == "=SUBTOTAL(103,A6:A11)"   # contador que segue o filtro
-    codes = [general.cell(r, 1).value for r in range(6, 12)]
-    assert "0007891" in codes and general.cell(6, 1).number_format == "@"  # zeros à esquerda mantidos
-    assert general.conditional_formatting  # destaque da busca
+    assert [general.cell(3, c).value for c in range(1, 10)] == [
+        "Código de barras", "Loja", "Descrição do produto", "Grupo", "Subclasse", "Estoque",
+        "Valor unitário", "Valor total em estoque", None]      # sem busca e sem origem do preço
+    assert len(general.tables) == 1 and list(general.tables.values())[0].ref == "A3:H9"
+    codes = [general.cell(r, 1).value for r in range(4, 10)]
+    assert "0007891" in codes and general.cell(4, 1).number_format == "@"  # zeros à esquerda mantidos
+    saia = next(r for r in range(4, 10) if general.cell(r, 3).value == "SAIA JEANS" and general.cell(r, 2).value == "Palmeiras")
+    assert general.cell(saia, 7).value == 59.9 and math.isclose(general.cell(saia, 8).value, 4 * 59.9)
+    assert general["A1"].font.name == "Arial"
 
     pedras = wb["Pedras"]
-    assert [pedras.cell(r, 3).value for r in (6, 7)] == ["TOALHA BANHO", "CANECA"]
+    assert [pedras.cell(r, 3).value for r in (4, 5)] == ["TOALHA BANHO", "CANECA"]
 
-    groups = wb["Por grupo"]
-    labels = {groups.cell(r, 1).value: r for r in range(6, groups.max_row + 1)}
-    total = labels["TOTAL GERAL"]
-    assert groups.cell(total, 3).value == 5                   # produtos (códigos únicos)
-    grp, sub, prod = labels["▸  VESTUARIO FEMININO"], labels["SAIA"], labels["SAIA JEANS"]
-    assert groups.row_dimensions[grp].outlineLevel == 0 and not groups.row_dimensions[grp].hidden
-    assert groups.row_dimensions[sub].outlineLevel == 1 and groups.row_dimensions[sub].hidden
-    assert groups.row_dimensions[prod].outlineLevel == 2 and groups.row_dimensions[prod].hidden
-    header = {groups.cell(5, c).value: c for c in range(1, groups.max_column + 1)}
-    assert groups.cell(prod, header["Palmeiras"]).value == 4
-    assert groups.cell(prod, header["Sapiranga"]).value == -2
-    assert groups.cell(prod, header["Pedras"]).value == "—"   # produto não existe na loja
-    assert groups.sheet_properties.outlinePr.summaryBelow is False
 
-    summary = wb["Resumo"]
+def test_pivot_table_opens_collapsed_on_groups_with_stores_as_columns(tmp_path):
+    path = tmp_path / "estoque.xlsx"
+    export_inventory_xlsx(path, frame(), CATALOG)
+    sheet = load_workbook(path)["Tabela dinâmica"]
+    (pivot,) = sheet._pivots
+    assert [f.x for f in pivot.rowFields] == [0, 1, 2]          # Grupo › Subclasse › Produto
+    assert [f.x for f in pivot.colFields] == [3]                # Loja
+    assert pivot.dataFields[0].fld == 4                         # soma do estoque
+    groups = [i for i in pivot.pivotFields[0].items if i.t != "default"]
+    subs = [i for i in pivot.pivotFields[1].items if i.t != "default"]
+    assert all(i.sd is False for i in groups + subs)            # abre fechado
+    cache = pivot.cache
+    assert cache.refreshOnLoad and cache.cacheSource.worksheetSource.sheet == "Dados"
+    assert [s.v for s in cache.cacheFields[3].sharedItems._fields] == ["Sitio São João", "Palmeiras", "Sapiranga", "Pedras"]
+    assert len(cache.records.r) == 6
+    # Já desenhada fechada, para quem não recalcula ao abrir.
+    labels = [sheet.cell(r, 1).value for r in range(6, 10)]
+    assert labels == ["UTILIDADES", "VESTUARIO FEMININO", "SEM CLASSIFICAÇÃO", "Total geral"]
+    assert sheet.cell(7, 4).value == -2 and sheet.cell(9, 6).value == 4 + -2 + 3 + 5 + 0 + 2
+
+
+def test_summary_counts_products_per_store_and_links_to_sheets(tmp_path):
+    path = tmp_path / "estoque.xlsx"
+    export_inventory_xlsx(path, frame(), CATALOG)
+    summary = load_workbook(path)["Resumo"]
     stores = {summary.cell(r, 2).value: r for r in range(9, 16)}
     assert summary.cell(stores["Palmeiras"], 3).value == 2  # produtos na loja
-    assert summary.cell(stores["Palmeiras"], 2).hyperlink.location == "'Palmeiras'!A1" or \
-        "Palmeiras" in summary.cell(stores["Palmeiras"], 2).hyperlink.target
+    assert "Palmeiras" in (summary.cell(stores["Palmeiras"], 2).hyperlink.location
+                           or summary.cell(stores["Palmeiras"], 2).hyperlink.target)
     assert math.isclose(summary.cell(stores["Total da rede"], 5).value,
                         4 * 59.9 + 3 * 35.0 + 5 * 19.9 + 2 * 8.5)
 
@@ -119,4 +134,4 @@ def test_workbook_has_summary_groups_general_and_one_sheet_per_store(tmp_path):
 def test_empty_analysis_still_writes_a_valid_file(tmp_path):
     path = tmp_path / "vazio.xlsx"
     assert export_inventory_xlsx(path, frame().iloc[0:0]) == 0
-    assert load_workbook(path).sheetnames[:3] == ["Resumo", "Por grupo", "Geral"]
+    assert load_workbook(path).sheetnames[:3] == ["Resumo", "Tabela dinâmica", "Geral"]
