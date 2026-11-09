@@ -20,6 +20,7 @@ from ui.stock_alerts import StockAlertsDialog
 from ui.window_chrome import get_save_file, install_mac_window_chrome, show_message
 from core.unclassified import is_unclassified, merge_by_barcode, product_count, unclassified_rows
 from ui.unclassified_dialog import UnclassifiedDialog, export_unclassified_excel
+from ui.inventory_excel import export_inventory_excel
 from ui.ui_kit import BRAND_GRADIENT_DIAGONAL, brand_bar, brand_eyebrow, button, section_header
 
 # Títulos de coluna em português claro (as tabelas usam os nomes internos das colunas).
@@ -245,6 +246,11 @@ class DashboardPage(QWidget):
                                                "QPushButton:hover{background:#FFEFC2;border-color:#E8B24A;}")
         self.unclassified_button.setToolTip("Produtos sem grupo ou subclasse no catálogo.\nAbre a lista (um por código) e gera o Excel para cadastro.")
         self.unclassified_button.clicked.connect(lambda: UnclassifiedDialog(self.current_df(),self.catalog,self).exec()); head.addWidget(self.unclassified_button,0,Qt.AlignmentFlag.AlignVCenter)
+        self.inventory_button=button("📦  Excel do estoque","Secondary",
+            "Baixa o estoque completo (todas as lojas, sem os filtros da tela):\n"
+            "resumo, visão Grupo › Subclasse › Produto que abre e fecha, aba geral e uma aba por loja,\n"
+            "com busca e filtros por código, nome, loja, grupo e subclasse.",self.export_inventory)
+        head.addWidget(self.inventory_button,0,Qt.AlignmentFlag.AlignVCenter)
         pdf=button("📄  Exportar PDF","Primary","Gera um relatório em PDF com o que está filtrado na tela.",self.export_pdf); head.addWidget(pdf,0,Qt.AlignmentFlag.AlignVCenter); root.addWidget(hero)
         filters=QFrame(); filters.setObjectName("Panel"); fbox=QVBoxLayout(filters); fbox.setContentsMargins(16,12,16,12); fbox.setSpacing(10)
         ftop=QHBoxLayout(); ftop.setSpacing(8); fcap=QLabel("🔎  FILTROS"); fcap.setObjectName("FieldLabel"); ftop.addWidget(fcap)
@@ -578,6 +584,9 @@ class DashboardPage(QWidget):
     @staticmethod
     def _close_row(dlg):
         row=QHBoxLayout(); row.addStretch(1); row.addWidget(button("Fechar","Ghost","Fechar esta lista",dlg.accept)); return row
+    def export_inventory(self):
+        # Estoque inteiro da análise: os filtros da tela não se aplicam (o Excel tem os próprios).
+        return export_inventory_excel(self,self.df,self.catalog,self._period_title())
     def export_pdf(self):
         p=get_save_file(self,"Exportar PDF","MixModaInsights.pdf","PDF (*.pdf)","pdf")
         if not p: return

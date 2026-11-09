@@ -196,3 +196,30 @@ def test_selection_filters_the_whole_dashboard(app, chrome):
 
     page.set_selection(set())
     assert len(page.current_df()) == 3 and page.selection_bar.isHidden()
+
+
+def test_inventory_excel_exports_the_whole_stock_ignoring_screen_filters(app, chrome, monkeypatch, tmp_path):
+    import pandas as pd
+    from openpyxl import load_workbook
+    from core.matcher import build_analysis
+    from core.models import AnalysisConfig
+    from ui import inventory_excel
+    from ui.dashboard_page import DashboardPage
+
+    stock = pd.DataFrame([
+        ["7896722660005", "CONJUNTO RENDA P", 4, 10.0, 30.0],
+        ["7891000000001", "CUECA BOXER M", 9, 5.0, 15.0],
+    ], columns=["codigo_barras", "descricao", "quantidade_estoque", "preco_compra", "preco_venda"])
+    sales = stock.iloc[0:0].rename(columns={"quantidade_estoque": "quantidade_vendida"})
+    frame, audit = build_analysis(stock, sales, {"produtos": []}, "Pedras",
+                                  AnalysisConfig("Pedras", None, None, "", ""), None)
+    target = tmp_path / "estoque.xlsx"
+    monkeypatch.setattr(inventory_excel, "get_save_file", lambda *a, **k: str(target))
+    monkeypatch.setattr(inventory_excel.QDesktopServices, "openUrl", lambda *_: True)
+
+    page = DashboardPage(frame, "período", audit)
+    assert page.inventory_button.text().endswith("Excel do estoque")
+    page.search.setText("cueca")                       # filtro da tela não reduz o Excel
+    assert page.export_inventory() == str(target)
+    general = load_workbook(target)["Geral"]
+    assert {general.cell(r, 3).value for r in (6, 7)} == {"CONJUNTO RENDA P", "CUECA BOXER M"}
