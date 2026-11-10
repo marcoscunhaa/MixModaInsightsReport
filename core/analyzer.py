@@ -35,6 +35,8 @@ def pivot_by_store(df, value="quantidade_estoque", ascending=False):
     Colunas de loja na ordem oficial (core.stores) e linhas pelo código de
     barras, do menor para o maior: assim a grade de tamanhos fica em sequência
     (P, M, G, GG). `ascending` é mantido só por compatibilidade.
+    Também traz o preço unitário de venda (`preco_min`/`preco_max` e `precos`, por
+    loja), com a mesma regra do Excel do estoque: preço do sistema, senão o das vendas.
     Retorna (tabela, lojas, totais por loja).
     """
     if df.empty:
@@ -45,11 +47,29 @@ def pivot_by_store(df, value="quantidade_estoque", ascending=False):
     groups = df.groupby("codigo_barras")[["grupo", "subclasse"]].first()
     pivot = df.pivot_table(index="codigo_barras", columns="loja", values=value,
                            aggfunc="sum").reindex(columns=stores)
-    table = pd.concat([names, groups, pivot], axis=1).reset_index()
+    prices = unit_prices(df)
+    table = pd.concat([names, groups, prices, pivot], axis=1).reset_index()
     table["total"] = table[stores].sum(axis=1, min_count=1).fillna(0)
     table = table.sort_values("codigo_barras", key=lambda col: col.map(barcode_sort_key), kind="stable").reset_index(drop=True)
     totals = {store: float(df.loc[df.loja == store, value].sum()) for store in stores}
     return table, stores, totals
+
+
+def unit_prices(df):
+    """Preço unitário de venda de cada código: menor, maior e {loja: preço}."""
+    from core.inventory import sale_price  # import tardio: core.inventory usa pandas e catálogo
+    has_system = "preco_venda_sistema" in df.columns
+    per_code = {}
+    for record in df.to_dict("records"):
+        price, _origin = sale_price(record, None, has_system)
+        if price > 0:
+            per_code.setdefault(record["codigo_barras"], {})[str(record.get("loja", ""))] = round(price, 2)
+    index = pd.Index(df.codigo_barras.unique(), name="codigo_barras")
+    return pd.DataFrame({
+        "preco_min": [min(per_code[c].values()) if c in per_code else float("nan") for c in index],
+        "preco_max": [max(per_code[c].values()) if c in per_code else float("nan") for c in index],
+        "precos": [per_code.get(c, {}) for c in index],
+    }, index=index)
 
 
 def stock_by_store(df):

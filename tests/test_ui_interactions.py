@@ -223,3 +223,32 @@ def test_inventory_excel_exports_the_whole_stock_ignoring_screen_filters(app, ch
     assert page.export_inventory() == str(target)
     general = load_workbook(target)["Geral"]
     assert {general.cell(r, 3).value for r in (4, 5)} == {"CONJUNTO RENDA P", "CUECA BOXER M"}
+
+
+def test_store_list_starts_with_code_name_price_group_and_subclass(app, chrome, monkeypatch):
+    import pandas as pd
+    from PySide6.QtWidgets import QDialog, QTableWidget
+    from core.matcher import build_analysis
+    from core.models import AnalysisConfig
+    from ui.dashboard_page import DashboardPage
+
+    stock = pd.DataFrame([["7896722660005", "CONJUNTO RENDA P", 4, 10.0, 30.0]],
+                         columns=["codigo_barras", "descricao", "quantidade_estoque", "preco_compra", "preco_venda"])
+    sales = stock.iloc[0:0].rename(columns={"quantidade_estoque": "quantidade_vendida"})
+    frame, audit = build_analysis(stock, sales, {"produtos": []}, "Pedras",
+                                  AnalysisConfig("Pedras", None, None, "", ""), None)
+    page = DashboardPage(frame, "período", audit)
+    seen = []
+
+    def capture(dialog):
+        table = dialog.findChild(QTableWidget)
+        seen.append(([table.horizontalHeaderItem(c).text() for c in range(table.columnCount())],
+                     [table.item(0, c).text() for c in range(3)], dialog.width()))
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(QDialog, "exec", capture)
+    page.detail("Valor em estoque", page.current_df())
+    headers, first_row, width = seen[0]
+    assert headers[:5] == ["Código", "Produto", "Preço un.", "Grupo", "Subclasse"] and headers[-1] == "Total"
+    assert first_row == ["7896722660005", "CONJUNTO RENDA P", "R$ 30,00"]
+    assert width >= 960
