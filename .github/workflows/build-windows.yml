@@ -1,7 +1,11 @@
 # Gera o MixModaInsights.exe num servidor Windows do GitHub.
 #
-# - A cada push: roda os testes, gera o .exe com o build.bat e deixa o arquivo
-#   para download na aba Actions (Artifacts) por 30 dias.
+# - A cada push: gera o .exe com o build.bat e deixa o arquivo para download na
+#   aba Actions (Artifacts) por 30 dias. Os testes NÃO rodam por padrão (o build
+#   fica mais rápido); para rodar, use uma das opções:
+#     * escreva [testes] na mensagem do commit;
+#     * ou Actions > Build Windows .exe > Run workflow e marque "Rodar os testes".
+#   Os testes também rodam no PC: python -m pytest -q tests
 # - Em tag de versão (ex.: v1.0): também publica o .exe numa Release.
 # - Também pode ser disparado à mão em Actions > Build Windows .exe > Run workflow.
 name: Build Windows .exe
@@ -11,6 +15,11 @@ on:
     branches: ["main", "feature/**", "fix/**"]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      testes:
+        description: "Rodar os testes antes de gerar o .exe"
+        type: boolean
+        default: false
 
 permissions:
   contents: write   # necessário só para publicar a Release nas tags
@@ -30,7 +39,8 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      - name: Testes
+      - name: Testes (só com [testes] no commit ou marcado no Run workflow)
+        if: ${{ inputs.testes || contains(github.event.head_commit.message, '[testes]') }}
         shell: cmd
         run: |
           python -m pip install -r requirements.txt pytest
