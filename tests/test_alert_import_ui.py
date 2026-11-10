@@ -57,6 +57,9 @@ def test_download_template_then_import_rules_from_the_alerts_page(app, chrome, m
 
     def accept(dialog):
         shown.append((dialog.preview.rules_to_write, dialog.confirm.isEnabled(), dialog.table.rowCount()))
+        # Células com widget não têm texto por baixo (o texto se sobrepunha ao cartão).
+        assert all(dialog.table.item(r, c).text() == "" for r in range(dialog.table.rowCount()) for c in range(1, 5))
+        assert dialog.table.item(0, 0).text().isdigit()
         return QDialog.DialogCode.Accepted
 
     monkeypatch.setattr(alert_import_dialog, "get_open_file", lambda *a, **k: str(target))

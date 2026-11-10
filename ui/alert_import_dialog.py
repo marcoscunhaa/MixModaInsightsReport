@@ -6,7 +6,7 @@
 from datetime import date
 
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QColor, QDesktopServices
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
@@ -219,9 +219,11 @@ class AlertImportPreviewDialog(QDialog):
             texts = (str(line.linha), line.descricao or line.codigo_barras, line.lojas_texto,
                      "" if line.status == STATUS_ERROR else f"≤ {line.estoque_minimo} un.", STATUS_LOOK[line.status][0])
             for col, text in enumerate(texts):
-                item = QTableWidgetItem(text)
+                # Só a coluna LINHA é texto da célula; as outras são desenhadas pelos widgets
+                # (o texto fica na dica, sem pintar por baixo do widget).
+                item = QTableWidgetItem(text if col == 0 else "")
                 if col != 0:
-                    item.setForeground(QColor(0, 0, 0, 0))  # o visual vem dos widgets
+                    item.setToolTip(text)
                 table.setItem(row, col, item)
             table.item(row, 0).setTextAlignment(Qt.AlignmentFlag.AlignCenter)
 
