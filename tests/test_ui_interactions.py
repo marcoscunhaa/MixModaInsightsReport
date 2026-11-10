@@ -251,4 +251,6 @@ def test_store_list_starts_with_code_name_price_group_and_subclass(app, chrome, 
     headers, first_row, width = seen[0]
     assert headers[:5] == ["Código", "Produto", "Preço un.", "Grupo", "Subclasse"] and headers[-1] == "Total"
     assert first_row == ["7896722660005", "CONJUNTO RENDA P", "R$ 30,00"]
-    assert width >= 960
+    # Quase a tela toda (até 1560), mas nunca maior que a tela: no CI a tela virtual tem 800 px.
+    available = app.primaryScreen().availableGeometry().width()
+    assert width == min(max(960, min(1560, available - 80)), available - 24)
