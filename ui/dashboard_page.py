@@ -46,10 +46,15 @@ def _emoji(text, idx=0):
     return SUBCLASS_EMOJIS[idx % len(SUBCLASS_EMOJIS)]
 
 
-class _AutoHeightCardGrid(QListWidget):
-    """Grade de cards que cresce até mostrar todos os cards (a rolagem fica com o dashboard)."""
+class _FixedHeightCardGrid(QListWidget):
+    """Grade de cards com altura fixa (4 fileiras), igual em qualquer nível do explorador.
+
+    Assim o painel não encolhe com 1 card nem estica com 50: o que passar de 4
+    fileiras rola dentro da grade (ao chegar no fim, a roda do mouse volta a rolar o dashboard).
+    """
 
     GRID=QSize(350,116)
+    VISIBLE_ROWS=4
 
     def __init__(self,parent=None):
         super().__init__(parent)
@@ -57,23 +62,21 @@ class _AutoHeightCardGrid(QListWidget):
         self.setMovement(QListWidget.Movement.Static); self.setViewMode(QListWidget.ViewMode.IconMode)
         self.setResizeMode(QListWidget.ResizeMode.Adjust); self.setSpacing(10); self.setGridSize(self.GRID)
         self.setUniformItemSizes(False); self.setWrapping(True)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel); self.verticalScrollBar().setSingleStep(24)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setFixedHeight(self.panel_height())
 
-    def fit_height(self):
-        columns=max(1,self.viewport().width()//self.GRID.width())
-        rows=max(1,-(-self.count()//columns))
-        self.setFixedHeight(rows*self.GRID.height()+2*self.frameWidth()+12)
-
-    def resizeEvent(self,event):
-        super().resizeEvent(event); self.fit_height()
+    @classmethod
+    def panel_height(cls):
+        return cls.VISIBLE_ROWS*cls.GRID.height()+14
 
 
 class HierarchyBrowser(QFrame):
     """Cards navegáveis Grupo › Subclasse › Produto.
 
-    `inline=True` é o modo do dashboard: fica dentro da página, cresce até mostrar
-    todos os cards e "← Voltar" só aparece depois de entrar num grupo. No modo
+    `inline=True` é o modo do dashboard: fica dentro da página, com altura fixa
+    (a grade rola por dentro) e "← Voltar" só aparece depois de entrar num grupo. No modo
     janela (explorador em diálogo) a lista rola sozinha.
     """
 
@@ -90,11 +93,12 @@ class HierarchyBrowser(QFrame):
         root.addLayout(head)
         self.tip=QLabel(); self.tip.setObjectName("SectionHint"); root.addWidget(self.tip)
         if inline:
-            self.list=_AutoHeightCardGrid()
+            self.list=_FixedHeightCardGrid()
         else:
             self.list=QListWidget(); self.list.setObjectName("CardGrid"); self.list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection); self.list.setMovement(QListWidget.Movement.Static); self.list.setViewMode(QListWidget.ViewMode.IconMode); self.list.setResizeMode(QListWidget.ResizeMode.Adjust); self.list.setSpacing(10); self.list.setGridSize(QSize(350,116)); self.list.setUniformItemSizes(False)
         self.list.itemClicked.connect(self.open_item); root.addWidget(self.list,0 if inline else 1)
         self.empty=QLabel("Nenhum produto com os filtros atuais."); self.empty.setObjectName("Muted"); self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter); self.empty.setStyleSheet("padding:24px;"); self.empty.hide(); root.addWidget(self.empty)
+        if inline: self.empty.setFixedHeight(self.list.height())  # sem cards, o painel mantém a mesma altura
         self.render_group(start_group) if start_group else self.render_groups()
 
     # ---------- montagem ----------
@@ -110,7 +114,7 @@ class HierarchyBrowser(QFrame):
 
     def _finish(self):
         self.empty.setVisible(self.list.count()==0); self.list.setVisible(self.list.count()>0)
-        if self.inline: self.list.fit_height()
+        self.list.scrollToTop()
 
     @staticmethod
     def _counts(d,key):

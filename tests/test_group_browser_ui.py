@@ -66,3 +66,18 @@ def test_dashboard_keeps_group_when_filters_change(app, made):
     made(fresh)
     fresh.restore([("group", "NÃO EXISTE")])  # grupo sumiu com o filtro: fica na lista de grupos
     assert fresh.path == [] and fresh.list.count() == 2
+
+
+def test_inline_panel_keeps_the_same_height_on_every_level(app, made):
+    from ui.dashboard_page import HierarchyBrowser
+    many = pd.concat([frame()] * 40, ignore_index=True)
+    many["codigo_barras"] = [str(i) for i in range(len(many))]
+    browser = HierarchyBrowser(many, inline=True)
+    made(browser)
+    heights = [browser.list.height()]
+    browser.render_group("MIX COSMÉTICOS")            # 1 card
+    heights.append(browser.list.height())
+    browser.render_sub("VESTUARIO FEMININO", "BLUSA")  # 80 cards: rola dentro da grade
+    heights.append(browser.list.height())
+    assert len(set(heights)) == 1 and heights[0] >= 4 * 116
+    assert browser.empty.height() == heights[0]       # sem cards, mesma altura
