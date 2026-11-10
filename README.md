@@ -55,6 +55,16 @@ Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflo
 - O produto da regra é encontrado pelo código de barras; a descrição só desempata quando o mesmo código aparece com mais de uma descrição na loja. Assim a regra continua valendo se a planilha da loja usa outra descrição que o catálogo.
 - Na dashboard, o ícone de alertas destaca quantos produtos atingiram as regras e abre a relação com código, loja, quantidade e preço de venda.
 
+### Importar alertas por planilha
+
+- Na página de regras de alertas, **⬇ Baixar planilha modelo** gera um Excel nas cores da Mix Moda, com as abas nesta ordem:
+  - **Como usar**: os quatro passos (a planilha abre nesta aba).
+  - **Produtos**: todos os produtos do catálogo com o estoque de cada loja (última análise), com filtro em cada coluna.
+  - **Alertas**: cole o código de barras e a descrição, o grupo e o estoque atual aparecem sozinhos (fórmulas que procuram na aba Produtos; acha o código mesmo que o Excel o transforme em número ou tire o zero à esquerda). Informe o **estoque mínimo** e as lojas: **Todas as lojas = Sim**, ou marque Sim só nas lojas desejadas (sem nenhuma marcada, vale para todas). A coluna **Situação** mostra ✓ quando a linha está pronta e ⚠ quando falta algo. As regras atuais já vêm preenchidas, para só ajustar o limite.
+- **⬆ Importar planilha** lê a aba Alertas (só as colunas que o usuário preenche, não o resultado das fórmulas), confere com o catálogo e com as regras atuais e mostra uma **prévia**: novas, atualizadas (com o limite antigo → novo), sem mudança e com problema (código fora do catálogo, falta de código ou de mínimo, mínimo negativo ou quebrado). Nada é gravado antes de confirmar; linhas com problema ficam de fora.
+- Mesmo código e loja repetidos na planilha: vale a última linha. Regra que já existe com outra descrição é atualizada, não duplicada. Apagar uma linha da planilha não apaga a regra no app.
+- Código em `core/alert_import.py` (leitura e prévia), `exports/alert_template_export.py` (planilha) e `ui/alert_import_dialog.py` (botões e prévia).
+
 ## Explorar estoque (cadastro, edição e exclusão)
 
 - No menu inicial, **EXPLORAR ESTOQUE** abre os produtos do catálogo em cards: **Grupo → Subclasse → Produto**, com busca por descrição ou código.

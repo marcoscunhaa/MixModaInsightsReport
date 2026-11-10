@@ -50,6 +50,12 @@ QFrame#hero QLabel#heroText { color:#E6EAFF; font-size:12px; }
 QFrame#hero QFrame#heroStat { background:rgba(255,255,255,0.14); border:1px solid rgba(255,255,255,0.22); border-radius:16px; }
 QFrame#hero QLabel#heroNumber { font-size:28px; font-weight:900; }
 QFrame#hero QLabel#heroCaption { color:#DCE3FF; font-size:10px; font-weight:900; letter-spacing:1px; }
+QFrame#hero QPushButton#heroAction { background:rgba(255,255,255,0.14); color:#FFFFFF; border:1px solid rgba(255,255,255,0.32);
+    border-radius:12px; padding:9px 16px; font-size:11px; font-weight:900; text-align:left; }
+QFrame#hero QPushButton#heroAction:hover { background:rgba(255,255,255,0.24); border-color:rgba(255,255,255,0.55); }
+QFrame#hero QPushButton#heroPrimary { background:#FFFFFF; color:#3B3FD9; border:none; border-radius:12px;
+    padding:9px 16px; font-size:11px; font-weight:900; text-align:left; }
+QFrame#hero QPushButton#heroPrimary:hover { background:#EEF2FF; }
 QFrame#card { background:#FFFFFF; border:1px solid #DCE6F3; border-radius:20px; }
 QFrame#card QWidget { background:transparent; }
 QFrame#card QLabel#cardTitle { color:#12213D; font-size:16px; font-weight:900; }
@@ -222,6 +228,25 @@ class StockAlertRulesDialog(QDialog):
         subtitle.setWordWrap(True)
         texts.addWidget(subtitle)
         row.addLayout(texts, 1)
+        actions = QVBoxLayout()
+        actions.setSpacing(8)
+        template = QPushButton("⬇   Baixar planilha modelo")
+        template.setObjectName("heroAction")
+        template.setToolTip("Planilha com todos os produtos e o estoque de cada loja.\n"
+                            "Cole o código de barras, defina o estoque mínimo e as lojas.\n"
+                            "As regras atuais já vêm preenchidas.")
+        template.clicked.connect(self.download_template)
+        actions.addWidget(template)
+        importer = QPushButton("⬆   Importar planilha")
+        importer.setObjectName("heroPrimary")
+        importer.setToolTip("Lê a planilha preenchida, mostra uma prévia e cria todas as regras de uma vez.")
+        importer.clicked.connect(self.import_rules)
+        actions.addWidget(importer)
+        for action in (template, importer):
+            action.setCursor(Qt.CursorShape.PointingHandCursor)
+            action.setMinimumWidth(210)
+        self.template_button, self.import_button = template, importer
+        row.addLayout(actions)
         stat = QFrame()
         stat.setObjectName("heroStat")
         stat_box = QVBoxLayout(stat)
@@ -306,6 +331,19 @@ class StockAlertRulesDialog(QDialog):
         self.save_button.clicked.connect(self.save_rule)
         layout.addWidget(self.save_button)
         return panel
+
+    def download_template(self):
+        from ui.alert_import_dialog import download_alert_template
+        if download_alert_template(self, self.catalog, self.alert_store):
+            self.status.setText("Planilha modelo salva. Preencha a aba Alertas e use “Importar planilha”.")
+
+    def import_rules(self):
+        from ui.alert_import_dialog import import_alert_rules
+        saved = import_alert_rules(self, self.catalog, self.alert_store)
+        if saved:
+            self.status.setText(f"{saved} regra{'s' if saved != 1 else ''} importada{'s' if saved != 1 else ''} da planilha.")
+            self.refresh_rules()
+        return saved
 
     def _set_hint(self, text, selected=False):
         self.selected_label.setText(text)
