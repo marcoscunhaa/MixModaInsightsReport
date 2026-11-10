@@ -70,3 +70,25 @@ def test_stock_by_store_pivots_units_per_store():
     second = table.iloc[1]
     assert pd.isna(second.Palmeiras) and second.total == 3          # não existe em Palmeiras ≠ zero
     assert totals == {"Palmeiras": 3, "Pedras": 4, "Sapiranga": 4}
+
+
+def test_pivot_by_store_brings_unit_price_and_group():
+    from core.analyzer import pivot_by_store
+    df = pd.DataFrame({
+        "codigo_barras": ["1", "1", "2", "3"],
+        "descricao": ["SUNGA P", "SUNGA P", "SUNGA M", "COPO"],
+        "grupo": ["MODA PRAIA", "MODA PRAIA", "MODA PRAIA", "UTILIDADES"],
+        "subclasse": ["SUNGA", "SUNGA", "SUNGA", "COPO"],
+        "loja": ["Pedras", "Palmeiras", "Pedras", "Pedras"],
+        "quantidade_estoque": [2, 1, 4, 0],
+        "quantidade_vendida": [1, 0, 0, 0],
+        "preco_venda": [27.0, 29.99, 29.99, 0.0],
+        "preco_venda_sistema": [29.99, 34.99, 29.99, 0.0],
+        "preco_compra": [10.0, 10.0, 10.0, 0.0],
+    })
+    table, _stores, _totals = pivot_by_store(df)
+    first, second, third = (table.iloc[i] for i in range(3))
+    assert (first.grupo, first.preco_min, first.preco_max) == ("MODA PRAIA", 29.99, 34.99)  # preço do sistema, por loja
+    assert first.precos == {"Pedras": 29.99, "Palmeiras": 34.99}
+    assert second.preco_min == second.preco_max == 29.99
+    assert pd.isna(third.preco_min) and third.precos == {}  # sem preço em lugar nenhum

@@ -2,7 +2,7 @@ from utils.formatting import brl, br_number
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QComboBox,QLineEdit,QLabel,QTableWidget,
     QTableWidgetItem,QScrollArea,QGridLayout,QFrame,QPushButton,QHeaderView,QDialog,
-    QListWidget,QListWidgetItem,QAbstractItemView)
+    QListWidget,QListWidgetItem,QAbstractItemView,QApplication)
 from PySide6.QtGui import QColor, QFont
 from ui.widgets import Card, KpiCard, RankCard, StatusFilterBar
 from ui.explorer_cards import ExplorerCard, SUBCLASS_COLORS, _stable_color
@@ -509,7 +509,7 @@ class DashboardPage(QWidget):
         table,stores,totals=pivot_by_store(rows,view["value"],view["ascending"])
         def fmt(value): return brl(value) if kind=="money" else br_number(value,0)
         unit="" if kind=="money" else " un."
-        dlg=QDialog(parent or self); dlg.setWindowTitle(view["title"]); dlg.resize(1180,700)
+        dlg=QDialog(parent or self); dlg.setWindowTitle(view["title"]); self._fit_list_dialog(dlg)
         dlg.setStyleSheet("QDialog{background:#F4F7FC;} QLabel{background:transparent;}")
         l=QVBoxLayout(dlg); l.setContentsMargins(12,8,12,12); l.setSpacing(10); install_mac_window_chrome(dlg,l)
         filters=[x for x in (self.group.currentText(),self.sub.currentText()) if x not in ("Todos os grupos","Todas as subclasses")]
@@ -528,10 +528,24 @@ class DashboardPage(QWidget):
         hint=QLabel(f"{view['note']}  Clique numa loja para abrir o card do produto nela.  Dois cliques no código para copiar.  “—” = {absent}."
                     if len(table) else "Nenhum produto nesta lista com os filtros atuais.")
         hint.setStyleSheet("color:#7A879D;font-size:11px;padding:0 4px;"); hint.setWordWrap(True); l.addWidget(hint)
-        headers=["Produto","Código","Subclasse",*stores,"Total"]
+        # Código › Produto › Preço un. › Grupo › Subclasse › lojas › Total
+        fixed=["Código","Produto","Preço un.","Grupo","Subclasse"]; first_store=len(fixed)
+        headers=[*fixed,*stores,"Total"]
         t=QTableWidget(len(table)+(1 if len(table) else 0),len(headers)); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         t.setHorizontalHeaderLabels(headers); t.verticalHeader().setVisible(False); t.setAlternatingRowColors(True)
         bold=QFont("Segoe UI",9,QFont.Weight.Bold)
+        def price_item(row):
+            """Preço unitário de venda; se muda de loja para loja, a faixa (detalhe na dica)."""
+            low,high=row.get("preco_min"),row.get("preco_max")
+            if low!=low or low is None:
+                item=QTableWidgetItem("—"); item.setForeground(QColor("#A3AEC0"))
+            else:
+                item=QTableWidgetItem(brl(low) if abs(high-low)<0.005 else f"{brl(low)} – {brl(high)}")
+                item.setForeground(QColor("#0F7A55")); item.setFont(bold)
+                per_store=row.get("precos") or {}
+                if len(per_store)>1:
+                    item.setToolTip("Preço por loja:\n"+"\n".join(f"{s}: {brl(per_store[s])}" for s in stores if s in per_store))
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter); return item
         def cell(value):
             if value!=value:  # NaN: sem linha do produto nesta loja
                 item=QTableWidgetItem("—"); item.setForeground(QColor("#A3AEC0"))
@@ -541,50 +555,62 @@ class DashboardPage(QWidget):
                 elif value==0 and kind=="stock": item.setForeground(QColor("#B77900")); item.setBackground(QColor("#FFF8E6"))
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter); return item
         for i,row in table.iterrows():
-            for j,v in enumerate((row.descricao,row.codigo_barras,row.subclasse)): t.setItem(i,j,QTableWidgetItem(str(v)))
-            for k,store in enumerate(stores): t.setItem(i,3+k,cell(row[store]))
+            price=price_item(row)
+            for j,v in enumerate((row.codigo_barras,row.descricao,None,row.grupo,row.subclasse)):
+                t.setItem(i,j,price if j==2 else QTableWidgetItem(str(v)))
+            t.item(i,1).setToolTip(str(row.descricao))
+            for k,store in enumerate(stores): t.setItem(i,first_store+k,cell(row[store]))
             total=cell(row.total); total.setBackground(QColor("#EEF3FF")); t.setItem(i,len(headers)-1,total)
         if len(table):
-            last=len(table); label=QTableWidgetItem("TOTAL POR LOJA"); label.setFont(bold); t.setItem(last,0,label)
-            for k,store in enumerate(stores): t.setItem(last,3+k,cell(totals[store]))
+            last=len(table); label=QTableWidgetItem("TOTAL POR LOJA"); label.setFont(bold); t.setItem(last,1,label)
+            for k,store in enumerate(stores): t.setItem(last,first_store+k,cell(totals[store]))
             t.setItem(last,len(headers)-1,cell(sum(totals.values())))
             for j in range(len(headers)):
                 if t.item(last,j) is None: t.setItem(last,j,QTableWidgetItem(""))
                 t.item(last,j).setBackground(QColor("#DCE6FF"))
-        header=t.horizontalHeader(); header.setSectionResizeMode(QHeaderView.ResizeToContents); header.setSectionResizeMode(0,QHeaderView.Stretch)
+        header=t.horizontalHeader(); header.setSectionResizeMode(QHeaderView.ResizeToContents); header.setSectionResizeMode(1,QHeaderView.Stretch)
+        header.setMinimumSectionSize(70); t.verticalHeader().setDefaultSectionSize(32)
         def open_cell(r,c):
-            if r>=len(table) or not (3<=c<3+len(stores)): return
-            store=stores[c-3]; code=table.iloc[r].codigo_barras
+            if r>=len(table) or not (first_store<=c<first_store+len(stores)): return
+            store=stores[c-first_store]; code=table.iloc[r].codigo_barras
             found=rows[(rows.codigo_barras==code)&(rows.loja==store)]
             if len(found): self.open_row_dict(found.iloc[0].to_dict(),dlg)
-        make_barcode_copyable(t,1)
+        make_barcode_copyable(t,0)
         t.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
         t.cellClicked.connect(open_cell); l.addWidget(t,1); l.addLayout(self._close_row(dlg)); dlg.exec()
     def show_product_list(self,title,d):
         d=sort_products(d)
-        dlg=QDialog(self); dlg.setWindowTitle(title); dlg.resize(1180,700); l=QVBoxLayout(dlg); l.setContentsMargins(12,8,12,12); install_mac_window_chrome(dlg,l)
+        dlg=QDialog(self); dlg.setWindowTitle(title); self._fit_list_dialog(dlg); l=QVBoxLayout(dlg); l.setContentsMargins(12,8,12,12); install_mac_window_chrome(dlg,l)
         head=QLabel(f"{title} • {br_number(len(d),0)} registros")
         head.setStyleSheet("font-size:18px;font-weight:900;color:#12213D;padding:4px;"); l.addWidget(head)
         hint=QLabel("Clique em um produto para abrir o card com todos os detalhes. Dois cliques no código para copiar." if len(d) else "Nenhum produto com os filtros atuais.")
         hint.setStyleSheet("color:#7A879D;font-size:11px;padding:0 4px 4px 4px;"); l.addWidget(hint)
-        headers=["Código","Produto","Grupo","Subclasse","Loja","Estoque","Vendas","Preço venda","Faturamento","Valor estoque","Status"]
+        headers=["Código","Produto","Preço un.","Grupo","Subclasse","Loja","Estoque","Vendas","Faturamento","Valor estoque","Status"]
         status_colors={"NEGATIVO":("#7F1D1D","#FFFFFF"),"SEM ESTOQUE":("#FFE4E8","#B91C3A"),"CRÍTICO":("#FFF0F2","#D9284B"),"BAIXO":("#FFF5D9","#B77900"),"NORMAL":("#E8FAF5","#087F6A"),"EXCESSO":("#EEF2FF","#4C5BD4")}
         t=QTableWidget(len(d),len(headers)); t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); t.setHorizontalHeaderLabels(headers); t.setSortingEnabled(False)
         t.setSelectionBehavior(QTableWidget.SelectRows); t.verticalHeader().setVisible(False); t.setCursor(Qt.CursorShape.PointingHandCursor); rows=list(d.iterrows())
         for i,(_,r) in enumerate(rows):
-            vals=[r.codigo_barras,r.descricao,r.grupo,r.subclasse,r.loja,r.quantidade_estoque,r.quantidade_vendida,r.preco_venda,r.valor_vendido,r.valor_estoque,r.status_estoque]
+            vals=[r.codigo_barras,r.descricao,r.preco_venda,r.grupo,r.subclasse,r.loja,r.quantidade_estoque,r.quantidade_vendida,r.valor_vendido,r.valor_estoque,r.status_estoque]
             for j,v in enumerate(vals):
-                if j in (7,8,9): txt=brl(v)
+                if j in (2,8,9): txt=brl(v)
                 elif isinstance(v,(float,int)): txt=br_number(v,0)
                 else: txt=str(v)
                 item=QTableWidgetItem(txt)
-                if j==5 and r.quantidade_estoque<0: item.setForeground(QColor("#B91C3A")); item.setFont(QFont("Segoe UI",9,QFont.Weight.Bold))
+                if j==6 and r.quantidade_estoque<0: item.setForeground(QColor("#B91C3A")); item.setFont(QFont("Segoe UI",9,QFont.Weight.Bold))
                 if j==10:
                     bg,fg=status_colors.get(str(v).upper(),("#F1F4F8","#5F6D82")); item.setBackground(QColor(bg)); item.setForeground(QColor(fg)); item.setFont(QFont("Segoe UI",9,QFont.Weight.Bold))
                 t.setItem(i,j,item)
         t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents); t.horizontalHeader().setSectionResizeMode(1,QHeaderView.Stretch); t.setAlternatingRowColors(True)
         make_barcode_copyable(t,0)
         t.cellClicked.connect(lambda rr,cc:None if cc==0 else self.open_row_dict(rows[rr][1].to_dict(),dlg)); l.addWidget(t); l.addLayout(self._close_row(dlg)); dlg.exec()
+    @staticmethod
+    def _fit_list_dialog(dlg):
+        """Listas grandes: quase a tela toda (até 1560×920), para caber todas as colunas."""
+        screen=dlg.screen() or QApplication.primaryScreen()
+        area=screen.availableGeometry() if screen else None
+        width=min(1560,area.width()-80) if area else 1400
+        height=min(920,area.height()-70) if area else 820
+        dlg.resize(max(960,width),max(560,height))
     @staticmethod
     def _close_row(dlg):
         row=QHBoxLayout(); row.addStretch(1); row.addWidget(button("Fechar","Ghost","Fechar esta lista",dlg.accept)); return row

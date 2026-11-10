@@ -102,6 +102,8 @@ Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflo
 
 - Todo KPI com **Ver lista ›** abre no formato produto × loja: uma linha por produto, uma coluna por loja, o total do produto e uma linha de total por loja, com chips de cada loja no topo. Clicar numa loja abre o card do produto naquela loja.
 - O número de cada célula depende do KPI: **Faturamento** (valor vendido, coluna G), **Valor em estoque** (R$ do estoque), **Unidades em estoque**, **Unidades vendidas** (vendas do período), **Sem vendas** (unidades paradas), **Em ruptura** (quanto vendeu antes de zerar) e **Estoque crítico** (unidades). Com o status Sem estoque ou Negativo selecionado, o Valor em estoque lista as unidades zeradas/negativas.
+- Colunas, nesta ordem: **Código**, **Produto**, **Preço un.**, **Grupo**, **Subclasse**, uma coluna por loja e **Total**. O preço unitário é o de venda, com a mesma regra do Excel do estoque (preço do sistema, senão o das vendas); quando muda de loja para loja aparece a faixa (menor – maior) e a dica mostra o preço de cada loja.
+- A janela da lista ocupa quase a tela toda (até 1560×920) para caber todas as colunas.
 - Zerado fica em âmbar e negativo em vermelho; "—" indica que o produto não entra naquela lista naquela loja (ou, no estoque, que não está na planilha da loja).
 - Em análises com várias lojas, o KPI Unidades em estoque também mostra a divisão por loja na frase do card.
 
