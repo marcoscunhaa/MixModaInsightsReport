@@ -218,7 +218,7 @@ def test_inventory_excel_exports_the_whole_stock_ignoring_screen_filters(app, ch
     monkeypatch.setattr(inventory_excel.QDesktopServices, "openUrl", lambda *_: True)
 
     page = DashboardPage(frame, "período", audit)
-    assert page.inventory_button.text().endswith("Excel do estoque")
+    assert page.inventory_button.text().endswith("Exportar Estoque")
     page.search.setText("cueca")                       # filtro da tela não reduz o Excel
     assert page.export_inventory() == str(target)
     general = load_workbook(target)["Geral"]

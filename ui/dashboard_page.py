@@ -246,7 +246,7 @@ class DashboardPage(QWidget):
                                                "QPushButton:hover{background:#FFEFC2;border-color:#E8B24A;}")
         self.unclassified_button.setToolTip("Produtos sem grupo ou subclasse no catálogo.\nAbre a lista (um por código) e gera o Excel para cadastro.")
         self.unclassified_button.clicked.connect(lambda: UnclassifiedDialog(self.current_df(),self.catalog,self).exec()); head.addWidget(self.unclassified_button,0,Qt.AlignmentFlag.AlignVCenter)
-        self.inventory_button=button("📦  Excel do estoque","Secondary",
+        self.inventory_button=button("📊  Exportar Estoque","Secondary",
             "Baixa o estoque completo (todas as lojas, sem os filtros da tela):\n"
             "resumo, tabela dinâmica Grupo › Subclasse › Produto por loja, aba geral e uma aba por loja,\n"
             "com filtros por código, nome, loja, grupo e subclasse.",self.export_inventory)

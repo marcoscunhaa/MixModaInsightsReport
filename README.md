@@ -68,7 +68,7 @@ Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflo
 
 ## Excel do estoque completo
 
-- No dashboard, **📦 Excel do estoque** baixa o estoque inteiro da análise (todas as lojas; os filtros da tela não se aplicam, o Excel tem os próprios).
+- No dashboard, **📊 Exportar Estoque** baixa o estoque inteiro da análise (todas as lojas; os filtros da tela não se aplicam, o Excel tem os próprios).
 - Abas:
   - **Resumo**: produtos, unidades, valor total em estoque, grupos e subclasses; tabela **por loja** (produtos, unidades, valor, zerados, negativos, % do valor) e **por grupo** (com quantos produtos cada loja tem). Os nomes de loja e de grupo são atalhos para as outras abas.
   - **Tabela dinâmica**: tabela dinâmica de verdade (Excel, WPS e LibreOffice), com Grupo › Subclasse › Produto nas linhas, as lojas nas colunas e as unidades em estoque. Abre fechada nos grupos: o ⊞ ao lado do grupo (ou dois cliques no nome) abre as subclasses, e a subclasse abre os produtos. A fonte é a aba oculta **Dados**; o arquivo pede para recalcular ao abrir.

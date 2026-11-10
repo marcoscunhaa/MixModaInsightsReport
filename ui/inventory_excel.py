@@ -1,4 +1,4 @@
-"""Botão "Excel do estoque": salva o Excel completo (resumo, tabela dinâmica, geral e lojas) e o abre."""
+"""Botão "Exportar Estoque": salva o Excel completo (resumo, tabela dinâmica, geral e lojas) e o abre."""
 from datetime import date
 
 from PySide6.QtCore import Qt, QUrl
