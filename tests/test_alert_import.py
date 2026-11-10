@@ -54,7 +54,8 @@ def test_template_has_lookup_formulas_and_prefilled_rules(tmp_path, store):
     path = tmp_path / "modelo.xlsx"
     assert export_alert_template_xlsx(path, CATALOG, store.load_rules(), SNAPSHOT) == (3, 1)
     wb = load_workbook(path)
-    assert wb.sheetnames == ["Alertas", "Produtos", "Como usar"]
+    assert wb.sheetnames == ["Como usar", "Produtos", "Alertas"]
+    assert wb.active.title == "Como usar"
     alerts = wb["Alertas"]
     head = columns(alerts)
     assert list(head)[:6] == ["Código de barras", "Descrição do produto", "Grupo", "Estoque atual",

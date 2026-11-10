@@ -1,13 +1,13 @@
 """Planilha modelo para importar alertas de estoque (regras de estoque mínimo).
 
-Abas:
+Abas, nesta ordem (abre em Como usar):
+- **Como usar**: os passos.
+- **Produtos**: todos os produtos do catálogo com o estoque de cada loja (última
+  análise), em tabela com filtro, para achar e copiar códigos.
 - **Alertas**: onde o usuário trabalha. Cola o código de barras e a descrição, o grupo
   e o estoque atual aparecem sozinhos (fórmulas que procuram na aba Produtos). Ele só
   informa o estoque mínimo e as lojas. A coluna Situação avisa o que falta. Já vem com
   as regras que existem hoje, para ajustar o limite.
-- **Produtos**: todos os produtos do catálogo com o estoque de cada loja (última
-  análise), em tabela com filtro, para achar e copiar códigos.
-- **Como usar**: os passos.
 
 A leitura de volta fica em core/alert_import.py e usa só as colunas que o usuário
 preenche (código, mínimo e lojas), não o resultado das fórmulas.
@@ -282,10 +282,11 @@ def export_alert_template_xlsx(path, catalog, rules=None, snapshot=None):
     products = template_products(catalog, snapshot)
     workbook = Workbook()
     workbook.loaded_theme = _brand_theme()
-    alerts = workbook.active
-    alerts.title = SHEET
+    # Ordem das abas: Como usar › Produtos › Alertas (abre em Como usar).
+    help_sheet = workbook.active
+    help_sheet.title = HELP_SHEET
     products_sheet = workbook.create_sheet(PRODUCTS_SHEET)
-    help_sheet = workbook.create_sheet(HELP_SHEET)
+    alerts = workbook.create_sheet(SHEET)
     product_range = _products_sheet(products_sheet, products)
     prefilled = _alerts_sheet(alerts, rules, product_range)
     _help_sheet(help_sheet)
