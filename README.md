@@ -66,6 +66,18 @@ Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflo
 - Ao abrir, o app valida o catálogo. Se o JSON estiver inválido (ex.: editado à mão), ele avisa o problema e oferece restaurar o `.bak` ou, no executável, o catálogo original embutido. O arquivo com problema é guardado como `catalogo_produtos_estoque_geral.corrompido-<data-hora>.json`.
 - No executável, o catálogo embutido é copiado na primeira execução para a pasta `data` ao lado do `.exe` (ou para a pasta de dados do usuário) e as edições vão para essa cópia. Um `.exe` novo com catálogo atualizado não sobrescreve essa cópia; para recomeçar do catálogo embutido, apague-a.
 
+## Excel do estoque completo
+
+- No dashboard, **📊 Exportar Estoque** baixa o estoque inteiro da análise (todas as lojas; os filtros da tela não se aplicam, o Excel tem os próprios).
+- Abas:
+  - **Resumo**: produtos, unidades, valor total em estoque, grupos e subclasses; tabela **por loja** (produtos, unidades, valor, zerados, negativos, % do valor) e **por grupo** (com quantos produtos cada loja tem). Os nomes de loja e de grupo são atalhos para as outras abas.
+  - **Tabela dinâmica**: tabela dinâmica de verdade (Excel, WPS e LibreOffice), com Grupo › Subclasse › Produto nas linhas, as lojas nas colunas e as unidades em estoque. Abre fechada nos grupos: o ⊞ ao lado do grupo (ou dois cliques no nome) abre as subclasses, e a subclasse abre os produtos. A fonte é a aba oculta **Dados**; o arquivo pede para recalcular ao abrir.
+  - **Geral** e **uma aba por loja**: código de barras, loja, descrição, grupo, subclasse, estoque, valor unitário e valor total em estoque, como tabela do Excel com filtro em cada coluna.
+- **Valor unitário**, nesta ordem: preço do **sistema** (coluna F da planilha de estoque) → valor registrado nas **vendas do período** → **catálogo** (último valor gravado para a loja) → **estimado** (2× compra). A análise passa a guardar a coluna F em `preco_venda_sistema`; em análises salvas antes disso, o preço do produto sem venda já é a coluna F.
+- Valor total em estoque = estoque × valor unitário. Estoque negativo aparece em vermelho e não entra no valor.
+- Visual nas cores da Mix Moda (faixa vermelha com fio amarelo, cabeçalhos amarelos, linhas em creme) e fonte Arial, para abrir igual no Excel e no WPS.
+- Código em `exports/inventory_export.py`; regra do preço em `core/inventory.py`.
+
 ## Dashboard: estoque zerado ou negativo
 
 - Status de estoque: **NEGATIVO** (estoque abaixo de zero, venda sem entrada no sistema) e **SEM ESTOQUE** (estoque igual a zero, com ou sem venda). Os dois aparecem no filtro de status.

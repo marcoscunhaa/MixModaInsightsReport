@@ -228,6 +228,9 @@ def build_analysis(df_estoque, df_vendas, catalog, loja, config, classification=
     merged["preco_venda_atual"] = merged.preco_venda_estoque.where(
         many_prices & (merged.preco_venda_estoque > 0)
     )
+    # Preço de venda definido no sistema (coluna F do estoque), como veio: é o
+    # valor que o Excel de estoque completo usa primeiro.
+    merged["preco_venda_sistema"] = merged.preco_venda_estoque
     merged.drop(columns=["_faturamento", "_custo_vendas", "preco_venda_estoque"], inplace=True)
     merged["margem_unitaria"] = merged.preco_venda - merged.preco_compra
     merged["margem_percentual"] = merged.apply(lambda r: r.margem_unitaria / r.preco_venda * 100 if r.preco_venda else 0, axis=1)
