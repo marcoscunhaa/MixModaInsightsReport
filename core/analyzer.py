@@ -42,8 +42,7 @@ def pivot_by_store(df, value="quantidade_estoque", ascending=False):
     if df.empty:
         return df.iloc[0:0], [], {}
     stores = order_stores(df.loja.dropna().unique())
-    names = (df.groupby("codigo_barras").descricao
-             .agg(lambda s: s.value_counts().index[0]).rename("descricao"))
+    names = most_common_name(df)
     groups = df.groupby("codigo_barras")[["grupo", "subclasse"]].first()
     pivot = df.pivot_table(index="codigo_barras", columns="loja", values=value,
                            aggfunc="sum").reindex(columns=stores)
@@ -53,6 +52,20 @@ def pivot_by_store(df, value="quantidade_estoque", ascending=False):
     table = table.sort_values("codigo_barras", key=lambda col: col.map(barcode_sort_key), kind="stable").reset_index(drop=True)
     totals = {store: float(df.loc[df.loja == store, value].sum()) for store in stores}
     return table, stores, totals
+
+
+def most_common_name(df):
+    """Descrição mais frequente de cada código (vetorizado; no empate, a que aparece primeiro).
+
+    Equivale a `groupby(código).descricao.agg(lambda s: s.value_counts().index[0])`,
+    sem chamar uma função Python por produto (de ~280 ms para ~10 ms em 5 mil linhas).
+    """
+    counts = (df.assign(_ordem=range(len(df)))
+              .groupby(["codigo_barras", "descricao"], sort=False)
+              .agg(_n=("_ordem", "size"), _primeira=("_ordem", "min"))
+              .reset_index()
+              .sort_values(["codigo_barras", "_n", "_primeira"], ascending=[True, False, True], kind="stable"))
+    return counts.drop_duplicates("codigo_barras").set_index("codigo_barras").descricao.rename("descricao")
 
 
 def unit_prices(df):

@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
 
 from core.catalog_store import classification_payload, load_catalog
 from core.last_analysis import LastAnalysisError, LastAnalysisStore
-from core.models import AnalysisConfig
 from core.stock_alerts import StockAlertStore
 from ui.analysis_page import AnalysisPage
 from ui.stock_explorer import StockExplorerPage
@@ -60,6 +59,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.analysis)
         self.stock_explorer = None
         self.dashboard = None
+        self._analysis_worker = None
         self.dashboard_id = None  # id da análise salva que o dashboard atual mostra
 
 
@@ -257,70 +257,59 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(page)
 
     def generate(self, info):
-        # Módulos pesados (pandas, gráficos, PDF) só são carregados aqui, para a
-        # tela inicial abrir rápido. O app.py já os pré-carrega em segundo plano.
-        import pandas as pd
-        from core.loader import load_stock, load_sales
-        from core.matcher import build_analysis
+        """Gera a análise numa thread: a janela continua respondendo e o botão mostra o progresso.
+
+        Os módulos pesados (pandas, leitura de planilhas) só são carregados na thread.
+        """
+        if self._analysis_worker is not None:
+            return  # já tem uma análise em andamento
+        from ui.analysis_worker import AnalysisWorker
+        worker = AnalysisWorker(info, self.catalog, self.classification, self)
+        worker.progress.connect(self.analysis.set_progress)
+        # Métodos da janela (não lambdas): o Qt entrega o sinal na thread da tela.
+        self._analysis_info = info
+        worker.succeeded.connect(self._analysis_ready)
+        worker.failed.connect(self._analysis_failed)
+        worker.finished.connect(self._analysis_finished)
+        self._analysis_worker = worker
+        self.analysis.set_busy(True)
+        worker.start()
+
+    def _analysis_finished(self):
+        worker, self._analysis_worker = self._analysis_worker, None
+        self.analysis.set_busy(False)
+        if worker is not None:
+            worker.deleteLater()
+
+    def _analysis_failed(self, message, details):
+        print(details)
+        show_message(
+            self,
+            "critical",
+            "Erro ao gerar análise",
+            f"Não foi possível processar os arquivos.\n\n{message}\n\n"
+            "Verifique se os arquivos são XLS/XLSX válidos e se seguem o layout da Mix Moda.",
+        )
+
+    def _analysis_ready(self, frame, audit):
+        info = self._analysis_info
+        if frame.empty:
+            show_message(self, "warning", "Sem dados", "Nenhum produto válido permaneceu após limpeza e cruzamento.")
+            return
         try:
-            frames = []
-            audits = []
-            for store_info in info["lojas"]:
-                stock = load_stock(store_info["estoque_path"])
-                sales = load_sales(store_info["vendas_path"])
-                config = AnalysisConfig(
-                    loja=store_info["loja"],
-                    data_inicio=info["data_inicio"],
-                    data_fim=info["data_fim"],
-                    estoque_path=store_info["estoque_path"],
-                    vendas_path=store_info["vendas_path"],
-                )
-                frame, audit = build_analysis(
-                    stock, sales, self.catalog, store_info["loja"], config, self.classification
-                )
-                frames.append(frame)
-                audits.append(audit)
-
-            frame = (
-                pd.concat([item for item in frames if not item.empty], ignore_index=True)
-                if any(not item.empty for item in frames)
-                else pd.DataFrame()
-            )
-            if frame.empty:
-                show_message(
-                    self,
-                    "warning",
-                    "Sem dados",
-                    "Nenhum produto válido permaneceu após limpeza e cruzamento.",
-                )
-                return
-
-            audit = {}
-            audit_keys = set().union(*(item.keys() for item in audits))
-            for key in audit_keys:
-                if key == "vendas_sem_correspondencia_itens":
-                    audit[key] = [row for item in audits for row in item.get(key, [])]
-                else:
-                    audit[key] = sum(item.get(key, 0) for item in audits)
-
-            snapshot_columns = [
-                "codigo_barras", "descricao", "quantidade_estoque", "preco_venda", "loja"
-            ]
+            snapshot_columns = ["codigo_barras", "descricao", "quantidade_estoque", "preco_venda", "loja"]
             self.alert_store.save_snapshot(frame[snapshot_columns].to_dict("records"))
-
             period = (info["data_inicio"], info["data_fim"])
             analysis_id = self.save_last_analysis(frame, period, audit, info["lojas"])
             self.show_dashboard(frame, period, audit, analysis_id)
         except Exception as error:
-            details = traceback.format_exc()
-            show_message(
-                self,
-                "critical",
-                "Erro ao gerar análise",
-                f"Não foi possível processar os arquivos.\n\n{type(error).__name__}: {error}\n\n"
-                "Verifique se os arquivos são XLS/XLSX válidos e se seguem o layout da Mix Moda.",
-            )
-            print(details)
+            self._analysis_failed(f"{type(error).__name__}: {error}", traceback.format_exc())
+
+    def closeEvent(self, event):
+        # Fechar com a análise rodando: espera a thread terminar (fechar no meio derrubaria o app).
+        if self._analysis_worker is not None and self._analysis_worker.isRunning():
+            self._analysis_worker.wait()
+        super().closeEvent(event)
 
     def save_last_analysis(self, frame, period, audit, stores):
         """Guarda a análise para o card da tela inicial; uma falha aqui não impede o dashboard."""

@@ -1,15 +1,15 @@
 from utils.formatting import brl, br_number
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QComboBox,QLineEdit,QLabel,QTableWidget,
     QTableWidgetItem,QScrollArea,QGridLayout,QFrame,QPushButton,QHeaderView,QDialog,
     QListWidget,QListWidgetItem,QAbstractItemView,QApplication)
 from PySide6.QtGui import QColor, QFont
 from ui.widgets import Card, KpiCard, RankCard, StatusFilterBar
-from ui.explorer_cards import ExplorerCard, SUBCLASS_COLORS, _stable_color
+from ui.explorer_cards import CardBatch, ExplorerCard, SUBCLASS_COLORS, _stable_color
 from core.kpi_view import STATUS_OPTIONS, kpi_cards, status_counts, store_list_view
 from ui.product_modal import ProductModal
 from ui.product_picker import ProductPickerDialog
-from charts.dashboard_charts import make_chart
+from charts.dashboard_charts import make_chart, update_chart
 from core.analyzer import filter_analysis,kpis,single_product_labels,pivot_by_store,top_sold,stagnant,critical,rupture,sort_products
 from core.stores import order_stores
 from ui.copyable import is_barcode_column, make_barcode_copyable
@@ -29,6 +29,8 @@ COLUMN_LABELS = {
     "quantidade_vendida":"Vendidas","valor_vendido":"Faturamento","giro":"Giro","quantidade_estoque":"Em estoque",
     "valor_estoque":"Valor em estoque","status_estoque":"Status",
 }
+SEARCH_DELAY_MS=300
+CHART_KINDS=("grupo_valor_3d","grupo_pizza","vendas_3d","rotacao","status","estoque_x_vendas")
 CLICK_HINT="Clique num produto para ver todos os detalhes  •  Dois cliques no código para copiar."
 
 SUBCLASS_EMOJIS = ["👗","👚","👕","👖","👟","🥿","👜","💄","💍","🧸","🏠","🛏️","🍳","🧴","🧢","🩱","🩴","🎀","🧦","🧺"]
@@ -96,6 +98,7 @@ class HierarchyBrowser(QFrame):
             self.list=_FixedHeightCardGrid()
         else:
             self.list=QListWidget(); self.list.setObjectName("CardGrid"); self.list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection); self.list.setMovement(QListWidget.Movement.Static); self.list.setViewMode(QListWidget.ViewMode.IconMode); self.list.setResizeMode(QListWidget.ResizeMode.Adjust); self.list.setSpacing(10); self.list.setGridSize(QSize(350,116)); self.list.setUniformItemSizes(False)
+        self.cards=CardBatch(self.list,QSize(340,104),noun="cards")
         self.list.itemClicked.connect(self.open_item); root.addWidget(self.list,0 if inline else 1)
         self.empty=QLabel("Nenhum produto com os filtros atuais."); self.empty.setObjectName("Muted"); self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter); self.empty.setStyleSheet("padding:24px;"); self.empty.hide(); root.addWidget(self.empty)
         if inline: self.empty.setFixedHeight(self.list.height())  # sem cards, o painel mantém a mesma altura
@@ -107,12 +110,13 @@ class HierarchyBrowser(QFrame):
         self.excel.setVisible(group is not None and is_unclassified(group) and not unclassified_rows(self.df).empty)
 
     def _begin(self,path,title,crumb,tip):
-        self.path=path; self.title.setText(title); self.crumb.setText(crumb); self.tip.setText(tip); self.list.clear()
+        self.path=path; self.title.setText(title); self.crumb.setText(crumb); self.tip.setText(tip); self.list.clear(); self.cards.reset()
         if self.inline: self.back.setVisible(bool(path))
         else: self.back.setEnabled(bool(path))
         if self.on_path: self.on_path(list(path))
 
     def _finish(self):
+        self.cards.flush()  # só o primeiro lote; o resto vem com "Mostrar mais"
         self.empty.setVisible(self.list.count()==0); self.list.setVisible(self.list.count()>0)
         self.list.scrollToTop()
 
@@ -122,6 +126,8 @@ class HierarchyBrowser(QFrame):
         return {k:product_count(part) for k,part in d.groupby(key,dropna=False)}
 
     def _add_card(self,title,subtitle,value,key,kind,accent,emoji,tooltip=""):
+        self.cards.add(lambda: self._create_card(title,subtitle,value,key,kind,accent,emoji,tooltip))
+    def _create_card(self,title,subtitle,value,key,kind,accent,emoji,tooltip=""):
         item=QListWidgetItem(); item.setData(Qt.ItemDataRole.UserRole,(kind,key)); item.setSizeHint(QSize(340,104)); self.list.addItem(item)
         card=ExplorerCard(emoji,title,subtitle,value,accent,flat=True,copyable_subtitle=(kind=="product"))
         if tooltip: card.setToolTip(tooltip)
@@ -188,6 +194,7 @@ class HierarchyBrowser(QFrame):
 
     # ---------- navegação ----------
     def open_item(self,item):
+        if CardBatch.is_more(item): self.cards.flush(); return
         kind,key=item.data(Qt.ItemDataRole.UserRole)
         if kind=="group": self.render_group(key)
         elif kind=="sub": self.render_sub(self.path[0][1],key)
@@ -270,7 +277,12 @@ class DashboardPage(QWidget):
         fl.setStretch(3,1); fbox.addWidget(self._selection_bar()); fbox.addWidget(self.status)
         root.addWidget(filters)
         sc=QScrollArea(); sc.setWidgetResizable(True); inner=QWidget(); self.body=QVBoxLayout(inner); self.body.setContentsMargins(0,0,6,0); self.body.setSpacing(14); sc.setWidget(inner); root.addWidget(sc,1)
-        self.store.currentTextChanged.connect(self.refresh); self.group.currentTextChanged.connect(self.refresh); self.sub.currentTextChanged.connect(self.refresh); self.status.currentTextChanged.connect(self.refresh); self.search.textChanged.connect(self.refresh); self._update_selection_ui(); self.refresh()
+        self.store.currentTextChanged.connect(self.refresh); self.group.currentTextChanged.connect(self.refresh); self.sub.currentTextChanged.connect(self.refresh); self.status.currentTextChanged.connect(self.refresh)
+        # Busca: espera a pessoa parar de digitar (cada atualização refaz cards, gráficos e tabelas).
+        self._search_timer=QTimer(self); self._search_timer.setSingleShot(True); self._search_timer.setInterval(SEARCH_DELAY_MS)
+        self._search_timer.timeout.connect(self.refresh); self.search.textChanged.connect(lambda _text: self._search_timer.start())
+        self._charts=None; self._charts_key=None; self._data_version=0
+        self._update_selection_ui(); self.refresh()
 
     def _period_title(self):
         from core.last_analysis import _iso, describe_period
@@ -337,7 +349,7 @@ class DashboardPage(QWidget):
         """O catálogo mudou: reaplica grupo/subclasse e redesenha (filtros e seleção ficam)."""
         from core.matcher import reclassify
         self.catalog=catalog; self.df,changed=reclassify(self.df,catalog)
-        if changed: self.refresh()
+        if changed: self._data_version+=1; self.refresh()
 
     def refresh_unclassified_button(self,d):
         n=len(merge_by_barcode(unclassified_rows(d)))
@@ -393,6 +405,7 @@ class DashboardPage(QWidget):
                     z=item.layout().takeAt(0)
                     if z.widget(): z.widget().deleteLater()
     def refresh(self):
+        self._search_timer.stop()  # um filtro mudou agora: a busca pendente entra nesta mesma atualização
         options=self._apply_selection(self.df)
         if self.store.currentText()!="Todas as lojas":
             options=options[options.loja==self.store.currentText()]
@@ -409,7 +422,10 @@ class DashboardPage(QWidget):
         # Contagem de cada status com os outros filtros aplicados (sem o de status).
         self.status.set_counts(status_counts(self._apply_selection(filter_analysis(self.df,*self._base_filters(),"Todos"))))
         self.clear_filters_button.setVisible(self._filters_active())
-        d=self.current_df(); self.refresh_alert_button(); self.refresh_unclassified_button(d); self.clear_body()
+        d=self.current_df(); self.refresh_alert_button(); self.refresh_unclassified_button(d)
+        charts=self._chart_grid(d)
+        self.body.removeWidget(charts)  # os gráficos sobrevivem à limpeza: só são redesenhados
+        self.clear_body()
         self.body.addWidget(section_header("RESUMO","Os cards com “Ver lista ›” abrem os produtos por loja. Passe o mouse num card para mais detalhes."))
         grid=QGridLayout(); grid.setHorizontalSpacing(12); grid.setVerticalSpacing(12)
         for i,spec in enumerate(kpi_cards(d)):
@@ -419,9 +435,7 @@ class DashboardPage(QWidget):
         self.body.addLayout(grid)
         row1=QHBoxLayout(); row1.setSpacing(12); row1.addWidget(self.panel("🏆  TOP 3 MAIS VENDIDOS",self.top3(d),"Clique num produto para ver os detalhes."),1); row1.addWidget(self.panel("🏬  RANKING POR LOJA",self.store_ranking(d),"Lojas ordenadas pelas unidades vendidas no período."),1); self.body.addLayout(row1)
         self.body.addWidget(section_header("GRÁFICOS","Visão geral do estoque e das vendas por grupo."))
-        charts=QGridLayout(); charts.setSpacing(12)
-        for i,k in enumerate(["grupo_valor_3d","grupo_pizza","vendas_3d","rotacao","status","estoque_x_vendas"]): charts.addWidget(self.chart_panel(make_chart(k,d)),i//2,i%2)
-        self.body.addLayout(charts)
+        self.body.addWidget(charts)
         self.body.addWidget(self.group_browser(d))
         self.body.addWidget(section_header("PRODUTOS MAIS VENDIDOS",CLICK_HINT)); self.table_section(top_sold(d,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_vendida","valor_vendido","giro"],150,"#2F5BEA")
         self.body.addWidget(section_header("ESTOQUE PARADO  •  DINHEIRO PARADO EM PRODUTO","Produtos com estoque e pouca ou nenhuma venda. "+CLICK_HINT)); self.table_section(stagnant(d,6),["codigo_barras","descricao","grupo","subclasse","loja","quantidade_estoque","valor_estoque"],150,"#FF9F43")
@@ -442,6 +456,19 @@ class DashboardPage(QWidget):
         if hint:
             h=QLabel(hint); h.setObjectName("SectionHint"); l.addWidget(h)
         l.addWidget(widget); return f
+    def _chart_grid(self,d):
+        """Os 6 gráficos: criados uma vez e só redesenhados quando os dados filtrados mudam."""
+        key=(self._data_version,self._base_filters(),self.status.currentText(),frozenset(self.selected_codes))
+        if self._charts is None:
+            box=QWidget(); box.setObjectName("PanelBody"); grid=QGridLayout(box); grid.setContentsMargins(0,0,0,0); grid.setSpacing(12)
+            self._chart_canvases=[]
+            for i,kind in enumerate(CHART_KINDS):
+                canvas=make_chart(kind,d); self._chart_canvases.append(canvas); grid.addWidget(self.chart_panel(canvas),i//2,i%2)
+            self._charts=box; self._charts_key=key
+        elif key!=self._charts_key:
+            for kind,canvas in zip(CHART_KINDS,self._chart_canvases): update_chart(canvas,kind,d)
+            self._charts_key=key
+        return self._charts
     def chart_panel(self,chart): f=QFrame(); f.setObjectName("Panel"); l=QVBoxLayout(f); l.setContentsMargins(8,6,8,6); l.addWidget(chart); return f
     def top3(self,d):
         w=QWidget(); w.setObjectName("PanelBody"); l=QVBoxLayout(w); l.setContentsMargins(0,6,0,0); l.setSpacing(8); rows=top_sold(d,3).reset_index(drop=True); medals=[("👑","#F3B63F"),("🥈","#6D7A91"),("🥉","#B97845")]

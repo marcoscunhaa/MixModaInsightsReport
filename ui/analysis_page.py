@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QDateEdit, QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea,
+    QComboBox, QDateEdit, QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea,
     QVBoxLayout, QWidget,
 )
 
@@ -267,13 +267,15 @@ class AnalysisPage(QWidget):
         if len(selected) != len(set(selected)):
             show_message(self, "warning", "Loja repetida", "Selecione cada loja no máximo uma vez.")
             return
-        # Mostra que está trabalhando: ler as planilhas leva alguns segundos.
-        self.generate_button.setEnabled(False)
-        self.generate_button.setText("⏳  Gerando dashboard…")
-        QApplication.processEvents()
-        try:
-            self.generate.emit({"lojas": stores, "data_inicio": self.ini.date().toPython(),
-                                "data_fim": self.fim.date().toPython()})
-        finally:
-            self.generate_button.setEnabled(True)
-            self.generate_button.setText("📊  Gerar dashboard  →")
+        # A análise roda em segundo plano; a janela principal chama set_busy/set_progress.
+        self.generate.emit({"lojas": stores, "data_inicio": self.ini.date().toPython(),
+                            "data_fim": self.fim.date().toPython()})
+
+    def set_busy(self, busy):
+        """Botão travado e com progresso enquanto a análise roda em segundo plano."""
+        self.generate_button.setEnabled(not busy)
+        self.generate_button.setText("⏳  Preparando…" if busy else "📊  Gerar dashboard  →")
+
+    def set_progress(self, text, done, total):
+        percent = int(done * 100 / total) if total else 0
+        self.generate_button.setText(f"⏳  {text}…  {percent}%")

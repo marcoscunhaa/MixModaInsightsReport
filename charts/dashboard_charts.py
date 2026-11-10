@@ -1,25 +1,47 @@
 from utils.formatting import brl, br_number
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 import numpy as np
 
 NAVY="#14284B"; BLUE="#2854D9"; CYAN="#16B8C8"; TEAL="#0F9D8A"; GOLD="#F3B63F"; PINK="#E85D8A"; LIGHT="#EAF0FF"
 
-def _base(title, w=6.3, h=3.35):
-    fig=Figure(figsize=(w,h),dpi=100); fig.patch.set_facecolor("#FFFFFF")
+# Tamanho de cada gráfico (polegadas a 100 dpi): define a altura inicial do canvas.
+SIZES={"grupo_valor_3d":(7.0,3.75),"grupo_pizza":(7.0,4.0),"vendas_3d":(7.4,4.25),"rotacao":(7.0,3.75),
+       "status":(6.3,3.25),"top":(6.3,3.5),"estoque_x_vendas":(6.3,3.5)}
+_DEFAULT_MARGINS=dict(left=.125,right=.9,top=.88,bottom=.11)
+
+
+def make_chart(kind,df):
+    """Cria o canvas do gráfico `kind`. Para atualizar depois, use `update_chart` (não cria outro)."""
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas  # Qt só aqui: draw_chart roda sem Qt
+    fig=Figure(figsize=SIZES.get(kind,(6.3,3.5)),dpi=100)
+    canvas=FigureCanvas(fig)
+    draw_chart(fig,kind,df)
+    return canvas
+
+
+def update_chart(canvas,kind,df):
+    """Redesenha o mesmo canvas com outros dados: sem criar figura nova (economiza memória e tempo)."""
+    draw_chart(canvas.figure,kind,df)
+    canvas.draw_idle()
+
+
+def _base(fig, title, w=6.3, h=3.35):
+    # Limpa a figura (reaproveitada entre atualizações) e volta às margens padrão.
+    fig.clear(); fig.subplots_adjust(**_DEFAULT_MARGINS); fig.patch.set_facecolor("#FFFFFF")
     ax=fig.add_subplot(111); ax.set_facecolor("#FFFFFF")
     ax.set_title(title,loc="left",fontsize=12,fontweight="bold",color=NAVY,pad=12)
     for s in ax.spines.values(): s.set_visible(False)
     ax.grid(axis="y",alpha=.08); ax.tick_params(colors="#718097",labelsize=8)
     return fig,ax
 
-def make_chart(kind,df):
+def draw_chart(fig,kind,df):
+    """Desenha o gráfico `kind` na figura `fig` (apaga o que havia nela)."""
     if df.empty:
-        fig,ax=_base("Sem dados para exibir"); ax.axis("off"); return FigureCanvas(fig)
+        fig,ax=_base(fig,"Sem dados para exibir"); ax.axis("off"); return fig
     if kind=="grupo_valor_3d":
         # Troca do 3D por ranking horizontal: mais legível, sem perspectiva
         # distorcendo a comparação entre grupos e sem cortar os nomes.
-        fig,ax=_base("Concentração de estoque por grupo",7.0,3.75)
+        fig,ax=_base(fig,"Concentração de estoque por grupo",7.0,3.75)
         x=df.groupby("grupo").valor_estoque.sum().sort_values(ascending=True).tail(8)
         labels=[str(v) for v in x.index]
         y=np.arange(len(x))
@@ -32,9 +54,9 @@ def make_chart(kind,df):
         for bar,val in zip(bars,x.values):
             ax.text(val,max(bar.get_y()+bar.get_height()/2,0),brl(val,0),va="center",ha="left",fontsize=7.5,fontweight="bold",color=NAVY)
         fig.subplots_adjust(left=.31,right=.96,top=.84,bottom=.18)
-        return FigureCanvas(fig)
+        return fig
     if kind=="grupo_pizza":
-        fig,ax=_base("Grupos com maior volume de vendas",7.0,4.0); x=df.groupby("grupo").quantidade_vendida.sum().sort_values(ascending=False); x=x[x>0].head(7)
+        fig,ax=_base(fig,"Grupos com maior volume de vendas",7.0,4.0); x=df.groupby("grupo").quantidade_vendida.sum().sort_values(ascending=False); x=x[x>0].head(7)
         if len(x):
             vals=x.values; labels=[str(i) for i in x.index]
             # Cores fixas por grupo: Cosméticos sempre roxo e Vestuário Fem. Adul. sempre azul.
@@ -74,16 +96,15 @@ def make_chart(kind,df):
             leg=ax.legend(wedges,legend_labels,loc="upper center",bbox_to_anchor=(.5,-.04),frameon=False,fontsize=7.5,ncol=2,columnspacing=1.2,handlelength=1.2)
             for t in leg.get_texts(): t.set_color(NAVY)
             ax.axis("equal"); fig.subplots_adjust(left=.03,right=.97,top=.84,bottom=.30)
-        return FigureCanvas(fig)
+        return fig
     if kind=="vendas_3d":
         # Barras verticais simples, vinho, com bastante respiro entre barras e legenda.
-        fig=Figure(figsize=(7.4,4.25),dpi=100); fig.patch.set_facecolor("#FFFFFF")
-        ax=fig.add_subplot(111); ax.set_facecolor("#FFFFFF")
+        fig,ax=_base(fig,"Volume vendido por grupo",7.4,4.25)
+        ax.spines["bottom"].set_visible(True)  # este gráfico mostra a linha de base
         x=df.groupby("grupo").quantidade_vendida.sum().sort_values(ascending=False).head(8)
         labels=[str(v) for v in x.index]; vals=x.values.astype(float); xpos=np.arange(len(vals))
         wine="#E85D8A"
         bars=ax.bar(xpos,vals,width=.48,color=wine,alpha=.95)
-        ax.set_title("Volume vendido por grupo",loc="left",fontsize=12,fontweight="bold",color=NAVY,pad=12)
         ax.set_xticks(xpos); ax.set_xticklabels([lab[:18] for lab in labels],rotation=-28,ha="left",fontsize=7.5,color="#50627E")
         ax.set_ylabel("Unidades",fontsize=8,color="#718097")
         ax.tick_params(axis="y",labelsize=7.5,colors="#718097")
@@ -92,9 +113,9 @@ def make_chart(kind,df):
         for bar,val in zip(bars,vals):
             ax.text(bar.get_x()+bar.get_width()/2,val*1.015,f"{br_number(val,0)}",ha="center",va="bottom",fontsize=7.5,fontweight="bold",color=NAVY)
         fig.subplots_adjust(left=.08,right=.97,top=.84,bottom=.36)
-        return FigureCanvas(fig)
+        return fig
     if kind=="rotacao":
-        fig,ax=_base("Giro médio do período por grupo",7.0,3.75)
+        fig,ax=_base(fig,"Giro médio do período por grupo",7.0,3.75)
         x=df.groupby("grupo").giro.mean().sort_values(ascending=True).tail(10)
         labels=[str(i) for i in x.index]
         y=np.arange(len(x))
@@ -107,10 +128,10 @@ def make_chart(kind,df):
         for bar,val in zip(bars,x.values):
             ax.text(val,max(bar.get_y()+bar.get_height()/2,0),f"{val:.1f}%",va="center",ha="left",fontsize=7.5,fontweight="bold",color=NAVY)
         fig.subplots_adjust(left=.34,right=.96,top=.84,bottom=.18)
-        return FigureCanvas(fig)
+        return fig
     if kind=="status":
         # Saúde do estoque em pizza: distribuição dos produtos por status.
-        fig,ax=_base("Saúde do estoque",6.3,3.25)
+        fig,ax=_base(fig,"Saúde do estoque",6.3,3.25)
         x=df.status_estoque.value_counts()
         colors_map={"NORMAL":TEAL,"CRÍTICO":PINK,"BAIXO":GOLD,"SEM ESTOQUE":"#D9284B","NEGATIVO":"#7F1D1D","EXCESSO":"#7C6FE6","SEM VENDA":BLUE}
         colors=[colors_map.get(str(k).upper(),"#97A2B6") for k in x.index]
@@ -127,7 +148,7 @@ def make_chart(kind,df):
         ax.text(0,0,"ESTOQUE",ha="center",va="center",fontsize=8,fontweight="bold",color="#718097")
         ax.axis("equal")
         fig.subplots_adjust(left=.02,right=.72,top=.86,bottom=.05)
-        return FigureCanvas(fig)
+        return fig
     if kind=="top":
-        fig,ax=_base("Top produtos vendidos",6.3,3.5); x=df.sort_values("quantidade_vendida").tail(8); ax.barh([str(v)[:28] for v in x.descricao],x.quantidade_vendida,color=BLUE); return FigureCanvas(fig)
-    fig,ax=_base("Estoque × vendas",6.3,3.5); x=df.sample(min(len(df),500),random_state=1); ax.scatter(x.quantidade_vendida,x.quantidade_estoque,s=28,alpha=.55,color=BLUE,edgecolors="white",linewidths=.4); ax.set_xlabel("Vendas",fontsize=8); ax.set_ylabel("Estoque",fontsize=8); return FigureCanvas(fig)
+        fig,ax=_base(fig,"Top produtos vendidos",6.3,3.5); x=df.sort_values("quantidade_vendida").tail(8); ax.barh([str(v)[:28] for v in x.descricao],x.quantidade_vendida,color=BLUE); return fig
+    fig,ax=_base(fig,"Estoque × vendas",6.3,3.5); x=df.sample(min(len(df),500),random_state=1); ax.scatter(x.quantidade_vendida,x.quantidade_estoque,s=28,alpha=.55,color=BLUE,edgecolors="white",linewidths=.4); ax.set_xlabel("Vendas",fontsize=8); ax.set_ylabel("Estoque",fontsize=8); return fig
