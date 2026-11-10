@@ -81,3 +81,22 @@ def test_inline_panel_keeps_the_same_height_on_every_level(app, made):
     heights.append(browser.list.height())
     assert len(set(heights)) == 1 and heights[0] >= 4 * 116
     assert browser.empty.height() == heights[0]       # sem cards, mesma altura
+
+
+def test_big_subclass_creates_cards_in_batches(app, made):
+    from ui.dashboard_page import HierarchyBrowser
+    from ui.explorer_cards import CARD_BATCH, CardBatch
+    many = pd.concat([frame()] * 70, ignore_index=True)       # 140 blusas + 70 batons
+    many["codigo_barras"] = [str(i) for i in range(len(many))]
+    browser = HierarchyBrowser(many, inline=True)
+    made(browser)
+    browser.render_sub("VESTUARIO FEMININO", "BLUSA")
+    assert browser.list.count() == CARD_BATCH + 1              # 60 cards + "Mostrar mais"
+    more = browser.list.item(browser.list.count() - 1)
+    assert CardBatch.is_more(more)
+    browser.open_item(more)
+    assert browser.list.count() == 2 * CARD_BATCH + 1
+    browser.open_item(browser.list.item(browser.list.count() - 1))
+    assert browser.list.count() == 140 and not CardBatch.is_more(browser.list.item(139))
+    browser.render_group("VESTUARIO FEMININO")                 # trocar de nível descarta o resto
+    assert browser.list.count() == 1 and not browser.cards.pending

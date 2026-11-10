@@ -6,7 +6,7 @@ arquivo na hora, através de core.catalog_editor.
 """
 import copy
 
-from PySide6.QtCore import QRegularExpression, QSize, Qt
+from PySide6.QtCore import QRegularExpression, QSize, Qt, QTimer
 from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from core import catalog_editor as ce
 from core.stores import STORES, store_sort_key
-from ui.explorer_cards import ExplorerCard, _stable_color
+from ui.explorer_cards import CardBatch, ExplorerCard, _stable_color
 from ui.window_chrome import confirm_action, install_mac_window_chrome, show_message
 from utils.formatting import br_number
 from utils.normalization import barcode_sort_key, normalize_barcode, normalize_text
@@ -107,7 +107,12 @@ class StockExplorerPage(QWidget):
         self.search = QLineEdit()
         self.search.setPlaceholderText("🔍  Buscar produto por descrição ou código de barras...")
         self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(lambda _text: self.render())
+        # Espera parar de digitar antes de refazer os cards.
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(250)
+        self._search_timer.timeout.connect(self.render)
+        self.search.textChanged.connect(lambda _text: self._search_timer.start())
         root.addWidget(self.search)
         self.tip = QLabel("Clique num grupo para ver as subclasses e, depois, os produtos. Clique num produto para editar ou excluir.")
         self.tip.setObjectName("SectionHint")
@@ -123,6 +128,7 @@ class StockExplorerPage(QWidget):
         self.list.setGridSize(QSize(350, 116))
         self.list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.list.itemClicked.connect(self.open_item)
+        self.cards = CardBatch(self.list, QSize(340, 104), noun="produtos")
         root.addWidget(self.list, 1)
 
         self.empty = QLabel("")
@@ -143,7 +149,9 @@ class StockExplorerPage(QWidget):
         self.render()
 
     def render(self):
+        self._search_timer.stop()
         self.list.clear()
+        self.cards.reset()
         query = normalize_text(self.search.text())
         if query:
             self.render_search(query)
@@ -153,9 +161,13 @@ class StockExplorerPage(QWidget):
             self.render_subclasses(self.path[0])
         else:
             self.render_groups()
+        self.cards.flush()  # primeiro lote; o resto com "Mostrar mais"
         self.empty.setVisible(self.list.count() == 0)
 
     def _add_card(self, title, subtitle, value, kind, key, accent):
+        self.cards.add(lambda: self._create_card(title, subtitle, value, kind, key, accent))
+
+    def _create_card(self, title, subtitle, value, kind, key, accent):
         item = QListWidgetItem()
         item.setData(Qt.ItemDataRole.UserRole, (kind, key))
         item.setSizeHint(QSize(340, 104))
@@ -230,6 +242,9 @@ class StockExplorerPage(QWidget):
         self.empty.setText("Nenhum produto encontrado.")
 
     def open_item(self, item):
+        if CardBatch.is_more(item):
+            self.cards.flush()
+            return
         kind, key = item.data(Qt.ItemDataRole.UserRole)
         if kind == "group":
             self.path = [key]
@@ -245,6 +260,7 @@ class StockExplorerPage(QWidget):
     def go_back(self):
         if self.search.text():
             self.search.clear()
+            self.render()  # limpar a busca volta na hora, sem esperar o tempo da digitação
         elif self.path:
             self.path = self.path[:-1]
             self.render()

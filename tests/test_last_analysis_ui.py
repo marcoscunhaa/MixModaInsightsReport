@@ -101,3 +101,30 @@ def test_broken_file_shows_message_and_hides_card(app, tmp_path, monkeypatch):
     assert messages and messages[0][1] == "warning"
     assert not win.resume_card.has_analysis()
     assert QApplication.overrideCursor() is None
+
+
+def test_generate_runs_in_background_and_opens_the_dashboard(app, tmp_path, monkeypatch):
+    import time
+    from core import loader
+    from ui.dashboard_page import DashboardPage
+
+    def raw(path):
+        return pd.DataFrame([[f"78900000{i}", f"PRODUTO {i}", "UN" if "estoque" in path else 2.0, 1.0, 5.0, 9.99, 5.0, 9.99]
+                             for i in range(5)])
+    monkeypatch.setattr(loader, "read_raw", raw)
+    win = window(tmp_path)
+    steps = []
+    win.analysis.set_progress = lambda text, done, total: steps.append((text, done, total))
+    win.generate({"lojas": [{"loja": "Pedras", "estoque_path": "estoque.xls", "vendas_path": "vendas.xls"}],
+                  "data_inicio": PERIOD[0], "data_fim": PERIOD[1]})
+    assert win._analysis_worker is not None and not win.analysis.generate_button.isEnabled()
+    win.generate({"lojas": [], "data_inicio": PERIOD[0], "data_fim": PERIOD[1]})  # segundo clique é ignorado
+    deadline = time.time() + 20
+    while win._analysis_worker is not None and time.time() < deadline:
+        app.processEvents()
+        time.sleep(0.01)
+    assert win._analysis_worker is None and win.analysis.generate_button.isEnabled()
+    assert isinstance(win.dashboard, DashboardPage) and len(win.dashboard.df) == 5
+    assert steps and steps[-1][0] == "Montando o dashboard"
+    win.last_analysis.wait()
+    win.deleteLater()

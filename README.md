@@ -122,6 +122,15 @@ Sem Windows à mão: o GitHub Actions gera o `.exe` sozinho a cada push (workflo
 - A importação também aceita uma planilha montada à mão: basta ter, em qualquer aba, um cabeçalho (nas 15 primeiras linhas) com **Código de barras**, **Grupo** e **Subclasse**. **Descrição**, **Loja**, **Estoque** e **Preço de venda** são opcionais; sem a coluna Loja, o nome da aba é usado quando for uma loja da rede. Código que já está no catálogo tem a classificação atualizada; código novo é cadastrado.
 - Depois de qualquer mudança no catálogo (cadastro, edição ou importação), o dashboard aberto e a **última análise** passam a usar a classificação nova, sem precisar gerar a análise de novo.
 
+## Desempenho (notebooks com pouca memória)
+
+- **Busca do dashboard**: atualiza 300 ms depois da última tecla, não a cada tecla (o Explorar estoque espera 250 ms).
+- **Gráficos**: as 6 figuras são criadas uma vez e só redesenhadas quando os dados filtrados mudam (`charts/dashboard_charts.py`: `make_chart` cria, `update_chart` redesenha).
+- **Gerar dashboard**: leitura das planilhas e cruzamento rodam numa thread (`core/analysis_job.py` + `ui/analysis_worker.py`); a janela continua respondendo e o botão mostra a etapa e o percentual. Fechar o app no meio espera a thread terminar.
+- **Explorador** (dashboard e Explorar estoque): os cards são criados em lotes de 60, com um card "＋ Mostrar mais" no fim (`CardBatch` em `ui/explorer_cards.py`).
+- **Listas por loja**: o nome mais frequente de cada código é calculado de forma vetorizada (de ~250 ms para ~15 ms em 5 mil linhas).
+- **Executável**: o `build.bat` exclui do pacote o que o app não usa (outros bindings Qt, módulos Qt extras, backends de gráfico de outras bibliotecas, testes). Prefira a versão em **pasta** (`MixModaInsights-pasta.zip`): o arquivo único extrai tudo para a pasta temporária a cada abertura.
+
 ## Visual e navegação
 
 - Todas as telas seguem o mesmo desenho: **voltar no canto esquerdo**, título e "onde estou" ao lado, e as ações da tela à direita, com a principal por último (azul ou verde). Ações secundárias são brancas com borda; excluir é sempre vermelho.

@@ -38,3 +38,62 @@ class ExplorerCard(QFrame):
             make_label_copyable(sub)
         val=QLabel(str(value)); val.setStyleSheet(f"font-size:11px;font-weight:900;color:{accent};"); val.setWordWrap(True); text.addWidget(val); l.addLayout(text,1)
         arrow=QLabel("›"); arrow.setStyleSheet(f"font-size:26px;font-weight:300;color:{accent};"); l.addWidget(arrow)
+
+
+MORE_KIND = "more"
+CARD_BATCH = 60
+
+
+class CardBatch:
+    """Cria os cards de uma QListWidget em lotes, com um card "Mostrar mais" no fim.
+
+    Uma subclasse grande (ex.: BRINQUEDO, 500+ itens) virava centenas de cards com
+    vários widgets cada, todos criados de uma vez. Aqui só o primeiro lote é criado;
+    o restante espera o clique em "Mostrar mais". `add` recebe uma função que cria
+    um card (item + widget) na lista.
+    """
+
+    def __init__(self, list_widget, size_hint, batch=CARD_BATCH, noun="itens"):
+        self.list, self.size_hint, self.batch, self.noun = list_widget, size_hint, batch, noun
+        self.reset()
+
+    def reset(self):
+        self.pending = []
+        self._more = None
+
+    def add(self, build):
+        self.pending.append(build)
+
+    def flush(self):
+        """Cria o próximo lote; devolve quantos cards foram criados."""
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QListWidgetItem
+        if self._more is not None:
+            self.list.takeItem(self.list.row(self._more))
+            self._more = None
+        chunk, self.pending = self.pending[:self.batch], self.pending[self.batch:]
+        self.list.setUpdatesEnabled(False)
+        try:
+            for build in chunk:
+                build()
+            if self.pending:
+                left = len(self.pending)
+                item = QListWidgetItem()
+                item.setData(Qt.ItemDataRole.UserRole, (MORE_KIND, None))
+                item.setSizeHint(self.size_hint)
+                self.list.addItem(item)
+                card = ExplorerCard("", "＋  Mostrar mais",
+                                    f"Mais {min(left, self.batch)} de {left} {self.noun} restantes",
+                                    "Clique para carregar", "#7A879D")
+                card.setToolTip("Os cards são criados aos poucos para o app não pesar")
+                self.list.setItemWidget(item, card)
+                self._more = item
+        finally:
+            self.list.setUpdatesEnabled(True)
+        return len(chunk)
+
+    @staticmethod
+    def is_more(item):
+        from PySide6.QtCore import Qt
+        data = item.data(Qt.ItemDataRole.UserRole)
+        return isinstance(data, tuple) and data and data[0] == MORE_KIND
