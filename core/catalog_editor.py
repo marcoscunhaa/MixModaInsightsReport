@@ -7,6 +7,7 @@ cada loja é preservada quando difere da descrição geral.
 
 Este módulo não depende de Qt: a tela de estoque só chama estas funções.
 """
+import copy
 import json
 import os
 import re
@@ -276,6 +277,30 @@ def save_catalog(catalog, path, keep_backup=True):
         if os.path.exists(tmp):
             os.unlink(tmp)
         raise
+
+
+def commit_change(path, change, current=None, should_save=None):
+    """Relê o catálogo do disco, aplica `change` e grava. Devolve (catálogo, resultado).
+
+    Cada janela guarda o catálogo em memória desde que abriu. Gravar essa cópia
+    apagaria o que outra janela (ou outra execução do app) gravou depois. Por isso a
+    mudança é sempre aplicada sobre o arquivo como está agora no disco.
+
+    `current` (o catálogo em memória) só é usado se o arquivo não puder ser lido.
+    `should_save(resultado)` decide se grava; sem ele, sempre grava. Se `change`
+    levantar erro, nada é gravado. Quem chama troca o catálogo em memória pelo
+    devolvido, para a tela mostrar também o que veio do disco.
+    """
+    try:
+        catalog = check_catalog(path)
+    except CatalogFileError:
+        if current is None:
+            raise
+        catalog = copy.deepcopy(current)
+    result = change(catalog)
+    if should_save is None or should_save(result):
+        save_catalog(catalog, path)
+    return catalog, result
 
 
 def editable_catalog_path(bundled_path, data_dir):

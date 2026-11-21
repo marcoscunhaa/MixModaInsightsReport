@@ -4,8 +4,6 @@ Usado pelo botão "Importar planilha de classificação" do Explorar estoque. Ac
 de produtos sem classificação gerado pelo app ou uma planilha com colunas
 equivalentes (código, descrição, grupo, subclasse, loja, estoque, preço).
 """
-import copy
-
 from core import catalog_editor as ce
 from ui.window_chrome import confirm_action, get_open_file, show_message
 from utils.formatting import br_number
@@ -46,16 +44,18 @@ def import_catalog_excel(parent, catalog, catalog_path, on_changed=None):
     ):
         return False
 
-    # Grava numa cópia: se salvar falhar, o catálogo em uso fica como estava.
-    candidate = copy.deepcopy(catalog)
-    summary = apply_classifications(candidate, items)
+    # Aplica sobre o catálogo relido do disco (não sobre a cópia em memória), para
+    # não apagar o que outra janela do app gravou. Se salvar falhar, nada muda.
+    try:
+        candidate, summary = ce.commit_change(
+            catalog_path, lambda fresh: apply_classifications(fresh, items), current=catalog,
+            should_save=lambda s: s["cadastrados"] + s["atualizados"] > 0,
+        )
+    except Exception as error:
+        show_message(parent, "critical", "Não foi possível salvar o catálogo", f"{type(error).__name__}: {error}")
+        return False
     saved = summary["cadastrados"] + summary["atualizados"] > 0
     if saved:
-        try:
-            ce.save_catalog(candidate, catalog_path)
-        except Exception as error:
-            show_message(parent, "critical", "Não foi possível salvar o catálogo", f"{type(error).__name__}: {error}")
-            return False
         catalog.clear()
         catalog.update(candidate)
         if on_changed:

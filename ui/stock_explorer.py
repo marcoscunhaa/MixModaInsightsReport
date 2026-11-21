@@ -303,13 +303,12 @@ class StockExplorerPage(QWidget):
             self.path = self.path[:1]
 
     def commit(self, change):
-        """Aplica `change` numa cópia, grava o arquivo e só então atualiza a memória.
+        """Aplica `change` sobre o catálogo relido do disco, grava e só então atualiza a memória.
 
-        Se a gravação falhar, o catálogo em uso continua exatamente como estava.
+        Reler evita apagar o que outra janela do app gravou. Se a gravação falhar,
+        o catálogo em uso continua exatamente como estava.
         """
-        candidate = copy.deepcopy(self.catalog)
-        result = change(candidate)
-        ce.save_catalog(candidate, self.catalog_path)
+        candidate, result = ce.commit_change(self.catalog_path, change, current=self.catalog)
         self.catalog.clear()
         self.catalog.update(candidate)
         self.on_catalog_changed()

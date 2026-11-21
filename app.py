@@ -110,6 +110,13 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setOrganizationName("Mix Moda")
     app.setApplicationName("Mix Moda Insights")
+    # Uma janela só: com o app já aberto, este clique só traz a janela para a frente.
+    # Duas janelas gravando o catálogo apagavam os cadastros uma da outra.
+    from ui.single_instance import acquire
+    instance = acquire()
+    if instance is None:
+        close_splash()
+        sys.exit(0)
     data_dir = persistent_data_directory()
     # O JSON embutido no .exe é somente leitura; as edições do estoque vão para a
     # cópia na pasta de dados (rodando pelo código-fonte é o próprio data/).
@@ -118,6 +125,7 @@ if __name__ == "__main__":
     if not ensure_valid_catalog(catalog_path, bundled_catalog):
         sys.exit(1)
     window = MainWindow(catalog_path, data_dir)
+    instance.window = window
     window.show()
     close_splash()
     preload_heavy_modules()
